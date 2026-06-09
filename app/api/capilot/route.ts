@@ -1,41 +1,10 @@
-export const runtime = "nodejs";
-
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import OpenAI from "openai";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-});
-
-// normalize tiếng Việt
-const normalize = (str: string = "") =>
-  str
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "");
-
-// parse JSON an toàn
-function safeParse(text: string) {
-  try {
-    return JSON.parse(text);
-  } catch {
-    const match = text.match(/\{[\s\S]*\}/);
-    if (match) {
-      try {
-        return JSON.parse(match[0]);
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
-}
 
 export async function POST(req: Request) {
   try {
@@ -49,97 +18,50 @@ export async function POST(req: Request) {
       );
     }
 
-    const cleanMessage = message.trim();
-
-    // 1. SAVE CUSTOMER MESSAGE
+    // save message
     await supabase.from("conversations").insert([
       {
         customer_id: customerId,
         channel: "chatbot",
-        message: cleanMessage,
+        message,
         sender: "customer",
         created_at: new Date().toISOString(),
       },
     ]);
 
-    // 2. GET CUSTOMER
-    const { data: customer } = await supabase
-      .from("customers")
-      .select("*")
-      .eq("id", customerId)
-      .single();
-
-    if (!customer) {
-      return NextResponse.json(
-        { success: false, error: "Customer not found" },
-        { status: 404 }
-      );
-    }
-
-    // 3. GET LISTINGS (LIMIT 30 cho nhẹ)
+    // get listings
     const { data: listings } = await supabase
       .from("listings")
       .select("*")
-      .limit(30);
+      .limit(20);
 
-    // 4. AI PROMPT (GIẢN LƯỢC để tránh lỗi GPT)
-    const prompt = `
-Bạn là AI môi giới bất động sản.
+    const q = message.toLowerCase();
 
-Khách nói:
-${cleanMessage}
+    const scored = (listings || []).map((item) => {
+      let score = 0;
 
-Danh sách nhà:
-${JSON.stringify(listings)}
+      if (q.includes(item.district?.toLowerCase())) score += 30;
+      if (q.includes("phòng") && item.bedrooms >= 1) score += 20;
+      if (q.includes("tỷ") && item.price) score += 20;
 
-Hãy chọn 3-5 căn phù hợp nhất.
-
-Trả về JSON DUY NHẤT:
-{
-  "topListings": [
-    { "id": "", "title": "", "score": 0 }
-  ],
-  "suggestReply": "tin nhắn trả lời khách",
-  "leadScore": 0
-}
-`;
-
-    // 5. CALL OPENAI (STABLE MODEL)
-    const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.5,
+      return { ...item, score };
     });
 
-    const text = completion.choices[0]?.message?.content || "";
+    scored.sort((a, b) => b.score - a.score);
 
-    let responseData = safeParse(text);
+    const topListings = scored.slice(0, 5);
 
-    // 6. FALLBACK nếu AI lỗi
-    if (!responseData) {
-      responseData = {
-        topListings: [],
-        suggestReply:
-          "Mình chưa tìm được căn phù hợp, bạn cho mình thêm ngân sách hoặc khu vực nhé.",
-        leadScore: 30,
-      };
-    }
+    const suggestReply =
+      topListings.length > 0
+        ? `Mình tìm được ${topListings.length} căn phù hợp cho bạn.`
+        : "Bạn cho mình thêm ngân sách hoặc khu vực nhé.";
 
-    // 7. UPDATE CUSTOMER SCORE
-    await supabase
-      .from("customers")
-      .update({
-        lead_score: responseData.leadScore || 30,
-        status: responseData.leadScore > 60 ? "hot" : "new",
-      })
-      .eq("id", customerId);
-
-    // 8. SAVE AI MESSAGE
+    // save AI reply (fake system)
     await supabase.from("conversations").insert([
       {
         customer_id: customerId,
         channel: "chatbot",
-        message: responseData.suggestReply,
+        message: suggestReply,
         sender: "ai",
         created_at: new Date().toISOString(),
       },
@@ -147,15 +69,13 @@ Trả về JSON DUY NHẤT:
 
     return NextResponse.json({
       success: true,
-      ...responseData,
+      topListings,
+      suggestReply,
     });
   } catch (err) {
-    console.error("COPILOT ERROR:", err);
-
-    const message = err instanceof Error ? err.message : "Unknown error";
-
+    console.error(err);
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false },
       { status: 500 }
     );
   }

@@ -27,13 +27,13 @@ export default function CopilotPage() {
 
     setMessages((p) => [
       ...p,
-      { role: "ai", text: data.suggestReply || "..." },
+      { role: "ai", text: data.suggestReply },
     ]);
   };
 
   return (
     <div style={{ maxWidth: 600, margin: "auto", padding: 20 }}>
-      <h2>AI Copilot</h2>
+      <h2>Copilot (No AI Mode)</h2>
 
       <div style={{ height: 400, overflow: "auto", border: "1px solid #ddd", padding: 10 }}>
         {messages.map((m, i) => (
