@@ -6,41 +6,38 @@ export default function CopilotPage() {
   const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState("");
 
-  const sendMessage = async () => {
+  const send = async () => {
     if (!input) return;
 
-    const userMessage = input;
+    const msg = input;
     setInput("");
 
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", text: userMessage },
-    ]);
+    setMessages((p) => [...p, { role: "user", text: msg }]);
 
     const res = await fetch("/api/copilot", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        message: userMessage,
+        message: msg,
         customerId: "demo",
       }),
     });
 
     const data = await res.json();
 
-    setMessages((prev) => [
-      ...prev,
-      { role: "ai", text: data.suggestReply },
+    setMessages((p) => [
+      ...p,
+      { role: "ai", text: data.suggestReply || "..." },
     ]);
   };
 
   return (
     <div style={{ maxWidth: 600, margin: "auto", padding: 20 }}>
-      <h2>AI Copilot</h2>
+      <h2>Copilot Chat</h2>
 
-      <div style={{ height: 400, overflowY: "auto", border: "1px solid #ddd", padding: 10 }}>
+      <div style={{ height: 400, overflow: "auto", border: "1px solid #ddd", padding: 10 }}>
         {messages.map((m, i) => (
-          <div key={i} style={{ margin: 8 }}>
+          <div key={i}>
             <b>{m.role}:</b> {m.text}
           </div>
         ))}
@@ -50,9 +47,9 @@ export default function CopilotPage() {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          style={{ flex: 1, padding: 10 }}
+          style={{ flex: 1 }}
         />
-        <button onClick={sendMessage}>Send</button>
+        <button onClick={send}>Send</button>
       </div>
     </div>
   );
