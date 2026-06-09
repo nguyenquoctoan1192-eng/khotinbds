@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 
+
 import {
   DndContext,
   closestCenter,
@@ -45,22 +46,38 @@ function SortableImage({
     <div
       ref={setNodeRef}
       style={{
-        ...styles.imageBox,
-        ...style,
-      }}
+      position: "relative",
+      ...style,
+}}
     >
       <img
-        src={img}
-        style={styles.image}
-        {...attributes}
-        {...listeners}
-      />
+      src={img}
+      style={{
+      width: "100%",
+      aspectRatio: "4/3",
+      objectFit: "cover",
+      borderRadius: 10,
+  }}
+  {...attributes}
+  {...listeners}
+/>
 
       <button
         onClick={() =>
           removeImage(index)
         }
-        style={styles.removeBtn}
+        style={{
+        position: "absolute",
+        top: 6,
+        right: 6,
+        background: "red",
+        color: "white",
+        border: "none",
+        borderRadius: "50%",
+        width: 24,
+        height: 24,
+        cursor: "pointer",
+}}
       >
         ✕
       </button>
@@ -172,7 +189,8 @@ const [amenities, setAmenities] =
     const uploadedUrls: string[] = [];
 
     for (const file of files) {
-      const fileName = `${Date.now()}-${file.name}`;
+      const fileName =
+  `${Date.now()}-${Math.random()}-${file.name}`;
 
       const { error } =
         await supabase.storage
@@ -305,8 +323,8 @@ console.log(
     if (/bình\s*thạnh/i.test(t)) return "Quận Bình Thạnh";
     if (/gò\s*vấp/i.test(t)) return "Quận Gò Vấp";
     if (/tân\s*bình/i.test(t)) return "Quận Tân Bình";
-    if (/phú\s*nhuận/i.test(t)) return "Quận Phú Nhuận";
-    if (/tân\s*nhuận/i.test(t)) return "Quận Tân Phú ";
+    if (/q\.?\s*phú\s*nhuận/i.test(t) ||/phú\s*nhuận/i.test(t)) return "Quận Phú Nhuận";
+    if (/tân\s*phú/i.test(t)) return "Quận Tân Phú";
     if (/bình\s*chánh/i.test(t)) return "Quận Bình Chánh";
     return "";
   };
@@ -456,18 +474,20 @@ console.log("SET PRICE:", String(priceValue));
     setLoading(true);
 
     // KIỂM TRA TIN TRÙNG
-const { data: oldPost } =
+const { data: oldPosts } =
   await supabase
     .from("listings")
     .select("id")
-    .eq("address", address)
-    .maybeSingle();
+    .eq("address", address);
 
-if (oldPost) {
+if (oldPosts?.length) {
   await supabase
     .from("listings")
     .delete()
-    .eq("id", oldPost.id);
+    .in(
+      "id",
+      oldPosts.map(x => x.id)
+    );
 }
 
     const payload = {
@@ -520,343 +540,212 @@ console.log("ERROR =", error);
   };
 
   return (
+  <div style={{ width: "100%", overflowX: "hidden" }}>
+    
     <div style={styles.page}>
+
       {/* NAVBAR */}
       <div style={styles.nav}>
         <h2
-          style={{
-            cursor: "pointer",
-          }}
-          onClick={() =>
-            router.push("/")
-          }
+          style={{ cursor: "pointer" }}
+          onClick={() => router.push("/")}
         >
           🏠 BDS
         </h2>
 
         <button
           style={styles.backBtn}
-          onClick={() =>
-            router.push("/")
-          }
+          onClick={() => router.push("/")}
         >
           ← Trang chủ
         </button>
       </div>
 
       {/* FORM */}
-      <div style={styles.container}>
-        <div style={styles.form}>
-          <h1>
-  Đăng tin bất động sản
-</h1>
-
-{/* ZALO INPUT */}
-<textarea
-  placeholder="Dán tin từ Zalo vào đây..."
-  value={zaloText}
-  onChange={(e) =>
-    setZaloText(e.target.value)
-  }
-  style={{
-    width: "100%",
-    height: 120,
-    marginBottom: 12,
-    padding: 12,
-    borderRadius: 8,
-    border: "1px solid #ddd",
-  }}
-/>
-
-<button
-  onClick={autoFillFromZalo}
-  style={{
-    width: "100%",
-    marginBottom: 20,
-    padding: 12,
-    background: "#2563eb",
-    color: "white",
-    border: "none",
-    borderRadius: 8,
-    cursor: "pointer",
-  }}
->
-  🤖 Tự điền từ Zalo
-</button>
-
+      <div className="container" style={styles.container}>
+        <div className="form" style={styles.form}>
           
+          <h1>Đăng tin bất động sản</h1>
 
-          {/* TITLE */}
-          <input
-            placeholder="Tiêu đề"
-            value={title}
-            onChange={(e) =>
-              setTitle(e.target.value)
-            }
-            style={styles.input}
+          {/* ZALO INPUT */}
+          <textarea
+            placeholder="Dán tin từ Zalo vào đây..."
+            value={zaloText}
+            onChange={(e) => setZaloText(e.target.value)}
+            style={{
+              width: "100%",
+              height: 120,
+              marginBottom: 12,
+              padding: 12,
+              borderRadius: 8,
+              border: "1px solid #ddd",
+            }}
           />
 
-          {/* PRICE */}
-          <input
-            placeholder="Giá"
-            value={price}
-            onChange={(e) =>
-              setPrice(e.target.value)
-            }
-            style={styles.input}
-          />
+          <button
+            onClick={autoFillFromZalo}
+            style={{
+              width: "100%",
+              marginBottom: 20,
+              padding: 12,
+              background: "#2563eb",
+              color: "white",
+              border: "none",
+              borderRadius: 8,
+              cursor: "pointer",
+            }}
+          >
+            🤖 Tự điền từ Zalo
+          </button>
 
-          {/* DISTRICT */}
-<input
-  placeholder="Quận"
-  value={district}
-  onChange={(e) =>
-    setDistrict(e.target.value)
-  }
-  style={styles.input}
-/>
+          {/* INPUTS */}
+          <input placeholder="Tiêu đề" value={title} onChange={(e) => setTitle(e.target.value)} style={styles.input} />
+          <input placeholder="Giá" value={price} onChange={(e) => setPrice(e.target.value)} style={styles.input} />
+          <input placeholder="Quận" value={district} onChange={(e) => setDistrict(e.target.value)} style={styles.input} />
+          <input placeholder="Địa chỉ" value={address} onChange={(e) => setAddress(e.target.value)} style={styles.input} />
+          <input placeholder="Diện tích (m²)" value={area} onChange={(e) => setArea(e.target.value)} style={styles.input} />
+          <input placeholder="Ngang" value={width} onChange={(e) => setWidth(e.target.value)} style={styles.input} />
+          <input placeholder="Dài" value={length} onChange={(e) => setLength(e.target.value)} style={styles.input} />
+          <input placeholder="Số tầng" value={floors} onChange={(e) => setFloors(e.target.value)} style={styles.input} />
+          <input placeholder="Số điện thoại liên hệ" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} style={styles.input} />
+          <input placeholder="Số phòng ngủ" value={bedrooms} onChange={(e) => setBedrooms(e.target.value)} style={styles.input} />
+          <input placeholder="Số WC" value={bathrooms} onChange={(e) => setBathrooms(e.target.value)} style={styles.input} />
 
-<input
-  placeholder="Địa chỉ"
-  value={address}
-  onChange={(e) =>
-    setAddress(e.target.value)
-  }
-  style={styles.input}
-/>
-
-<input
-  placeholder="Diện tích (m²)"
-  value={area}
-  onChange={(e) =>
-    setArea(e.target.value)
-  }
-  style={styles.input}
-/>
-
-<input
-  placeholder="Ngang"
-  value={width}
-  onChange={(e) =>
-    setWidth(e.target.value)
-  }
-  style={styles.input}
-/>
-
-<input
-  placeholder="Dài"
-  value={length}
-  onChange={(e) =>
-    setLength(e.target.value)
-  }
-  style={styles.input}
-/>
-
-<input
-  placeholder="Số tầng"
-  value={floors}
-  onChange={(e) =>
-    setFloors(e.target.value)
-  }
-  style={styles.input}
-/>
-
-<input
-  placeholder="Số điện thoại liên hệ"
-  value={contactPhone}
-  onChange={(e) =>
-    setContactPhone(e.target.value)
-  }
-  style={styles.input}
-/>
-
-          {/* BEDROOMS */}
-          <input
-            placeholder="Số phòng ngủ"
-            value={bedrooms}
-            onChange={(e) =>
-              setBedrooms(
-                e.target.value
-              )
-            }
-            style={styles.input}
-          />
-
-          {/* BATHROOMS */}
-          <input
-            placeholder="Số WC"
-            value={bathrooms}
-            onChange={(e) =>
-              setBathrooms(
-                e.target.value
-              )
-            }
-            
-            style={styles.input}
-          />
+          {/* FURNITURE */}
           <select
-  value={furniture}
-  onChange={(e) =>
-    setFurniture(
-      e.target.value
-    )
-  }
-  style={styles.input}
->
-  <option>Trống</option>
-  <option>Cơ bản</option>
-  <option>Đầy đủ</option>
-</select>
+            value={furniture}
+            onChange={(e) => setFurniture(e.target.value)}
+            style={styles.input}
+          >
+            <option>Trống</option>
+            <option>Cơ bản</option>
+            <option>Đầy đủ</option>
+          </select>
 
           {/* DESCRIPTION */}
           <textarea
             placeholder="Mô tả"
             value={description}
-            onChange={(e) =>
-              setDescription(
-                e.target.value
-              )
-            }
+            onChange={(e) => setDescription(e.target.value)}
             style={styles.textarea}
           />
 
           {/* UPLOAD */}
           <div>
-            <p>
-              📸 Upload hình ảnh
-            </p>
+            <p>📸 Upload hình ảnh</p>
 
             <input
               type="file"
               multiple
-              onChange={(e) =>
-                uploadImages(
-                  e.target.files
-                )
-              }
+              onChange={(e) => uploadImages(e.target.files)}
             />
 
-            {uploading && (
-              <p>
-                Đang upload ảnh...
-              </p>
-            )}
+            {uploading && <p>Đang upload ảnh...</p>}
           </div>
 
-          {/* IMAGE PREVIEW */}
-
-<DndContext
-  collisionDetection={
-    closestCenter
-  }
-  onDragEnd={handleDragEnd}
->
-  <SortableContext
-    items={images}
-    strategy={
-      rectSortingStrategy
-    }
-  >
-    <div style={styles.gallery}>
-      {images.map(
-        (img, index) => (
-          <SortableImage
-            key={img}
-            img={img}
-            index={index}
-            removeImage={
-              removeImage
-            }
-          />
-        )
-      )}
-    </div>
-  </SortableContext>
-</DndContext>
+          {/* IMAGE GRID */}
+          <div className="gallery" style={styles.gallery}>
+            {images.map((img, index) => (
+              <SortableImage
+                key={img}
+                img={img}
+                index={index}
+                removeImage={removeImage}
+              />
+            ))}
+          </div>
 
           {/* BUTTON */}
           <button
+            className="btn"
             onClick={createPost}
             style={styles.button}
           >
-            {loading
-              ? "Đang đăng..."
-              : "Đăng tin"}
+            {loading ? "Đang đăng..." : "Đăng tin"}
           </button>
+
         </div>
       </div>
-    </div>
-  );
 
+    </div>
+  </div>
+);
 }
 
 const styles: any = {
   page: {
     minHeight: "100vh",
+    width: "100%",
+    overflowX: "hidden",
     background: "#f3f4f6",
     fontFamily: "Arial",
   },
 
   nav: {
-    background: "#111827",
-    color: "white",
-    padding: "16px 24px",
-    display: "flex",
-    justifyContent:
-      "space-between",
-    alignItems: "center",
+    background:"#111827",
+    color:"white",
+    padding:"12px",
+    display:"flex",
+    justifyContent:"space-between",
+    alignItems:"center",
+    flexWrap:"wrap",
+    gap:10,
   },
 
-  backBtn: {
-    background: "white",
-    color: "#111827",
-    border: "none",
-    padding: "10px 16px",
-    borderRadius: 10,
-    cursor: "pointer",
-    fontWeight: "bold",
+  backBtn:{
+    background:"white",
+    color:"#111827",
+    border:"none",
+    padding:"10px 12px",
+    borderRadius:10,
+    cursor:"pointer",
+    fontWeight:"bold",
+    fontSize:14,
   },
 
   container: {
     display: "flex",
     justifyContent: "center",
-    padding: 30,
+    padding: 12,
+    width: "100%",
+    overflowX: "hidden",
   },
 
   form: {
     background: "white",
+    maxWidth: "100%",
     width: "100%",
-    maxWidth: 700,
     borderRadius: 16,
-    padding: 24,
-    boxShadow:
-      "0 4px 12px rgba(0,0,0,0.08)",
+    padding: 16,
     display: "flex",
     flexDirection: "column",
     gap: 16,
+    boxSizing: "border-box",
   },
 
   input: {
-    padding: 14,
+    width: "100%",
+    padding: 16,
     borderRadius: 10,
     border: "1px solid #ddd",
-    outline: "none",
-    fontSize: 15,
+    fontSize: 16,
+    boxSizing: "border-box",
   },
 
   textarea: {
-    padding: 14,
+    width: "100%",
+    padding: 16,
     borderRadius: 10,
     border: "1px solid #ddd",
     minHeight: 120,
-    outline: "none",
-    fontSize: 15,
+    fontSize: 16,
+    boxSizing: "border-box",
   },
 
   gallery: {
-    display: "flex",
-    gap: 12,
-    flexWrap: "wrap",
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+    gap: 10,
   },
 
   imageBox: {
@@ -864,8 +753,8 @@ const styles: any = {
   },
 
   image: {
-    width: 140,
-    height: 100,
+    width: "100%",
+    aspectRatio: "4/3",
     objectFit: "cover",
     borderRadius: 10,
   },
@@ -884,13 +773,11 @@ const styles: any = {
   },
 
   button: {
-    background: "#2563eb",
-    color: "white",
-    border: "none",
+    width: "100%",
     padding: 16,
     borderRadius: 12,
-    cursor: "pointer",
-    fontWeight: "bold",
     fontSize: 16,
+    fontWeight: "bold",
   },
 };
+

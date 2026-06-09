@@ -12,16 +12,20 @@ const supabase = createClient(
 export default function ListingDetail() {
   const params = useParams();
 
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
+
   const [showPhone, setShowPhone] = useState(false);
   const [listing, setListing] = useState<any>(null);
   const [mainImage, setMainImage] = useState("");
 
   useEffect(() => {
+    if (!id) return;
+
     const fetchListing = async () => {
       const { data } = await supabase
         .from("listings")
         .select("*")
-        .eq("id", params.id)
+        .eq("id", id)
         .single();
 
       if (data) {
@@ -31,37 +35,38 @@ export default function ListingDetail() {
     };
 
     fetchListing();
-  }, [params.id]);
+  }, [id]);
 
   const refreshPost = async () => {
-    const { error } = await supabase
+    if (!listing) return;
+
+    await supabase
       .from("listings")
-      .update({ updated_at: new Date().toISOString() })
+      .update({
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", listing.id);
 
-    if (!error) {
-      alert("Đã làm mới tin");
-      location.reload();
-    }
+    location.reload();
   };
 
-  if (!listing) return <div style={{ padding: 40 }}>Đang tải...</div>;
+  if (!listing) {
+    return <div style={{ padding: 20 }}>Đang tải...</div>;
+  }
 
   return (
     <div style={styles.page}>
       {/* NAV */}
       <div style={styles.nav}>
-        <h2>🏠 BDS</h2>
+        <h2 style={styles.logo}>🏠 BDS</h2>
         <a href="/" style={styles.backBtn}>← Trang chủ</a>
       </div>
 
       {/* WRAPPER */}
       <div style={styles.wrapper}>
-
-        {/* LEFT BLOCK */}
-        <div style={styles.mainBlock}>
-
-          {/* IMAGE BLOCK */}
+        
+        {/* LEFT */}
+        <div style={styles.left}>
           <div style={styles.card}>
             <img src={mainImage} style={styles.mainImage} />
 
@@ -71,79 +76,65 @@ export default function ListingDetail() {
                   key={i}
                   src={img}
                   onClick={() => setMainImage(img)}
-                  style={{
-                    ...styles.thumb,
-                    border: mainImage === img ? "2px solid #2563eb" : "1px solid #ddd"
-                  }}
+                  style={styles.thumb}
                 />
               ))}
             </div>
           </div>
 
-          {/* INFO BLOCK */}
           <div style={styles.card}>
             <h1 style={styles.title}>{listing.title}</h1>
 
             <div style={styles.priceRow}>
-              <h2 style={styles.price}>
+              <div style={styles.price}>
                 {Number(listing.price || 0).toLocaleString("vi-VN")} VNĐ
-              </h2>
-
-             <span style={styles.date}>
-            Ngày đăng:{" "}
-            {listing.updated_at
-            ? new Date(listing.updated_at).toLocaleDateString("vi-VN")
-            : ""}
-            </span>
+              </div>
+              <div style={styles.date}>
+                {listing.updated_at
+                  ? new Date(listing.updated_at).toLocaleDateString("vi-VN")
+                  : ""}
+              </div>
             </div>
 
-            <p style={styles.address}>📍 {listing.address}</p>
-
-            <p style={styles.desc}>{listing.description}</p>
+            <div style={styles.address}>📍 {listing.address}</div>
+            <div style={styles.desc}>{listing.description}</div>
           </div>
 
-          {/* MAP BLOCK (TÁCH RIÊNG 100%) */}
           <div style={styles.card}>
-            <h3>📍 Vị trí bản đồ</h3>
-
+            <h3>📍 Bản đồ</h3>
             <iframe
               style={styles.map}
-              loading="lazy"
               src={`https://www.google.com/maps?q=${encodeURIComponent(
-                listing.address
+                listing.address || ""
               )}&output=embed`}
             />
           </div>
-
         </div>
 
-        {/* RIGHT ACTION BLOCK */}
-        <div style={styles.side}>
-
+        {/* RIGHT (FIX MOBILE FULL WIDTH) */}
+        <div style={styles.right}>
           <button
-  style={styles.contactBtn}
-  onClick={() => setShowPhone(true)}
->
-  {showPhone
-    ? `📞 ${listing.contact_phone || "Chưa có số"}`
-    : "📞 Liên hệ"}
-</button>
+            style={styles.btnBlue}
+            onClick={() => setShowPhone(true)}
+          >
+            {showPhone
+              ? `📞 ${listing.contact_phone || "Chưa có số"}`
+              : "📞 Liên hệ"}
+          </button>
 
-
-
-          <button onClick={refreshPost} style={styles.refreshBtn}>
-            🔁 Làm mới tin
+          <button style={styles.btnOrange} onClick={refreshPost}>
+            🔁 Làm mới
           </button>
 
           <button
-            style={styles.editBtn}
+            style={styles.btnGreen}
             onClick={() => window.location.assign(`/edit/${listing.id}`)}
           >
             ✏️ Sửa tin
           </button>
 
           <button
-            style={styles.deleteBtn}
+            style={styles.btnRed}
             onClick={async () => {
               if (!confirm("Xóa tin?")) return;
 
@@ -155,7 +146,7 @@ export default function ListingDetail() {
               location.href = "/";
             }}
           >
-            🗑 Xóa tin
+            🗑 Xóa
           </button>
         </div>
 
@@ -164,166 +155,163 @@ export default function ListingDetail() {
   );
 }
 
+/* ================= STYLE FIX MOBILE CHUẨN ================= */
+
 const styles: any = {
   page: {
-    background: "#f3f4f6",
-    fontFamily: "Arial",
-    minHeight: "100vh",
-  },
+  minHeight: "100vh",
+  width: "100%",
+  overflowX: "hidden",
+  background: "#f3f4f6",
+  fontFamily: "Arial",
+},
 
   nav: {
     background: "#111827",
     color: "white",
-    padding: "16px 24px",
+    padding: "12px 16px",
     display: "flex",
     justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  logo: {
+    fontSize: 18,
+    fontWeight: "bold",
   },
 
   backBtn: {
     color: "white",
-    border: "1px solid white",
-    padding: "6px 12px",
-    borderRadius: 8,
     textDecoration: "none",
+    border: "1px solid white",
+    padding: "6px 10px",
+    borderRadius: 8,
   },
 
+  /* ✅ QUAN TRỌNG NHẤT */
   wrapper: {
-    maxWidth: 1100,
-    margin: "30px auto",
-    display: "flex",
-    gap: 20,
-    alignItems: "flex-start",
-  },
+  width: "100%",
+  maxWidth: 1100,
+  margin: "0 auto",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 16,
+},
 
-  mainBlock: {
-    flex: 1,
-    display: "flex",
-    flexDirection: "column",
-    gap: 20,
-  },
+  /* LEFT FULL RESPONSIVE */
+  left: {
+  flex: "1 1 600px",
+  minWidth: 0,
+  display: "flex",
+  flexDirection: "column",
+  gap: 12,
+},
+
+  /* RIGHT AUTO FULL MOBILE */
+  right: {
+  flex: "1 1 240px",
+  minWidth: 0,
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+},
 
   card: {
     background: "white",
     borderRadius: 12,
-    padding: 16,
+    padding: 12,
   },
 
-mainImage: {
-  width: "100%",
-  height: 420,
-  objectFit: "contain", // ✔ quan trọng
-  backgroundColor: "#000",
-  borderRadius: 10,
-},
+  mainImage: {
+    width: "100%",
+    height: 320,
+    objectFit: "cover",
+    borderRadius: 10,
+  },
 
   thumbRow: {
-  display: "flex",
-  gap: 8,
-  marginTop: 10,
-  overflowX: "auto",
-  paddingBottom: 4,
-},
+    display: "flex",
+    gap: 8,
+    marginTop: 10,
+    overflowX: "auto",
+  },
 
   thumb: {
-  width: 72,
-  height: 72,
-  objectFit: "cover",
-  borderRadius: 6,
-  cursor: "pointer",
-  border: "1px solid #0f1113",
-},
+    width: 70,
+    height: 70,
+    objectFit: "cover",
+    borderRadius: 8,
+    cursor: "pointer",
+  },
 
   title: {
-    fontSize: 22,
-    fontWeight: 700,
-    marginBottom: 10,
+    fontSize: 20,
+    fontWeight: "bold",
   },
 
   priceRow: {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  marginTop: 6,
-},
+    display: "flex",
+    justifyContent: "space-between",
+    marginTop: 8,
+  },
 
   price: {
     color: "#dc2626",
-    fontSize: 24,
+    fontSize: 18,
+    fontWeight: "bold",
   },
 
   date: {
-  fontSize: 13,
-  color: "#6b7280",
-  marginLeft: 12,
-},
+    fontSize: 12,
+    color: "#666",
+  },
 
   address: {
-    marginTop: 10,
-    color: "#444",
+    marginTop: 8,
   },
 
   desc: {
-  marginTop: 30,      // ✔ tạo khoảng cách với phần trên
-  lineHeight: 1.7,
-  color: "#555",
-  fontSize: 15,       // ✔ cho dễ đọc hơn
-},
-
-district: {
-  marginTop: 6,   // tạo khoảng cách từ giá xuống
-  fontSize: 14,
-  color: "#555",
-},
+    marginTop: 10,
+    color: "#555",
+    lineHeight: 1.6,
+  },
 
   map: {
     width: "100%",
-    height: 260,
+    height: 220,
     border: 0,
     borderRadius: 10,
   },
 
-  side: {
-    width: 240,
-    display: "flex",
-    flexDirection: "column",
-    gap: 10,
-  },
-
-  contactBtn: {
+  btnBlue: {
     padding: 14,
     background: "#2563eb",
     color: "white",
-    borderRadius: 10,
     border: "none",
-    cursor: "pointer",
+    borderRadius: 10,
   },
 
-  refreshBtn: {
+  btnOrange: {
     padding: 14,
     background: "#f59e0b",
     color: "white",
-    borderRadius: 10,
     border: "none",
-    cursor: "pointer",
+    borderRadius: 10,
   },
 
-  editBtn: {
+  btnGreen: {
     padding: 14,
     background: "#10b981",
     color: "white",
-    borderRadius: 10,
     border: "none",
-    cursor: "pointer",
+    borderRadius: 10,
   },
 
-  deleteBtn: {
+  btnRed: {
     padding: 14,
     background: "#ef4444",
     color: "white",
-    borderRadius: 10,
     border: "none",
-    cursor: "pointer",
+    borderRadius: 10,
   },
-
-  
 };

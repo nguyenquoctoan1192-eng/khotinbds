@@ -25,10 +25,13 @@ export default function EditPage() {
   const router = useRouter();
 
   const params = useParams();
+  const id = Array.isArray(params?.id)
+  ? params.id[0]
+  : params?.id;
 
   console.log("PARAMS =", params);
-  console.log("ID =", params.id);
-
+  console.log("ID =", id);
+  
   const [loading, setLoading] =
     useState(false);
 
@@ -81,85 +84,41 @@ const [amenities, setAmenities] =
     useState<string[]>([]);
 
   // LOAD DATA
-  useEffect(() => {
-    fetchData();
-  }, []);
+ useEffect(() => {
+  if (!id) return;
+  fetchData();
+}, [id]);
 
   const fetchData = async () => {
-    const { data, error } =
-      await supabase
-        .from("listings")
-        .select("*")
-        .eq("id", params.id)
-        .single();
+  if (!id) return;
 
-        
-        
+  const { data, error } = await supabase
+    .from("listings")
+    .select("*")
+    .eq("id", id)
+    .single();
 
-    console.log("FETCH DATA =", data);
-  console.log("FETCH ERROR =", error);  
+  if (error || !data) {
+    alert("Không load được dữ liệu");
+    return;
+  }
 
-    if (error) {
-      console.error(error);
-      return;
-    }
-
-    setTitle(data.title || "");
-
-    setPrice(
-      String(data.price || "")
-    );
-
-    setDistrict(
-      data.district || ""
-    );
-
-    setAddress(
-  data.address || ""
-);
-
-setArea(
-  String(data.area || "")
-);
-
-setWidth(
-  String(data.width || "")
-);
-
-setLength(
-  String(data.length || "")
-);
-
-setFloors(
-  String(data.floors || "")
-);
-
-setFurniture(
-  data.furniture || "Trống"
-);
-
-setContactPhone(
-  data.contact_phone || ""
-);
-
-setAmenities(
-  data.amenities || []
-);
-
-    setBedrooms(
-      String(data.bedrooms || "")
-    );
-
-    setBathrooms(
-      String(data.bathrooms || "")
-    );
-
-    setDescription(
-      data.description || ""
-    );
-
-    setImages(data.images || []);
-  };
+  setTitle(data.title || "");
+  setPrice(String(data.price || ""));
+  setDistrict(data.district || "");
+  setAddress(data.address || "");
+  setArea(String(data.area || ""));
+  setWidth(String(data.width || ""));
+  setLength(String(data.length || ""));
+  setFloors(String(data.floors || ""));
+  setFurniture(data.furniture || "Trống");
+  setContactPhone(data.contact_phone || "");
+  setAmenities(data.amenities || []);
+  setBedrooms(String(data.bedrooms || ""));
+  setBathrooms(String(data.bathrooms || ""));
+  setDescription(data.description || "");
+  setImages(data.images || []);
+};
 
   // UPLOAD IMAGES
   const uploadImages = async (
@@ -243,10 +202,10 @@ setAmenities(
   console.log("PAYLOAD =", payload);
 
   const { data, error } = await supabase
-    .from("listings")
-    .update(payload)
-    .eq("id", params.id)
-    .select();
+  .from("listings")
+  .update(payload)
+  .eq("id", id)
+  .select();
 
   console.log("DATA =", data);
   console.log("ERROR =", error);
@@ -509,10 +468,12 @@ window.location.href = "/";
 
 const styles: any = {
   page: {
-    minHeight: "100vh",
-    background: "#f3f4f6",
-    fontFamily: "Arial",
-  },
+  minHeight: "100vh",
+  width: "100%",
+  overflowX: "hidden",
+  background: "#f3f4f6",
+  fontFamily: "Arial",
+},
 
   nav: {
     background: "#111827",
