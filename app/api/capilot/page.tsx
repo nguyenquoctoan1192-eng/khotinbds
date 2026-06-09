@@ -33,7 +33,7 @@ export default function CopilotPage() {
 
   return (
     <div style={{ maxWidth: 600, margin: "auto", padding: 20 }}>
-      <h2>Copilot Chat</h2>
+      <h2>AI Copilot</h2>
 
       <div style={{ height: 400, overflow: "auto", border: "1px solid #ddd", padding: 10 }}>
         {messages.map((m, i) => (
