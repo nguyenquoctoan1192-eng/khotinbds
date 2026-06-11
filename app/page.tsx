@@ -268,6 +268,18 @@ export default function Home() {
           </div>
         )}
 
+        {search.trim() && listings.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
+            <button
+              onClick={() => openSaveForm()}
+              style={{ background: "#2563eb", color: "#fff", border: "none", padding: "16px 28px", borderRadius: 12, cursor: "pointer", fontWeight: "bold", fontSize: 18, boxShadow: "0 8px 18px rgba(37,99,235,0.28)" }}
+            >
+              Lưu khách
+            </button>
+            <span style={{ color: "#2563eb", fontWeight: 700 }}>SAVE_BUTTON_RENDERED</span>
+          </div>
+        )}
+
         {saveMessage && (
           <p style={{ color: "#15803d", fontWeight: 700, marginTop: 0 }}>
             {saveMessage}
@@ -291,6 +303,17 @@ export default function Home() {
                   />
                   <div style={{ flex: "1 1 auto", minWidth: 0 }}>
                     <h3 style={{ fontSize: 24, fontWeight: 700, color: "#1f2937", marginBottom: 6 }}>{listing.title}</h3>
+                    {search.trim() && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+                        <button
+                          style={{ background: "#2563eb", color: "#fff", border: "none", padding: "12px 18px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" }}
+                          onClick={() => openSaveForm(listing)}
+                        >
+                          Lưu khách
+                        </button>
+                        <span style={{ color: "#2563eb", fontWeight: 700, fontSize: 13 }}>SAVE_BUTTON_RENDERED</span>
+                      </div>
+                    )}
                     <p style={{ color: "#dc2626", fontWeight: "bold", fontSize: 22 }}>
                       {Number(listing.price || 0).toLocaleString("vi-VN")} VNĐ
                     </p>
