@@ -24,6 +24,7 @@ export type ScoreBreakdown = {
   price_score: number;
   area_score: number;
   bedroom_score: number;
+  business_score: number;
   total_score: number;
   reasons: string[];
 };
@@ -90,6 +91,77 @@ function normalizeDistricts(value: LeadRequirement["preferred_districts"], distr
     .filter(Boolean);
 }
 
+function detectBusinessNeeds(value: unknown): string[] {
+  const normalized = normalizeText(value);
+  const needs: string[] = [];
+
+  if (normalized.includes("spa")) needs.push("spa");
+  if (normalized.includes("cafe") || normalized.includes("ca phe")) needs.push("cafe");
+  if (normalized.includes("van phong") || normalized.includes("office")) needs.push("office");
+  if (normalized.includes("quan an") || normalized.includes("nha hang") || normalized.includes("restaurant")) {
+    needs.push("restaurant");
+  }
+
+  return needs;
+}
+
+function listingSearchText(listing: ListingMatchCandidate) {
+  const fields = [
+    listing.title,
+    listing.description,
+    listing.address,
+    listing.district,
+    listing.note,
+    listing.amenities,
+    listing.furniture,
+  ];
+
+  return normalizeText(fields.filter(Boolean).join(" "));
+}
+
+function scoreBusinessSuitability(
+  listing: ListingMatchCandidate,
+  requirement: NormalizedLeadRequirement
+) {
+  const needs = detectBusinessNeeds(requirement.note);
+
+  if (needs.length === 0) {
+    return {
+      score: 0,
+      reasons: [] as string[],
+    };
+  }
+
+  const text = listingSearchText(listing);
+  const matchedNeeds = needs.filter((need) => {
+    if (need === "restaurant") {
+      return text.includes("quan an") || text.includes("nha hang") || text.includes("restaurant");
+    }
+
+    if (need === "office") {
+      return text.includes("van phong") || text.includes("office");
+    }
+
+    if (need === "cafe") {
+      return text.includes("cafe") || text.includes("ca phe");
+    }
+
+    return text.includes(need);
+  });
+
+  if (matchedNeeds.length === 0) {
+    return {
+      score: 0,
+      reasons: ["Business need noted, but listing has no clear business-use signal"],
+    };
+  }
+
+  return {
+    score: 20,
+    reasons: matchedNeeds.map((need) => `Listing appears suitable for ${need}`),
+  };
+}
+
 export function normalizeLeadRequirement(requirement: LeadRequirement): NormalizedLeadRequirement {
   return {
     min_price: toNumber(requirement.min_price),
@@ -125,8 +197,14 @@ export function scoreListingForLead(
 
   if (
     normalized.max_price !== null &&
-    listingPrice !== null &&
-    listingPrice > normalized.max_price
+    (listingPrice === null || listingPrice > normalized.max_price)
+  ) {
+    return null;
+  }
+
+  if (
+    normalized.min_price !== null &&
+    (listingPrice === null || listingPrice < normalized.min_price)
   ) {
     return null;
   }
@@ -138,11 +216,19 @@ export function scoreListingForLead(
     return null;
   }
 
+  if (
+    normalized.min_area !== null &&
+    (listingArea === null || listingArea < normalized.min_area)
+  ) {
+    return null;
+  }
+
   const breakdown: ScoreBreakdown = {
     district_score: 0,
     price_score: 0,
     area_score: 0,
     bedroom_score: 0,
+    business_score: 0,
     total_score: 0,
     reasons: [],
   };
@@ -187,11 +273,16 @@ export function scoreListingForLead(
     breakdown.reasons.push("Bedrooms meet requirement");
   }
 
+  const businessSuitability = scoreBusinessSuitability(listing, normalized);
+  breakdown.business_score = businessSuitability.score;
+  breakdown.reasons.push(...businessSuitability.reasons);
+
   breakdown.total_score =
     breakdown.district_score +
     breakdown.price_score +
     breakdown.area_score +
-    breakdown.bedroom_score;
+    breakdown.bedroom_score +
+    breakdown.business_score;
 
   if (breakdown.total_score <= 0) {
     return null;
