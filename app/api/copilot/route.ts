@@ -41,8 +41,8 @@ export async function POST(req: Request) {
       let score = 0;
 
       if (q.includes(item.district?.toLowerCase())) score += 30;
-      if (q.includes("phòng") && item.bedrooms >= 1) score += 20;
-      if (q.includes("tỷ") && item.price) score += 20;
+      if (q.includes("phÃ²ng") && item.bedrooms >= 1) score += 20;
+      if (q.includes("tá»·") && item.price) score += 20;
 
       return { ...item, score };
     });
@@ -53,8 +53,8 @@ export async function POST(req: Request) {
 
     const suggestReply =
       topListings.length > 0
-        ? `Mình tìm được ${topListings.length} căn phù hợp cho bạn.`
-        : "Bạn cho mình thêm ngân sách hoặc khu vực nhé.";
+        ? `MÃ¬nh tÃ¬m Ä‘Æ°á»£c ${topListings.length} cÄƒn phÃ¹ há»£p cho báº¡n.`
+        : "Báº¡n cho mÃ¬nh thÃªm ngÃ¢n sÃ¡ch hoáº·c khu vá»±c nhÃ©.";
 
     // save AI reply (fake system)
     await supabase.from("conversations").insert([

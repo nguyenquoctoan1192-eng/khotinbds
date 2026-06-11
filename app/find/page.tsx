@@ -33,10 +33,25 @@ export default function FindPage() {
     setLoading(false);
   };
 
+  const escapeRegExp = (value: string) =>
+    value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
   // highlight function
   const highlight = (text: string) => {
-    const regex = new RegExp(`(${query})`, "gi");
-    return text.replace(regex, "<mark>$1</mark>");
+    const value = String(text || "");
+    const keyword = query.trim();
+
+    if (!keyword) return value;
+
+    const regex = new RegExp(`(${escapeRegExp(keyword)})`, "gi");
+
+    return value.split(regex).map((part, index) =>
+      part.toLowerCase() === keyword.toLowerCase() ? (
+        <mark key={index}>{part}</mark>
+      ) : (
+        part
+      )
+    );
   };
 
   return (
@@ -63,8 +78,8 @@ export default function FindPage() {
               borderRadius: 6,
             }}
           >
-            <h3 dangerouslySetInnerHTML={{ __html: highlight(item.title) }} />
-            <p dangerouslySetInnerHTML={{ __html: highlight(item.address) }} />
+            <h3>{highlight(item.title)}</h3>
+            <p>{highlight(item.address)}</p>
             <p>Quận: {item.district}</p>
             <p>Phòng ngủ: {item.bedrooms}</p>
             <p>Giá: {Number(item.price).toLocaleString()} VND</p>

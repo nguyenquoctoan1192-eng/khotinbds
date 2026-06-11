@@ -19,7 +19,7 @@ export default function CustomerDetail() {
     <div style={{ maxWidth: 800, margin: "20px auto" }}>
       <h2>{data.customer.fullname}</h2>
 
-      <p>SĐT: {data.customer.phone}</p>
+      <p>SÄT: {data.customer.phone}</p>
       <p>Score: {data.customer.lead_score}</p>
       <p>Status: {data.customer.status}</p>
 
