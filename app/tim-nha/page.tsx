@@ -1,17 +1,21 @@
 "use client";
 
 import { useState } from "react";
+import {
+  ParsedRequirementFilters,
+  parseVietnameseRequirement,
+} from "@/lib/requirementParser";
 
 export default function FindHomePage() {
   const [fullname, setFullname] = useState("");
   const [phone, setPhone] = useState("");
-
+  const [requirementText, setRequirementText] = useState("");
   const [district, setDistrict] = useState("");
-
   const [maxPrice, setMaxPrice] = useState("");
-
+  const [minArea, setMinArea] = useState("");
   const [bedrooms, setBedrooms] = useState("");
-
+  const [parsedFilters, setParsedFilters] =
+    useState<ParsedRequirementFilters | null>(null);
   const [results, setResults] = useState<any[]>([]);
 
   const searchHomes = async () => {
@@ -19,6 +23,27 @@ export default function FindHomePage() {
       alert("Nhập số điện thoại");
       return;
     }
+
+    const parsed = parseVietnameseRequirement(requirementText);
+    const preferredDistricts =
+      parsed.preferred_districts.length > 0
+        ? parsed.preferred_districts
+        : district
+          ? [district]
+          : [];
+    const maxPriceValue =
+      parsed.max_price ?? (maxPrice ? Number(maxPrice) : null);
+    const minAreaValue =
+      parsed.min_area ?? (minArea ? Number(minArea) : null);
+
+    const filters = {
+      ...parsed,
+      preferred_districts: preferredDistricts,
+      max_price: maxPriceValue,
+      min_area: minAreaValue,
+    };
+
+    setParsedFilters(filters);
 
     const res = await fetch("/api/leads", {
       method: "POST",
@@ -28,17 +53,19 @@ export default function FindHomePage() {
       body: JSON.stringify({
         fullname,
         phone,
-        max_price: maxPrice ? Number(maxPrice) : null,
-        preferred_districts: district ? [district] : [],
-        bedrooms: bedrooms ? Number(bedrooms) : null,
         mode: "lead",
+        note: filters.note || null,
+        preferred_districts: filters.preferred_districts,
+        max_price: filters.max_price,
+        min_area: filters.min_area,
+        bedrooms: bedrooms ? Number(bedrooms) : null,
       }),
     });
 
     const json = await res.json();
 
     if (!res.ok || !json.success) {
-      alert("TÃ¬m nhÃ  tháº¥t báº¡i");
+      alert("Tìm nhà thất bại");
       return;
     }
 
@@ -58,58 +85,74 @@ export default function FindHomePage() {
       <input
         placeholder="Họ tên"
         value={fullname}
-        onChange={(e) =>
-          setFullname(
-            e.target.value
-          )
-        }
+        onChange={(e) => setFullname(e.target.value)}
       />
 
       <input
         placeholder="Số điện thoại"
         value={phone}
-        onChange={(e) =>
-          setPhone(
-            e.target.value
-          )
-        }
+        onChange={(e) => setPhone(e.target.value)}
+      />
+
+      <textarea
+        placeholder="VD: tìm nhà khu vực phú nhuận, làm spa, giá 50tr đổ lại, dt 80m2"
+        value={requirementText}
+        onChange={(e) => setRequirementText(e.target.value)}
+        style={{
+          display: "block",
+          width: "100%",
+          minHeight: 90,
+          marginTop: 10,
+        }}
       />
 
       <input
         placeholder="Quận"
         value={district}
-        onChange={(e) =>
-          setDistrict(
-            e.target.value
-          )
-        }
+        onChange={(e) => setDistrict(e.target.value)}
       />
 
       <input
         placeholder="Ngân sách tối đa"
         value={maxPrice}
-        onChange={(e) =>
-          setMaxPrice(
-            e.target.value
-          )
-        }
+        onChange={(e) => setMaxPrice(e.target.value)}
+      />
+
+      <input
+        placeholder="Diện tích tối thiểu"
+        value={minArea}
+        onChange={(e) => setMinArea(e.target.value)}
       />
 
       <input
         placeholder="Số phòng ngủ"
         value={bedrooms}
-        onChange={(e) =>
-          setBedrooms(
-            e.target.value
-          )
-        }
+        onChange={(e) => setBedrooms(e.target.value)}
       />
 
-      <button
-        onClick={searchHomes}
-      >
-        Tìm nhà
-      </button>
+      <button onClick={searchHomes}>Tìm nhà</button>
+
+      {parsedFilters && (
+        <div
+          style={{
+            border: "1px solid #ddd",
+            padding: 12,
+            marginTop: 16,
+            borderRadius: 8,
+          }}
+        >
+          <h3>Bộ lọc đã phân tích</h3>
+          <p>Quận: {parsedFilters.preferred_districts.join(", ") || "Không có"}</p>
+          <p>
+            Giá tối đa:{" "}
+            {parsedFilters.max_price
+              ? parsedFilters.max_price.toLocaleString("vi-VN")
+              : "Không có"}
+          </p>
+          <p>Diện tích tối thiểu: {parsedFilters.min_area || "Không có"}</p>
+          <p>Nhu cầu: {parsedFilters.note || "Không có"}</p>
+        </div>
+      )}
 
       <hr />
 
@@ -119,75 +162,46 @@ export default function FindHomePage() {
         const reasons = item.reasons || breakdown?.reasons || [];
 
         return (
-        <div
-          key={listing.id}
-          style={{
-            border:
-              "1px solid #ddd",
-            marginBottom: 12,
-            padding: 12,
-            borderRadius: 10,
-          }}
-        >
-          <h3>{listing.title}</h3>
+          <div
+            key={listing.id}
+            style={{
+              border: "1px solid #ddd",
+              marginBottom: 12,
+              padding: 12,
+              borderRadius: 10,
+            }}
+          >
+            <h3>{listing.title}</h3>
 
-          <p>
-            Score:
-            {" "}
-            {item.score}
-          </p>
+            <p>Score: {item.score}</p>
 
-          {breakdown && (
-            <p>
-              Breakdown:
-              {" "}
-              District {breakdown.district_score}
-              {" "}
-              -
-              {" "}
-              Price {breakdown.price_score}
-              {" "}
-              -
-              {" "}
-              Area {breakdown.area_score}
-              {" "}
-              -
-              {" "}
-              Bedrooms {breakdown.bedroom_score}
-            </p>
-          )}
+            {breakdown && (
+              <p>
+                Breakdown: District {breakdown.district_score} - Price{" "}
+                {breakdown.price_score} - Area {breakdown.area_score} - Bedrooms{" "}
+                {breakdown.bedroom_score}
+              </p>
+            )}
 
-          {reasons.length > 0 && (
-            <ul>
-              {reasons.map((reason: string, index: number) => (
-                <li key={index}>{reason}</li>
-              ))}
-            </ul>
-          )}
+            {reasons.length > 0 && (
+              <ul>
+                {reasons.map((reason: string, index: number) => (
+                  <li key={index}>{reason}</li>
+                ))}
+              </ul>
+            )}
 
-          <p>
-            Giá:
-            {" "}
-            {Number(
-              listing.price
-            ).toLocaleString()}
-          </p>
+            <p>Giá: {Number(listing.price).toLocaleString()}</p>
+            <p>{listing.address}</p>
+            <p>{listing.district}</p>
 
-          <p>
-            {listing.address}
-          </p>
-
-          <p>
-            {listing.district}
-          </p>
-
-          {listing.images?.[0] && (
-            <img
-              src={listing.images[0]}
-              width={250}
-            />
-          )}
-        </div>
+            {listing.images?.[0] && (
+              <img
+                src={listing.images[0]}
+                width={250}
+              />
+            )}
+          </div>
         );
       })}
     </div>

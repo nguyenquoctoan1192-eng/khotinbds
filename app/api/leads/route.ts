@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   LeadRequirement,
   MatchResult,
+  normalizeLeadRequirement,
   scoreListingForLead,
 } from "@/lib/matching";
 
@@ -33,6 +34,9 @@ export async function POST(req: Request) {
       mode, // 👈 THÊM MODE
       query, // 👈 SEARCH MODE
     } = body;
+
+    console.log("lead-match-debug mode:", mode);
+    console.log("lead-match-debug preferred_districts:", preferred_districts);
 
     // =================================================
     // 🟢 MODE 1: LEAD + MATCHING (giữ logic cũ)
@@ -70,6 +74,15 @@ export async function POST(req: Request) {
         note,
       };
 
+      console.log(
+        "lead-match-debug normalized requirement:",
+        normalizeLeadRequirement(requirement)
+      );
+      console.log(
+        "lead-match-debug listings before scoring:",
+        listings?.length || 0
+      );
+
       const matches: MatchWithLead[] = [];
 
       for (const listing of listings || []) {
@@ -82,6 +95,11 @@ export async function POST(req: Request) {
           });
         }
       }
+
+      console.log(
+        "lead-match-debug matches after scoring:",
+        matches.length
+      );
 
       matches.sort((a, b) => b.score - a.score);
 
