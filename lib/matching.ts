@@ -233,8 +233,10 @@ export function normalizeLeadRequirement(requirement: LeadRequirement): Normaliz
 }
 
 export function compareMatchResults(a: MatchResult, b: MatchResult) {
-  const areaA = toNumber(a.listing.area) || 0;
-  const areaB = toNumber(b.listing.area) || 0;
+  const rawAreaA = toNumber(a.listing.area) || 0;
+  const rawAreaB = toNumber(b.listing.area) || 0;
+  const areaA = rawAreaA > 0 && rawAreaA <= 1000 ? rawAreaA : 0;
+  const areaB = rawAreaB > 0 && rawAreaB <= 1000 ? rawAreaB : 0;
 
   return (
     b.score - a.score ||
@@ -266,7 +268,15 @@ export function scoreListingForLead(
 
   if (
     normalized.max_price !== null &&
-    (listingPrice === null || listingPrice <= 0 || listingPrice > normalized.max_price)
+    (listingPrice === null || listingPrice <= 0)
+  ) {
+    return null;
+  }
+
+  if (
+    normalized.max_price !== null &&
+    listingPrice !== null &&
+    listingPrice > normalized.max_price
   ) {
     return null;
   }
@@ -287,7 +297,15 @@ export function scoreListingForLead(
 
   if (
     normalized.min_area !== null &&
-    (listingArea === null || listingArea < normalized.min_area)
+    (listingArea === null || listingArea <= 0)
+  ) {
+    return null;
+  }
+
+  if (
+    normalized.min_area !== null &&
+    listingArea !== null &&
+    listingArea < normalized.min_area
   ) {
     return null;
   }
@@ -367,7 +385,15 @@ export function scoreListingForLead(
 
   if (listingArea === null || listingArea <= 0) {
     breakdown.data_quality_penalty = -8;
-    breakdown.reasons.push("Area data missing or zero");
+    breakdown.reasons.push("Thiếu dữ liệu diện tích");
+  } else if (listingArea > 1000) {
+    breakdown.data_quality_penalty = -5;
+    breakdown.reasons.push("Diện tích cần kiểm tra lại");
+  }
+
+  if (listingPrice === null || listingPrice <= 0) {
+    breakdown.data_quality_penalty -= 10;
+    breakdown.reasons.push("Thiếu dữ liệu giá");
   }
 
   breakdown.total_score =
