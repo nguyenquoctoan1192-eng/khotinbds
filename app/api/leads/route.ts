@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import {
+  LeadRequirement,
+  MatchResult,
+  scoreListingForLead,
+} from "@/lib/matching";
+
+type MatchWithLead = MatchResult & { lead_id: string };
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -54,33 +61,24 @@ export async function POST(req: Request) {
         .from("listings")
         .select("*");
 
-      const matches: any[] = [];
+      const requirement: LeadRequirement = {
+        min_price,
+        max_price,
+        preferred_districts,
+        min_area,
+        bedrooms,
+        note,
+      };
+
+      const matches: MatchWithLead[] = [];
 
       for (const listing of listings || []) {
-        let score = 0;
+        const match = scoreListingForLead(listing, requirement);
 
-        if (listing.price >= min_price && listing.price <= max_price) {
-          score += 30;
-        }
-
-        if (preferred_districts?.includes(listing.district)) {
-          score += 30;
-        }
-
-        if (listing.area >= min_area) {
-          score += 20;
-        }
-
-        if (listing.bedrooms >= bedrooms) {
-          score += 20;
-        }
-
-        if (score > 0) {
+        if (match) {
           matches.push({
+            ...match,
             lead_id: lead.id,
-            listing_id: listing.id,
-            score,
-            listing,
           });
         }
       }
