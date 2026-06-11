@@ -25,6 +25,11 @@ export default function Home() {
   const [showSaveForm, setShowSaveForm] = useState(false);
   const [saveFullname, setSaveFullname] = useState("");
   const [savePhone, setSavePhone] = useState("");
+  const [saveDistrict, setSaveDistrict] = useState("");
+  const [saveNeed, setSaveNeed] = useState("");
+  const [saveTimeframe, setSaveTimeframe] = useState("");
+  const [saveBudget, setSaveBudget] = useState("");
+  const [saveFollowUpAt, setSaveFollowUpAt] = useState("");
   const [saveNote, setSaveNote] = useState("");
   const [savingCustomer, setSavingCustomer] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
@@ -146,9 +151,58 @@ export default function Home() {
     return details.length > 0 ? `Quan tam: ${details.join(" - ")}` : "";
   };
 
+  const parseBudgetValue = (value: string) => {
+    const normalized = value
+      .toLowerCase()
+      .replace(/\./g, "")
+      .replace(/,/g, "")
+      .trim();
+    const match = normalized.match(/(\d+(?:\.\d+)?)/);
+
+    if (!match) {
+      return null;
+    }
+
+    const amount = Number(match[1]);
+
+    if (!Number.isFinite(amount)) {
+      return null;
+    }
+
+    if (/tr|triệu|trieu/.test(normalized)) {
+      return amount * 1000000;
+    }
+
+    if (/tỷ|ty|tỉ|ti/.test(normalized)) {
+      return amount * 1000000000;
+    }
+
+    return amount;
+  };
+
+  const buildCrmNote = (fallbackNote?: string) =>
+    [
+      saveNeed ? `Nhu cau: ${saveNeed}` : fallbackNote,
+      saveTimeframe ? `Thoi gian can thue/mua: ${saveTimeframe}` : "",
+      saveFollowUpAt ? `Hen cham soc lai: ${saveFollowUpAt}` : "",
+      saveNote ? `Ghi chu: ${saveNote}` : "",
+      getListingNoteContext(selectedSaveListing),
+    ]
+      .filter(Boolean)
+      .join(" | ") || null;
+
   const openSaveForm = (listing?: any) => {
     setSelectedSaveListing(listing || null);
-    setSaveNote(parsedFilters?.note || "");
+    setSaveDistrict(parsedFilters?.preferred_districts?.[0] || "");
+    setSaveNeed(parsedFilters?.note || "");
+    setSaveBudget(
+      parsedFilters?.max_price
+        ? parsedFilters.max_price.toLocaleString("vi-VN")
+        : ""
+    );
+    setSaveNote("");
+    setSaveTimeframe("");
+    setSaveFollowUpAt("");
     setSaveMessage("");
     setShowSaveForm(true);
   };
@@ -172,12 +226,11 @@ export default function Home() {
         fullname: saveFullname,
         phone: savePhone,
         mode: "lead",
-        note:
-          [saveNote || filters.note, getListingNoteContext(selectedSaveListing)]
-            .filter(Boolean)
-            .join(" | ") || null,
-        preferred_districts: filters.preferred_districts,
-        max_price: filters.max_price,
+        note: buildCrmNote(filters.note || undefined),
+        preferred_districts: saveDistrict.trim()
+          ? [saveDistrict.trim()]
+          : filters.preferred_districts,
+        max_price: parseBudgetValue(saveBudget) ?? filters.max_price,
         min_area: filters.min_area,
         existing_matches: getExistingMatches(),
       }),
@@ -219,6 +272,9 @@ export default function Home() {
         <div style={{ display: "flex", gap: 14 }}>
           <button style={{ background: "transparent", border: "none", color: "#fff", cursor: "pointer" }} onClick={() => router.push("/")}>Trang chủ</button>
           <button style={{ background: "transparent", border: "none", color: "#fff", cursor: "pointer" }} onClick={() => router.push("/post")}>Đăng tin</button>
+          <button style={{ background: "#2563eb", border: "none", color: "#fff", cursor: "pointer", padding: "8px 12px", borderRadius: 8, fontWeight: "bold" }} onClick={() => openSaveForm()}>
+            Lưu khách
+          </button>
         </div>
       </div>
 
@@ -276,7 +332,6 @@ export default function Home() {
             >
               Lưu khách
             </button>
-            <span style={{ color: "#2563eb", fontWeight: 700 }}>SAVE_BUTTON_RENDERED</span>
           </div>
         )}
 
@@ -311,7 +366,6 @@ export default function Home() {
                         >
                           Lưu khách
                         </button>
-                        <span style={{ color: "#2563eb", fontWeight: 700, fontSize: 13 }}>SAVE_BUTTON_RENDERED</span>
                       </div>
                     )}
                     <p style={{ color: "#dc2626", fontWeight: "bold", fontSize: 22 }}>
@@ -391,41 +445,6 @@ export default function Home() {
         </button>
       )}
 
-      {search.trim() && (
-        <div
-          style={{
-            position: "fixed",
-            right: 20,
-            bottom: showTopButton ? 90 : 20,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "flex-end",
-            gap: 6,
-            zIndex: 9999,
-          }}
-        >
-          <span style={{ color: "#2563eb", fontWeight: 700, background: "#fff", padding: "4px 8px", borderRadius: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.12)" }}>
-            SAVE_BUTTON_RENDERED_FIXED
-          </span>
-          <button
-            onClick={() => openSaveForm()}
-            style={{
-              background: "#2563eb",
-              color: "#fff",
-              border: "none",
-              padding: "16px 24px",
-              borderRadius: 999,
-              cursor: "pointer",
-              fontWeight: "bold",
-              fontSize: 18,
-              boxShadow: "0 10px 24px rgba(37,99,235,0.36)",
-            }}
-          >
-            Lưu khách
-          </button>
-        </div>
-      )}
-
       {showSaveForm && (
         <div
           style={{
@@ -439,22 +458,53 @@ export default function Home() {
             zIndex: 10000,
           }}
         >
-          <div style={{ background: "#fff", borderRadius: 12, padding: 18, width: "min(92vw, 420px)", boxShadow: "0 12px 30px rgba(0,0,0,0.2)" }}>
+          <div style={{ background: "#fff", borderRadius: 12, padding: 18, width: "min(92vw, 480px)", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 12px 30px rgba(0,0,0,0.2)" }}>
             <h3 style={{ marginTop: 0 }}>Lưu khách</h3>
             <input
-              placeholder="Tên khách"
+              placeholder="Tên tuổi"
               value={saveFullname}
               onChange={(e) => setSaveFullname(e.target.value)}
               style={{ width: "100%", boxSizing: "border-box", padding: 12, borderRadius: 8, border: "1px solid #d1d5db", marginBottom: 10 }}
             />
             <input
-              placeholder="Số điện thoại"
+              placeholder="SĐT"
               value={savePhone}
               onChange={(e) => setSavePhone(e.target.value)}
               style={{ width: "100%", boxSizing: "border-box", padding: 12, borderRadius: 8, border: "1px solid #d1d5db", marginBottom: 10 }}
             />
+            <input
+              placeholder="Khu vực"
+              value={saveDistrict}
+              onChange={(e) => setSaveDistrict(e.target.value)}
+              style={{ width: "100%", boxSizing: "border-box", padding: 12, borderRadius: 8, border: "1px solid #d1d5db", marginBottom: 10 }}
+            />
             <textarea
-              placeholder="Ghi chú thêm"
+              placeholder="Nhu cầu"
+              value={saveNeed}
+              onChange={(e) => setSaveNeed(e.target.value)}
+              style={{ width: "100%", boxSizing: "border-box", padding: 12, borderRadius: 8, border: "1px solid #d1d5db", minHeight: 72, marginBottom: 10 }}
+            />
+            <input
+              placeholder="Thời gian cần thuê/mua"
+              value={saveTimeframe}
+              onChange={(e) => setSaveTimeframe(e.target.value)}
+              style={{ width: "100%", boxSizing: "border-box", padding: 12, borderRadius: 8, border: "1px solid #d1d5db", marginBottom: 10 }}
+            />
+            <input
+              placeholder="Ngân sách"
+              value={saveBudget}
+              onChange={(e) => setSaveBudget(e.target.value)}
+              style={{ width: "100%", boxSizing: "border-box", padding: 12, borderRadius: 8, border: "1px solid #d1d5db", marginBottom: 10 }}
+            />
+            <input
+              type="date"
+              placeholder="Ngày hẹn chăm sóc lại"
+              value={saveFollowUpAt}
+              onChange={(e) => setSaveFollowUpAt(e.target.value)}
+              style={{ width: "100%", boxSizing: "border-box", padding: 12, borderRadius: 8, border: "1px solid #d1d5db", marginBottom: 10 }}
+            />
+            <textarea
+              placeholder="Ghi chú"
               value={saveNote}
               onChange={(e) => setSaveNote(e.target.value)}
               style={{ width: "100%", boxSizing: "border-box", padding: 12, borderRadius: 8, border: "1px solid #d1d5db", minHeight: 90, marginBottom: 14 }}
