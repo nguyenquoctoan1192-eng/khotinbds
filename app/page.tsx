@@ -22,8 +22,30 @@ export default function Home() {
     useState<ParsedRequirementFilters | null>(null);
   const [showTopButton, setShowTopButton] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [showSaveForm, setShowSaveForm] = useState(false);
+  const [saveFullname, setSaveFullname] = useState("");
+  const [savePhone, setSavePhone] = useState("");
+  const [saveNote, setSaveNote] = useState("");
+  const [savingCustomer, setSavingCustomer] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
+  const [selectedSaveListing, setSelectedSaveListing] = useState<any | null>(null);
 
   const getListingFromResult = (item: any) => item.listing || item;
+
+  const getExistingMatches = () =>
+    listings
+      .map((item) => {
+        const listing = getListingFromResult(item);
+
+        return {
+          listing_id: item.listing_id || listing?.id,
+          score: item.score,
+          breakdown: item.breakdown,
+          reasons: item.reasons || item.breakdown?.reasons || [],
+        };
+      })
+      .filter((match) => match.listing_id);
+
   const getReasonLabels = (item: any) => {
     const breakdown = item.breakdown;
     const reasons = item.reasons || breakdown?.reasons || [];
@@ -56,6 +78,7 @@ export default function Home() {
 
   const fetchListings = async () => {
     setLoading(true);
+    setSaveMessage("");
 
     if (search.trim()) {
       const parsed = parseVietnameseRequirement(search);
@@ -107,6 +130,71 @@ export default function Home() {
     setLoading(false);
   };
 
+  const getListingNoteContext = (listing: any) => {
+    if (!listing) {
+      return "";
+    }
+
+    const details = [
+      listing.title,
+      listing.district,
+      listing.price
+        ? `${Number(listing.price).toLocaleString("vi-VN")} VND`
+        : null,
+    ].filter(Boolean);
+
+    return details.length > 0 ? `Quan tam: ${details.join(" - ")}` : "";
+  };
+
+  const openSaveForm = (listing?: any) => {
+    setSelectedSaveListing(listing || null);
+    setSaveNote(parsedFilters?.note || "");
+    setSaveMessage("");
+    setShowSaveForm(true);
+  };
+
+  const saveCustomerLead = async () => {
+    if (!savePhone.trim()) {
+      alert("Nhập số điện thoại");
+      return;
+    }
+
+    const filters = parsedFilters || parseVietnameseRequirement(search);
+
+    setSavingCustomer(true);
+
+    const res = await fetch("/api/leads", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        fullname: saveFullname,
+        phone: savePhone,
+        mode: "lead",
+        note:
+          [saveNote || filters.note, getListingNoteContext(selectedSaveListing)]
+            .filter(Boolean)
+            .join(" | ") || null,
+        preferred_districts: filters.preferred_districts,
+        max_price: filters.max_price,
+        min_area: filters.min_area,
+        existing_matches: getExistingMatches(),
+      }),
+    });
+
+    const json = await res.json();
+    setSavingCustomer(false);
+
+    if (!res.ok || !json.success) {
+      alert("Lưu khách thất bại");
+      return;
+    }
+
+    setSaveMessage("Đã lưu khách thành công");
+    setShowSaveForm(false);
+  };
+
   useEffect(() => {
     fetchListings();
   }, [search]);
@@ -149,11 +237,21 @@ export default function Home() {
       </div>
 
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: 20 }}>
-        <h2>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <h2 style={{ marginBottom: 8 }}>
           {search.trim()
             ? `Kết quả phù hợp (${listings.length})`
             : `Bất động sản nổi bật (${listings.length})`}
         </h2>
+          {search.trim() && listings.length > 0 && (
+            <button
+              onClick={() => openSaveForm()}
+              style={{ background: "#2563eb", color: "#fff", border: "none", padding: "11px 16px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" }}
+            >
+              Lưu khách
+            </button>
+          )}
+        </div>
 
         {parsedFilters && (
           <div style={{ background: "#fff", borderRadius: 10, padding: 14, marginTop: 12, marginBottom: 12 }}>
@@ -168,6 +266,12 @@ export default function Home() {
             <p>Diện tích tối thiểu: {parsedFilters.min_area || "Không có"}</p>
             <p>Nhu cầu: {parsedFilters.note || "Không có"}</p>
           </div>
+        )}
+
+        {saveMessage && (
+          <p style={{ color: "#15803d", fontWeight: 700, marginTop: 0 }}>
+            {saveMessage}
+          </p>
         )}
 
         {loading ? (
@@ -221,7 +325,15 @@ export default function Home() {
                       {new Date(listing.updated_at || listing.created_at).toLocaleDateString("vi-VN")}
                     </p>
                   </div>
-                  <div style={{ display: "flex", justifyContent: isMobile ? "flex-start" : "flex-end", width: isMobile ? "100%" : "auto", marginTop: isMobile ? 10 : 0, flexShrink: 0 }}>
+                  <div style={{ display: "flex", flexDirection: isMobile ? "row" : "column", gap: 10, justifyContent: isMobile ? "flex-start" : "flex-end", width: isMobile ? "100%" : "auto", marginTop: isMobile ? 10 : 0, flexShrink: 0, flexWrap: "wrap" }}>
+                    {search.trim() && (
+                      <button
+                        style={{ background: "#2563eb", color: "#fff", border: "none", padding: "12px 18px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" }}
+                        onClick={() => openSaveForm(listing)}
+                      >
+                        Lưu khách
+                      </button>
+                    )}
                     <button style={{ background: "#111827", color: "#fff", border: "none", padding: "12px 18px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" }} onClick={() => router.push(`/listing/${listing.id}`)}>
                       Xem chi tiết
                     </button>
@@ -254,6 +366,58 @@ export default function Home() {
         >
           ↑
         </button>
+      )}
+
+      {showSaveForm && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(17,24,39,0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 10000,
+          }}
+        >
+          <div style={{ background: "#fff", borderRadius: 12, padding: 18, width: "min(92vw, 420px)", boxShadow: "0 12px 30px rgba(0,0,0,0.2)" }}>
+            <h3 style={{ marginTop: 0 }}>Lưu khách</h3>
+            <input
+              placeholder="Tên khách"
+              value={saveFullname}
+              onChange={(e) => setSaveFullname(e.target.value)}
+              style={{ width: "100%", boxSizing: "border-box", padding: 12, borderRadius: 8, border: "1px solid #d1d5db", marginBottom: 10 }}
+            />
+            <input
+              placeholder="Số điện thoại"
+              value={savePhone}
+              onChange={(e) => setSavePhone(e.target.value)}
+              style={{ width: "100%", boxSizing: "border-box", padding: 12, borderRadius: 8, border: "1px solid #d1d5db", marginBottom: 10 }}
+            />
+            <textarea
+              placeholder="Ghi chú thêm"
+              value={saveNote}
+              onChange={(e) => setSaveNote(e.target.value)}
+              style={{ width: "100%", boxSizing: "border-box", padding: 12, borderRadius: 8, border: "1px solid #d1d5db", minHeight: 90, marginBottom: 14 }}
+            />
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button
+                onClick={() => setShowSaveForm(false)}
+                style={{ background: "#fff", color: "#111827", border: "1px solid #d1d5db", padding: "10px 14px", borderRadius: 8, cursor: "pointer" }}
+              >
+                Hủy
+              </button>
+              <button
+                onClick={saveCustomerLead}
+                disabled={savingCustomer}
+                style={{ background: "#2563eb", color: "#fff", border: "none", padding: "10px 14px", borderRadius: 8, cursor: savingCustomer ? "default" : "pointer", fontWeight: "bold", opacity: savingCustomer ? 0.7 : 1 }}
+              >
+                {savingCustomer ? "Đang lưu..." : "Lưu khách"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

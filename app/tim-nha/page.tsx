@@ -17,6 +17,26 @@ export default function FindHomePage() {
   const [parsedFilters, setParsedFilters] =
     useState<ParsedRequirementFilters | null>(null);
   const [results, setResults] = useState<any[]>([]);
+  const [showSaveForm, setShowSaveForm] = useState(false);
+  const [saveFullname, setSaveFullname] = useState("");
+  const [savePhone, setSavePhone] = useState("");
+  const [saveNote, setSaveNote] = useState("");
+  const [savingCustomer, setSavingCustomer] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
+  const getExistingMatches = () =>
+    results
+      .map((item) => {
+        const listing = item.listing || item;
+
+        return {
+          listing_id: item.listing_id || listing?.id,
+          score: item.score,
+          breakdown: item.breakdown,
+          reasons: item.reasons || item.breakdown?.reasons || [],
+        };
+      })
+      .filter((match) => match.listing_id);
+
   const getReasonLabels = (item: any) => {
     const breakdown = item.breakdown;
     const reasons = item.reasons || breakdown?.reasons || [];
@@ -99,6 +119,55 @@ export default function FindHomePage() {
     }
 
     setResults(json.matches || []);
+    setSaveMessage("");
+  };
+
+  const openSaveForm = () => {
+    setSaveFullname(fullname);
+    setSavePhone(phone);
+    setSaveNote(parsedFilters?.note || "");
+    setSaveMessage("");
+    setShowSaveForm(true);
+  };
+
+  const saveCustomerLead = async () => {
+    if (!savePhone.trim()) {
+      alert("Nhập số điện thoại");
+      return;
+    }
+
+    const filters = parsedFilters || parseVietnameseRequirement(requirementText);
+
+    setSavingCustomer(true);
+
+    const res = await fetch("/api/leads", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        fullname: saveFullname,
+        phone: savePhone,
+        mode: "lead",
+        note: saveNote || filters.note || null,
+        preferred_districts: filters.preferred_districts,
+        max_price: filters.max_price,
+        min_area: filters.min_area,
+        bedrooms: bedrooms ? Number(bedrooms) : null,
+        existing_matches: getExistingMatches(),
+      }),
+    });
+
+    const json = await res.json();
+    setSavingCustomer(false);
+
+    if (!res.ok || !json.success) {
+      alert("Lưu khách thất bại");
+      return;
+    }
+
+    setSaveMessage("Đã lưu khách thành công");
+    setShowSaveForm(false);
   };
 
   return (
@@ -183,6 +252,13 @@ export default function FindHomePage() {
         </div>
       )}
 
+      {results.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 12 }}>
+          <button onClick={openSaveForm}>Lưu khách</button>
+          {saveMessage && <span style={{ color: "#15803d", fontWeight: 700 }}>{saveMessage}</span>}
+        </div>
+      )}
+
       <hr />
 
       {results.map((item) => {
@@ -229,6 +305,79 @@ export default function FindHomePage() {
           </div>
         );
       })}
+
+      {showSaveForm && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(17,24,39,0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 10000,
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              padding: 18,
+              width: "min(92vw, 420px)",
+              boxShadow: "0 12px 30px rgba(0,0,0,0.2)",
+            }}
+          >
+            <h3 style={{ marginTop: 0 }}>Lưu khách</h3>
+            <input
+              placeholder="Tên khách"
+              value={saveFullname}
+              onChange={(e) => setSaveFullname(e.target.value)}
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                padding: 12,
+                borderRadius: 8,
+                border: "1px solid #d1d5db",
+                marginBottom: 10,
+              }}
+            />
+            <input
+              placeholder="Số điện thoại"
+              value={savePhone}
+              onChange={(e) => setSavePhone(e.target.value)}
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                padding: 12,
+                borderRadius: 8,
+                border: "1px solid #d1d5db",
+                marginBottom: 10,
+              }}
+            />
+            <textarea
+              placeholder="Ghi chú thêm"
+              value={saveNote}
+              onChange={(e) => setSaveNote(e.target.value)}
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                padding: 12,
+                borderRadius: 8,
+                border: "1px solid #d1d5db",
+                minHeight: 90,
+                marginBottom: 14,
+              }}
+            />
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button onClick={() => setShowSaveForm(false)}>Hủy</button>
+              <button onClick={saveCustomerLead} disabled={savingCustomer}>
+                {savingCustomer ? "Đang lưu..." : "Lưu khách"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
