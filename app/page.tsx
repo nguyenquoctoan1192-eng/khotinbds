@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
@@ -34,6 +34,7 @@ export default function Home() {
   const [savingCustomer, setSavingCustomer] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [selectedSaveListing, setSelectedSaveListing] = useState<any | null>(null);
+  const [showCustomerMenu, setShowCustomerMenu] = useState(false);
 
   const getListingFromResult = (item: any) => item.listing || item;
 
@@ -253,6 +254,14 @@ export default function Home() {
   }, [search]);
 
   useEffect(() => {
+    const query = new URLSearchParams(window.location.search).get("q");
+
+    if (query && query !== search) {
+      setSearch(query);
+    }
+  }, []);
+
+  useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     handleResize();
     window.addEventListener("resize", handleResize);
@@ -269,12 +278,43 @@ export default function Home() {
     <div style={{ fontFamily: "Arial", minHeight: "100vh", background: "#f3f4f6" }}>
       <div style={{ background: "#111827", color: "#fff", padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h2 style={{ cursor: "pointer" }} onClick={() => router.push("/")}>BDS</h2>
-        <div style={{ display: "flex", gap: 14 }}>
+        <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
           <button style={{ background: "transparent", border: "none", color: "#fff", cursor: "pointer" }} onClick={() => router.push("/")}>Trang chủ</button>
           <button style={{ background: "transparent", border: "none", color: "#fff", cursor: "pointer" }} onClick={() => router.push("/post")}>Đăng tin</button>
-          <button style={{ background: "#2563eb", border: "none", color: "#fff", cursor: "pointer", padding: "8px 12px", borderRadius: 8, fontWeight: "bold" }} onClick={() => openSaveForm()}>
-            Lưu khách
-          </button>
+          <div
+            style={{ position: "relative" }}
+            onMouseEnter={() => setShowCustomerMenu(true)}
+            onMouseLeave={() => setShowCustomerMenu(false)}
+          >
+            <button
+              style={{ background: "#2563eb", border: "none", color: "#fff", cursor: "pointer", padding: "8px 12px", borderRadius: 8, fontWeight: "bold" }}
+              onClick={() => setShowCustomerMenu((current) => !current)}
+            >
+              Khách hàng
+            </button>
+            {showCustomerMenu && (
+              <div style={{ position: "absolute", right: 0, top: "calc(100% + 8px)", background: "#fff", color: "#111827", minWidth: 180, borderRadius: 8, boxShadow: "0 12px 24px rgba(0,0,0,0.18)", padding: 6, zIndex: 1000 }}>
+                <button
+                  style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "10px 12px", cursor: "pointer", borderRadius: 6 }}
+                  onClick={() => {
+                    setShowCustomerMenu(false);
+                    openSaveForm();
+                  }}
+                >
+                  Lưu khách
+                </button>
+                <button
+                  style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "10px 12px", cursor: "pointer", borderRadius: 6 }}
+                  onClick={() => {
+                    setShowCustomerMenu(false);
+                    router.push("/customers");
+                  }}
+                >
+                  Thông tin khách
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -530,3 +570,4 @@ export default function Home() {
     </div>
   );
 }
+
