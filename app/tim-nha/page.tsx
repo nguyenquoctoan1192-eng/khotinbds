@@ -1,12 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
-);
 
 export default function FindHomePage() {
   const [fullname, setFullname] = useState("");
@@ -26,91 +20,29 @@ export default function FindHomePage() {
       return;
     }
 
-    await supabase
-      .from("leads")
-      .insert([
-        {
-          fullname,
-          phone,
-          district,
-          max_price: Number(maxPrice),
-          bedrooms: Number(bedrooms),
-        },
-      ]);
+    const res = await fetch("/api/leads", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        fullname,
+        phone,
+        max_price: maxPrice ? Number(maxPrice) : null,
+        preferred_districts: district ? [district] : [],
+        bedrooms: bedrooms ? Number(bedrooms) : null,
+        mode: "lead",
+      }),
+    });
 
-    let query = supabase
-      .from("listings")
-      .select("*");
+    const json = await res.json();
 
-    if (district) {
-      query = query.eq(
-        "district",
-        district
-      );
+    if (!res.ok || !json.success) {
+      alert("TÃ¬m nhÃ  tháº¥t báº¡i");
+      return;
     }
 
-    if (maxPrice) {
-      query = query.lte(
-        "price",
-        Number(maxPrice)
-      );
-    }
-
-    if (bedrooms) {
-      query = query.gte(
-        "bedrooms",
-        Number(bedrooms)
-      );
-    }
-
-    const { data } = await query;
-
-const scored =
-  (data || []).map(
-    (house) => {
-      let score = 0;
-
-      if (
-        district &&
-        house.district ===
-          district
-      ) {
-        score += 40;
-      }
-
-      if (
-        Number(house.price) <=
-        Number(maxPrice)
-      ) {
-        score += 40;
-      }
-
-      if (
-        Number(
-          house.bedrooms
-        ) >=
-        Number(bedrooms)
-      ) {
-        score += 20;
-      }
-
-      return {
-        ...house,
-        score,
-      };
-    }
-  );
-
-scored.sort(
-  (a, b) =>
-    b.score - a.score
-);
-
-setResults(
-  scored.slice(0, 10)
-);
-
-   
+    setResults(json.matches || []);
   };
 
   return (
@@ -181,9 +113,14 @@ setResults(
 
       <hr />
 
-      {results.map((item) => (
+      {results.map((item) => {
+        const listing = item.listing || item;
+        const breakdown = item.breakdown;
+        const reasons = item.reasons || breakdown?.reasons || [];
+
+        return (
         <div
-          key={item.id}
+          key={listing.id}
           style={{
             border:
               "1px solid #ddd",
@@ -192,32 +129,67 @@ setResults(
             borderRadius: 10,
           }}
         >
-          <h3>{item.title}</h3>
+          <h3>{listing.title}</h3>
+
+          <p>
+            Score:
+            {" "}
+            {item.score}
+          </p>
+
+          {breakdown && (
+            <p>
+              Breakdown:
+              {" "}
+              District {breakdown.district_score}
+              {" "}
+              -
+              {" "}
+              Price {breakdown.price_score}
+              {" "}
+              -
+              {" "}
+              Area {breakdown.area_score}
+              {" "}
+              -
+              {" "}
+              Bedrooms {breakdown.bedroom_score}
+            </p>
+          )}
+
+          {reasons.length > 0 && (
+            <ul>
+              {reasons.map((reason: string, index: number) => (
+                <li key={index}>{reason}</li>
+              ))}
+            </ul>
+          )}
 
           <p>
             Giá:
             {" "}
             {Number(
-              item.price
+              listing.price
             ).toLocaleString()}
           </p>
 
           <p>
-            {item.address}
+            {listing.address}
           </p>
 
           <p>
-            {item.district}
+            {listing.district}
           </p>
 
-          {item.images?.[0] && (
+          {listing.images?.[0] && (
             <img
-              src={item.images[0]}
+              src={listing.images[0]}
               width={250}
             />
           )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
