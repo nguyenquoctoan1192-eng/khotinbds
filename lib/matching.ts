@@ -58,7 +58,20 @@ function normalizeText(value: unknown): string {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/\s+/g, " ")
     .trim();
+}
+
+function normalizeDistrictName(value: unknown): string {
+  const normalized = normalizeText(value);
+  const withoutPrefix = normalized.replace(/^quan\s+/, "").trim();
+
+  if (/^\d+$/.test(withoutPrefix)) {
+    return `quan ${withoutPrefix}`;
+  }
+
+  return withoutPrefix;
 }
 
 function normalizeDistricts(value: LeadRequirement["preferred_districts"], district?: string | null) {
@@ -73,7 +86,7 @@ function normalizeDistricts(value: LeadRequirement["preferred_districts"], distr
   }
 
   return districts
-    .map((item) => normalizeText(item))
+    .map((item) => normalizeDistrictName(item))
     .filter(Boolean);
 }
 
@@ -102,7 +115,7 @@ export function scoreListingForLead(
   const normalized = normalizeLeadRequirement(requirement);
   const listingStatus = normalizeText(listing.status);
   const listingPrice = toNumber(listing.price);
-  const listingDistrict = normalizeText(listing.district);
+  const listingDistrict = normalizeDistrictName(listing.district);
   const listingArea = toNumber(listing.area);
   const listingBedrooms = toNumber(listing.bedrooms);
 

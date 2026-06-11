@@ -23,6 +23,8 @@ export default function Home() {
   const [showTopButton, setShowTopButton] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
+  const getListingFromResult = (item: any) => item.listing || item;
+
   const fetchListings = async () => {
     setLoading(true);
 
@@ -146,15 +148,15 @@ export default function Home() {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 18, marginTop: 20 }}>
             {listings.map((item) => {
-              const listing = item.listing || item;
+              const listing = getListingFromResult(item);
 
               return (
-                <div key={listing.id} style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 16, background: "#fff", borderRadius: 14, overflow: "hidden", padding: 14, alignItems: "flex-start" }}>
+                <div key={listing.id} style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 16, background: "#fff", borderRadius: 14, overflow: "hidden", padding: 14, alignItems: "flex-start", width: "100%", boxSizing: "border-box" }}>
                   <img
                     src={listing.images?.[0] || "https://placehold.co/600x400"}
                     style={{ width: isMobile ? "100%" : 260, height: isMobile ? 200 : 180, objectFit: "cover", borderRadius: 10, flexShrink: 0 }}
                   />
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ flex: "1 1 auto", minWidth: 0 }}>
                     <h3 style={{ fontSize: 24, fontWeight: 700, color: "#1f2937", marginBottom: 6 }}>{listing.title}</h3>
                     <p style={{ color: "#dc2626", fontWeight: "bold", fontSize: 22 }}>
                       {Number(listing.price || 0).toLocaleString("vi-VN")} VNĐ
@@ -174,7 +176,7 @@ export default function Home() {
                       {new Date(listing.updated_at || listing.created_at).toLocaleDateString("vi-VN")}
                     </p>
                   </div>
-                  <div style={{ display: "flex", justifyContent: isMobile ? "flex-start" : "flex-end", width: "100%", marginTop: isMobile ? 10 : 0 }}>
+                  <div style={{ display: "flex", justifyContent: isMobile ? "flex-start" : "flex-end", width: isMobile ? "100%" : "auto", marginTop: isMobile ? 10 : 0, flexShrink: 0 }}>
                     <button style={{ background: "#111827", color: "#fff", border: "none", padding: "12px 18px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" }} onClick={() => router.push(`/listing/${listing.id}`)}>
                       Xem chi tiết
                     </button>

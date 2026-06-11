@@ -5,22 +5,52 @@ export type ParsedRequirementFilters = {
   note: string;
 };
 
-const districtPatterns = [
-  { label: "Phú Nhuận", patterns: ["phu nhuan"] },
-  { label: "Bình Thạnh", patterns: ["binh thanh"] },
-  { label: "Gò Vấp", patterns: ["go vap"] },
-  { label: "Quận 1", patterns: ["quan 1", "q1", "q 1"] },
-  { label: "Quận 3", patterns: ["quan 3", "q3", "q 3"] },
-  { label: "Tân Bình", patterns: ["tan binh"] },
-  { label: "Tân Phú", patterns: ["tan phu"] },
+type DistrictPattern = {
+  label: string;
+  patterns: RegExp[];
+};
+
+const districtPatterns: DistrictPattern[] = [
+  {
+    label: "Ph\u00fa Nhu\u1eadn",
+    patterns: [/\b(?:quan\s+)?phu\s+nhuan\b/],
+  },
+  {
+    label: "B\u00ecnh Th\u1ea1nh",
+    patterns: [/\b(?:quan\s+)?binh\s+thanh\b/],
+  },
+  {
+    label: "G\u00f2 V\u1ea5p",
+    patterns: [/\b(?:quan\s+)?go\s+vap\b/],
+  },
+  {
+    label: "Qu\u1eadn 10",
+    patterns: [/\b(?:quan|q)\s*10\b/],
+  },
+  {
+    label: "Qu\u1eadn 1",
+    patterns: [/\b(?:quan|q)\s*1\b/],
+  },
+  {
+    label: "Qu\u1eadn 3",
+    patterns: [/\b(?:quan|q)\s*3\b/],
+  },
+  {
+    label: "T\u00e2n B\u00ecnh",
+    patterns: [/\b(?:quan\s+)?tan\s+binh\b/],
+  },
+  {
+    label: "T\u00e2n Ph\u00fa",
+    patterns: [/\b(?:quan\s+)?tan\s+phu\b/],
+  },
 ];
 
 const businessNeeds = [
-  { keyword: "spa", note: "làm spa" },
+  { keyword: "spa", note: "l\u00e0m spa" },
   { keyword: "cafe", note: "cafe" },
   { keyword: "ca phe", note: "cafe" },
-  { keyword: "quan an", note: "quán ăn" },
-  { keyword: "van phong", note: "văn phòng" },
+  { keyword: "quan an", note: "qu\u00e1n \u0103n" },
+  { keyword: "van phong", note: "v\u0103n ph\u00f2ng" },
 ];
 
 function normalizeText(value: string) {
@@ -29,6 +59,7 @@ function normalizeText(value: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/đ/g, "d")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -36,7 +67,7 @@ export function parseVietnameseRequirement(input: string): ParsedRequirementFilt
   const normalized = normalizeText(input);
 
   const district = districtPatterns.find((item) =>
-    item.patterns.some((pattern) => normalized.includes(pattern))
+    item.patterns.some((pattern) => pattern.test(normalized))
   );
 
   const priceMatch = normalized.match(/(\d+(?:[.,]\d+)?)\s*(tr|trieu)\b/);
