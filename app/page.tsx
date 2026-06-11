@@ -391,6 +391,41 @@ export default function Home() {
         </button>
       )}
 
+      {search.trim() && (
+        <div
+          style={{
+            position: "fixed",
+            right: 20,
+            bottom: showTopButton ? 90 : 20,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-end",
+            gap: 6,
+            zIndex: 9999,
+          }}
+        >
+          <span style={{ color: "#2563eb", fontWeight: 700, background: "#fff", padding: "4px 8px", borderRadius: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.12)" }}>
+            SAVE_BUTTON_RENDERED_FIXED
+          </span>
+          <button
+            onClick={() => openSaveForm()}
+            style={{
+              background: "#2563eb",
+              color: "#fff",
+              border: "none",
+              padding: "16px 24px",
+              borderRadius: 999,
+              cursor: "pointer",
+              fontWeight: "bold",
+              fontSize: 18,
+              boxShadow: "0 10px 24px rgba(37,99,235,0.36)",
+            }}
+          >
+            Lưu khách
+          </button>
+        </div>
+      )}
+
       {showSaveForm && (
         <div
           style={{
