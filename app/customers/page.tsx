@@ -1,7 +1,7 @@
-import Link from "next/link";
-import { createClient } from "@supabase/supabase-js";
+"use client";
 
-export const dynamic = "force-dynamic";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 
 type Lead = {
   id: string;
@@ -81,24 +81,42 @@ const formatDate = (value: string | null) => {
   return date.toLocaleDateString("vi-VN");
 };
 
-export default async function CustomersPage() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  let leads: Lead[] = [];
-  let loadError = "";
+export default function CustomersPage() {
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  if (!supabaseUrl || !serviceRoleKey) {
-    loadError = "Thiếu cấu hình Supabase để tải danh sách khách.";
-  } else {
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
-    const { data, error } = await supabase
-      .from("leads")
-      .select("id, fullname, phone, preferred_districts, note, max_price, created_at")
-      .order("created_at", { ascending: false });
+  useEffect(() => {
+    let mounted = true;
 
-    leads = (data || []) as Lead[];
-    loadError = error?.message || "";
-  }
+    fetch("/api/leads/list")
+      .then((res) => res.json())
+      .then((json) => {
+        if (!mounted) {
+          return;
+        }
+
+        setLeads(Array.isArray(json.leads) ? json.leads : []);
+        setError(json.success ? "" : json.error || "Không tải được danh sách khách.");
+      })
+      .catch((err) => {
+        if (!mounted) {
+          return;
+        }
+
+        setLeads([]);
+        setError(err instanceof Error ? err.message : "Không tải được danh sách khách.");
+      })
+      .finally(() => {
+        if (mounted) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <div style={{ fontFamily: "Arial", minHeight: "100vh", background: "#f3f4f6" }}>
@@ -135,21 +153,28 @@ export default async function CustomersPage() {
           </Link>
         </div>
 
-        {loadError && (
-          <div style={{ background: "#fee2e2", color: "#991b1b", padding: 14, borderRadius: 8, marginBottom: 16 }}>
-            Không tải được danh sách khách: {loadError}
+        {loading && (
+          <div style={{ background: "#fff", padding: 20, borderRadius: 10 }}>
+            Đang tải danh sách khách...
           </div>
         )}
 
-        {!loadError && leads.length === 0 && (
+        {!loading && error && (
+          <div style={{ background: "#fee2e2", color: "#991b1b", padding: 14, borderRadius: 8, marginBottom: 16 }}>
+            Không tải được danh sách khách: {error}
+          </div>
+        )}
+
+        {!loading && !error && leads.length === 0 && (
           <div style={{ background: "#fff", padding: 20, borderRadius: 10 }}>
             Chưa có khách hàng nào được lưu.
           </div>
         )}
 
-        {!loadError && leads.length > 0 && (
+        {!loading && !error && leads.length > 0 && (
           <div style={{ display: "grid", gap: 12 }}>
-            {leads.map((lead) => {
+            {leads.map((lead, index) => {
+              const id = lead.id || `lead-${index}`;
               const districts = formatDistricts(lead.preferred_districts);
               const followUp = extractFollowUp(lead.note);
               const requirementQuery = buildRequirementQuery(lead);
@@ -159,8 +184,8 @@ export default async function CustomersPage() {
 
               return (
                 <article
-                  id={`lead-${lead.id}`}
-                  key={lead.id}
+                  id={`lead-${id}`}
+                  key={id}
                   style={{ background: "#fff", borderRadius: 10, padding: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}
                 >
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, alignItems: "start" }}>
@@ -182,9 +207,7 @@ export default async function CustomersPage() {
                     </div>
                     <div>
                       <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>Ngày tạo</p>
-                      <span>
-                        {formatDate(lead.created_at)}
-                      </span>
+                      <span>{formatDate(lead.created_at)}</span>
                     </div>
                     <div>
                       <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>Hẹn chăm sóc lại</p>
@@ -203,7 +226,7 @@ export default async function CustomersPage() {
                         Xem chi tiết
                       </summary>
                       <div style={{ marginTop: 10, padding: 12, background: "#f9fafb", borderRadius: 8 }}>
-                        <p style={{ marginTop: 0 }}>ID: {lead.id}</p>
+                        <p style={{ marginTop: 0 }}>ID: {id}</p>
                         <p>Khách: {lead.fullname || "Chưa có tên"}</p>
                         <p>SĐT: {lead.phone || "Chưa có"}</p>
                         <p>Khu vực: {districts || "Chưa có"}</p>
