@@ -5,6 +5,14 @@ export type ListingMatchCandidate = {
   area?: number | string | null;
   bedrooms?: number | string | null;
   status?: string | null;
+  updated_at?: string | null;
+  created_at?: string | null;
+  title?: string | null;
+  description?: string | null;
+  address?: string | null;
+  note?: string | null;
+  amenities?: unknown;
+  furniture?: string | null;
   [key: string]: unknown;
 };
 
@@ -25,6 +33,7 @@ export type ScoreBreakdown = {
   area_score: number;
   bedroom_score: number;
   business_score: number;
+  data_quality_penalty: number;
   total_score: number;
   reasons: string[];
 };
@@ -46,6 +55,15 @@ type NormalizedLeadRequirement = {
   note?: string | null;
 };
 
+type BusinessNeed = "cafe" | "spa" | "office" | "restaurant";
+
+const businessKeywords: Record<BusinessNeed, RegExp[]> = {
+  cafe: [/\bcafe\b/, /\bca phe\b/, /\bcoffee\b/, /\bcf\b/],
+  spa: [/\bspa\b/, /\btham my\b/, /\bsalon\b/, /\bnail\b/, /\bmassage\b/],
+  office: [/\bvan phong\b/, /\bvp\b/, /\bsan vp\b/, /\boffice\b/, /\bcong ty\b/],
+  restaurant: [/\bquan an\b/, /\bnha hang\b/, /\ban uong\b/, /\bbep\b/, /\bf&b\b/, /\bfnb\b/],
+};
+
 function toNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
 
@@ -60,6 +78,7 @@ function normalizeText(value: unknown): string {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/đ/g, "d")
+    .replace(/Ä‘/g, "d")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -91,15 +110,14 @@ function normalizeDistricts(value: LeadRequirement["preferred_districts"], distr
     .filter(Boolean);
 }
 
-function detectBusinessNeeds(value: unknown): string[] {
+function detectBusinessNeeds(value: unknown): BusinessNeed[] {
   const normalized = normalizeText(value);
-  const needs: string[] = [];
+  const needs: BusinessNeed[] = [];
 
-  if (normalized.includes("spa")) needs.push("spa");
-  if (normalized.includes("cafe") || normalized.includes("ca phe")) needs.push("cafe");
-  if (normalized.includes("van phong") || normalized.includes("office")) needs.push("office");
-  if (normalized.includes("quan an") || normalized.includes("nha hang") || normalized.includes("restaurant")) {
-    needs.push("restaurant");
+  for (const [need, patterns] of Object.entries(businessKeywords) as Array<[BusinessNeed, RegExp[]]>) {
+    if (patterns.some((pattern) => pattern.test(normalized))) {
+      needs.push(need);
+    }
   }
 
   return needs;
@@ -112,11 +130,15 @@ function listingSearchText(listing: ListingMatchCandidate) {
     listing.address,
     listing.district,
     listing.note,
-    listing.amenities,
+    Array.isArray(listing.amenities) ? listing.amenities.join(" ") : listing.amenities,
     listing.furniture,
   ];
 
   return normalizeText(fields.filter(Boolean).join(" "));
+}
+
+function hasAny(text: string, patterns: RegExp[]) {
+  return patterns.some((pattern) => pattern.test(text));
 }
 
 function scoreBusinessSuitability(
@@ -133,23 +155,47 @@ function scoreBusinessSuitability(
   }
 
   const text = listingSearchText(listing);
-  const matchedNeeds = needs.filter((need) => {
-    if (need === "restaurant") {
-      return text.includes("quan an") || text.includes("nha hang") || text.includes("restaurant");
+  const businessSignals = {
+    frontage: hasAny(text, [/\bmt\b/, /\bmat tien\b/, /\b2 mat tien\b/]),
+    premise: hasAny(text, [/\bmb\b/, /\bmat bang\b/]),
+    groundFloor: hasAny(text, [/\btret\b/, /\btang tret\b/]),
+    largeSpace: hasAny(text, [/\brong\b/, /\bngang\b/]),
+    officeFloor: hasAny(text, [/\bsan\b/, /\bsan vp\b/, /\bvp\b/]),
+  };
+
+  let score = 0;
+  const reasons: string[] = [];
+
+  for (const need of needs) {
+    if (hasAny(text, businessKeywords[need])) {
+      score += 20;
+      reasons.push(`Listing text directly matches ${need} need`);
+      continue;
     }
 
     if (need === "office") {
-      return text.includes("van phong") || text.includes("office");
+      if (businessSignals.officeFloor) {
+        score += 18;
+        reasons.push("Sàn/VP signal supports office use");
+      } else if (businessSignals.premise || businessSignals.frontage) {
+        score += 10;
+        reasons.push("Premise/frontage signal may support office use");
+      }
+      continue;
     }
 
-    if (need === "cafe") {
-      return text.includes("cafe") || text.includes("ca phe");
+    if (businessSignals.frontage || businessSignals.premise) {
+      score += 12;
+      reasons.push("MT/MB signal supports customer-facing business use");
     }
 
-    return text.includes(need);
-  });
+    if (businessSignals.groundFloor || businessSignals.largeSpace) {
+      score += 8;
+      reasons.push("Ground-floor/large-space signal supports business use");
+    }
+  }
 
-  if (matchedNeeds.length === 0) {
+  if (score <= 0) {
     return {
       score: 0,
       reasons: ["Business need noted, but listing has no clear business-use signal"],
@@ -157,9 +203,19 @@ function scoreBusinessSuitability(
   }
 
   return {
-    score: 20,
-    reasons: matchedNeeds.map((need) => `Listing appears suitable for ${need}`),
+    score: Math.min(score, 25),
+    reasons,
   };
+}
+
+function getUpdatedAtTime(match: MatchResult) {
+  const value = match.listing.updated_at || match.listing.created_at;
+
+  if (!value) return 0;
+
+  const time = new Date(value).getTime();
+
+  return Number.isFinite(time) ? time : 0;
 }
 
 export function normalizeLeadRequirement(requirement: LeadRequirement): NormalizedLeadRequirement {
@@ -174,6 +230,19 @@ export function normalizeLeadRequirement(requirement: LeadRequirement): Normaliz
     bedrooms: toNumber(requirement.bedrooms),
     note: requirement.note,
   };
+}
+
+export function compareMatchResults(a: MatchResult, b: MatchResult) {
+  const areaA = toNumber(a.listing.area) || 0;
+  const areaB = toNumber(b.listing.area) || 0;
+
+  return (
+    b.score - a.score ||
+    b.breakdown.business_score - a.breakdown.business_score ||
+    Number(areaB > 0) - Number(areaA > 0) ||
+    areaB - areaA ||
+    getUpdatedAtTime(b) - getUpdatedAtTime(a)
+  );
 }
 
 export function getMatchReasons(breakdown: ScoreBreakdown) {
@@ -197,7 +266,7 @@ export function scoreListingForLead(
 
   if (
     normalized.max_price !== null &&
-    (listingPrice === null || listingPrice > normalized.max_price)
+    (listingPrice === null || listingPrice <= 0 || listingPrice > normalized.max_price)
   ) {
     return null;
   }
@@ -229,6 +298,7 @@ export function scoreListingForLead(
     area_score: 0,
     bedroom_score: 0,
     business_score: 0,
+    data_quality_penalty: 0,
     total_score: 0,
     reasons: [],
   };
@@ -243,13 +313,31 @@ export function scoreListingForLead(
 
   if (
     listingPrice !== null &&
-    (
-      (normalized.min_price === null && normalized.max_price === null) ||
-      (
-        (normalized.min_price === null || listingPrice >= normalized.min_price) &&
-        (normalized.max_price === null || listingPrice <= normalized.max_price)
-      )
-    )
+    normalized.min_price === null &&
+    normalized.max_price === null
+  ) {
+    breakdown.price_score = 30;
+    breakdown.reasons.push("Price matches budget");
+  } else if (listingPrice !== null && normalized.max_price !== null) {
+    const priceRatio = listingPrice / normalized.max_price;
+
+    if (priceRatio >= 0.9) {
+      breakdown.price_score = 30;
+      breakdown.reasons.push("Gi\u00e1 g\u1ea7n ng\u00e2n s\u00e1ch");
+    } else if (priceRatio >= 0.75) {
+      breakdown.price_score = 24;
+      breakdown.reasons.push("Gi\u00e1 th\u1ea5p h\u01a1n ng\u00e2n s\u00e1ch");
+    } else if (priceRatio >= 0.5) {
+      breakdown.price_score = 16;
+      breakdown.reasons.push("Gi\u00e1 th\u1ea5p h\u01a1n ng\u00e2n s\u00e1ch");
+    } else {
+      breakdown.price_score = 8;
+      breakdown.reasons.push("Gi\u00e1 th\u1ea5p h\u01a1n nhi\u1ec1u so v\u1edbi ng\u00e2n s\u00e1ch");
+    }
+  } else if (
+    listingPrice !== null &&
+    normalized.min_price !== null &&
+    listingPrice >= normalized.min_price
   ) {
     breakdown.price_score = 30;
     breakdown.reasons.push("Price matches budget");
@@ -277,12 +365,18 @@ export function scoreListingForLead(
   breakdown.business_score = businessSuitability.score;
   breakdown.reasons.push(...businessSuitability.reasons);
 
+  if (listingArea === null || listingArea <= 0) {
+    breakdown.data_quality_penalty = -8;
+    breakdown.reasons.push("Area data missing or zero");
+  }
+
   breakdown.total_score =
     breakdown.district_score +
     breakdown.price_score +
     breakdown.area_score +
     breakdown.bedroom_score +
-    breakdown.business_score;
+    breakdown.business_score +
+    breakdown.data_quality_penalty;
 
   if (breakdown.total_score <= 0) {
     return null;

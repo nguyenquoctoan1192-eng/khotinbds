@@ -3,11 +3,14 @@ import { createClient } from "@supabase/supabase-js";
 import {
   LeadRequirement,
   MatchResult,
+  compareMatchResults,
   normalizeLeadRequirement,
   scoreListingForLead,
 } from "@/lib/matching";
 
 type MatchWithLead = MatchResult & { lead_id: string };
+
+const MIN_MATCH_SCORE = 40;
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -88,7 +91,7 @@ export async function POST(req: Request) {
       for (const listing of listings || []) {
         const match = scoreListingForLead(listing, requirement);
 
-        if (match) {
+        if (match && match.score >= MIN_MATCH_SCORE) {
           matches.push({
             ...match,
             lead_id: lead.id,
@@ -101,13 +104,11 @@ export async function POST(req: Request) {
         matches.length
       );
 
-      matches.sort((a, b) => b.score - a.score);
+      matches.sort(compareMatchResults);
 
-      const top10 = matches.slice(0, 10);
-
-      if (top10.length > 0) {
+      if (matches.length > 0) {
         await supabase.from("lead_matches").insert(
-          top10.map((m) => ({
+          matches.map((m) => ({
             lead_id: m.lead_id,
             listing_id: m.listing_id,
             score: m.score,
@@ -118,7 +119,7 @@ export async function POST(req: Request) {
       return NextResponse.json({
         success: true,
         lead,
-        matches: top10,
+        matches,
       });
     }
 
@@ -142,11 +143,13 @@ export async function POST(req: Request) {
         return { ...item, score };
       });
 
-      scored.sort((a, b) => b.score - a.score);
+      const matches = scored
+        .filter((item) => item.score >= MIN_MATCH_SCORE)
+        .sort((a, b) => b.score - a.score);
 
       return NextResponse.json({
         success: true,
-        matches: scored.slice(0, 10),
+        matches,
       });
     }
 
