@@ -24,6 +24,35 @@ export default function Home() {
   const [isMobile, setIsMobile] = useState(false);
 
   const getListingFromResult = (item: any) => item.listing || item;
+  const getReasonLabels = (item: any) => {
+    const breakdown = item.breakdown;
+    const reasons = item.reasons || breakdown?.reasons || [];
+    const labels: string[] = [];
+
+    if (breakdown?.district_score > 0 || reasons.some((reason: string) => reason.includes("District"))) {
+      labels.push("Đúng quận");
+    }
+
+    if (breakdown?.price_score > 0 || reasons.some((reason: string) => reason.includes("Giá"))) {
+      labels.push("Giá gần ngân sách");
+    }
+
+    if (breakdown?.area_score > 0 || reasons.some((reason: string) => reason.includes("Area"))) {
+      labels.push("Diện tích phù hợp");
+    }
+
+    if (breakdown?.business_score > 0) {
+      const businessReason = reasons.find((reason: string) =>
+        /spa|cafe|office|restaurant|business|MT\/MB|VP|frontage|Premise/i.test(reason)
+      );
+      const businessType =
+        businessReason?.match(/spa|cafe|office|restaurant/i)?.[0] || "kinh doanh";
+
+      labels.push(`Phù hợp ${businessType}`);
+    }
+
+    return labels;
+  };
 
   const fetchListings = async () => {
     setLoading(true);
@@ -162,7 +191,23 @@ export default function Home() {
                       {Number(listing.price || 0).toLocaleString("vi-VN")} VNĐ
                     </p>
                     <p>Vị trí: {listing.district}</p>
-                    {search.trim() && <p>Score: {item.score}</p>}
+                    {search.trim() && (
+                      <div style={{ marginTop: 8, marginBottom: 8 }}>
+                        <p style={{ fontWeight: 700, marginBottom: 6 }}>
+                          Điểm phù hợp: {item.score}
+                        </p>
+                        {getReasonLabels(item).length > 0 && (
+                          <div>
+                            <p style={{ marginBottom: 4 }}>Reasons:</p>
+                            <ul style={{ marginTop: 0, paddingLeft: 20 }}>
+                              {getReasonLabels(item).map((reason) => (
+                                <li key={reason}>✓ {reason}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <div style={{ display: "flex", gap: 15, flexWrap: "wrap", marginTop: 8, marginBottom: 8 }}>
                       <span>{listing.bedrooms || 0} PN</span>
                       <span>{listing.bathrooms || 0} WC</span>

@@ -17,6 +17,35 @@ export default function FindHomePage() {
   const [parsedFilters, setParsedFilters] =
     useState<ParsedRequirementFilters | null>(null);
   const [results, setResults] = useState<any[]>([]);
+  const getReasonLabels = (item: any) => {
+    const breakdown = item.breakdown;
+    const reasons = item.reasons || breakdown?.reasons || [];
+    const labels: string[] = [];
+
+    if (breakdown?.district_score > 0 || reasons.some((reason: string) => reason.includes("District"))) {
+      labels.push("Đúng quận");
+    }
+
+    if (breakdown?.price_score > 0 || reasons.some((reason: string) => reason.includes("Giá"))) {
+      labels.push("Giá gần ngân sách");
+    }
+
+    if (breakdown?.area_score > 0 || reasons.some((reason: string) => reason.includes("Area"))) {
+      labels.push("Diện tích phù hợp");
+    }
+
+    if (breakdown?.business_score > 0) {
+      const businessReason = reasons.find((reason: string) =>
+        /spa|cafe|office|restaurant|business|MT\/MB|VP|frontage|Premise/i.test(reason)
+      );
+      const businessType =
+        businessReason?.match(/spa|cafe|office|restaurant/i)?.[0] || "kinh doanh";
+
+      labels.push(`Phù hợp ${businessType}`);
+    }
+
+    return labels;
+  };
 
   const searchHomes = async () => {
     if (!phone) {
@@ -158,8 +187,7 @@ export default function FindHomePage() {
 
       {results.map((item) => {
         const listing = item.listing || item;
-        const breakdown = item.breakdown;
-        const reasons = item.reasons || breakdown?.reasons || [];
+        const reasonLabels = getReasonLabels(item);
 
         return (
           <div
@@ -173,22 +201,19 @@ export default function FindHomePage() {
           >
             <h3>{listing.title}</h3>
 
-            <p>Score: {item.score}</p>
+            <p style={{ fontWeight: 700 }}>
+              Điểm phù hợp: {item.score}
+            </p>
 
-            {breakdown && (
-              <p>
-                Breakdown: District {breakdown.district_score} - Price{" "}
-                {breakdown.price_score} - Area {breakdown.area_score} - Bedrooms{" "}
-                {breakdown.bedroom_score}
-              </p>
-            )}
-
-            {reasons.length > 0 && (
-              <ul>
-                {reasons.map((reason: string, index: number) => (
-                  <li key={index}>{reason}</li>
-                ))}
-              </ul>
+            {reasonLabels.length > 0 && (
+              <div>
+                <p>Reasons:</p>
+                <ul>
+                  {reasonLabels.map((reason) => (
+                    <li key={reason}>✓ {reason}</li>
+                  ))}
+                </ul>
+              </div>
             )}
 
             <p>Giá: {Number(listing.price).toLocaleString()}</p>
