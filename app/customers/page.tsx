@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 type Lead = {
@@ -10,6 +11,15 @@ type Lead = {
   preferred_districts: unknown;
   note: string | null;
   max_price: number | string | null;
+  status: string | null;
+  created_at: string | null;
+};
+
+type LeadActivity = {
+  id: string;
+  lead_id: string;
+  type: string;
+  content: string;
   created_at: string | null;
 };
 
@@ -21,6 +31,7 @@ type LeadWithFollowUp = {
   followUpDate: Date | null;
   followUpText: string;
   followUpStatus: FollowUpStatus;
+  activities: LeadActivity[];
 };
 
 type CrmFields = {
@@ -35,6 +46,32 @@ type ComposeState = {
   message: string;
   copyMessage: string;
 };
+
+type NoteModalState = {
+  open: boolean;
+  leadId: string;
+  type: string;
+  content: string;
+  saving: boolean;
+  error: string;
+};
+
+const LEAD_STATUSES = [
+  "Khách mới",
+  "Đang chăm sóc",
+  "Đã gửi nhà",
+  "Đã đi xem",
+  "Đang đàm phán",
+  "Đã chốt",
+  "Hủy",
+];
+
+const ACTIVITY_TYPES = [
+  "Gọi điện",
+  "Đã gửi nhà",
+  "Đã đi xem",
+  "Ghi chú",
+];
 
 const formatDistricts = (districts: Lead["preferred_districts"]) => {
   if (Array.isArray(districts)) {
@@ -295,6 +332,14 @@ const getStatusStyle = (status: FollowUpStatus) => {
   return { background: "#dbeafe", color: "#1e40af" };
 };
 
+const formatActivityDate = (value: string | null) => {
+  if (!value) {
+    return "";
+  }
+
+  return new Date(value).toLocaleString("vi-VN");
+};
+
 const buildRequirementQuery = (lead: Lead, crmFields: CrmFields) =>
   [
     formatDistricts(lead.preferred_districts),
@@ -355,11 +400,17 @@ function CustomerCard({
   index,
   composing,
   onComposeMessage,
+  onFindMatches,
+  onOpenNote,
+  onStatusChange,
 }: {
   item: LeadWithFollowUp;
   index: number;
   composing: boolean;
   onComposeMessage: (item: LeadWithFollowUp) => void;
+  onFindMatches: (item: LeadWithFollowUp, href: string) => void;
+  onOpenNote: (item: LeadWithFollowUp) => void;
+  onStatusChange: (item: LeadWithFollowUp, status: string) => void;
 }) {
   const lead = item.lead;
   const crmFields = item.crmFields;
@@ -370,6 +421,7 @@ function CustomerCard({
     ? `/?q=${encodeURIComponent(requirementQuery)}`
     : "/";
   const statusLabel = getStatusLabel(item.followUpStatus);
+  const leadStatus = lead.status || LEAD_STATUSES[0];
 
   return (
     <article
@@ -392,6 +444,23 @@ function CustomerCard({
             {statusLabel}
           </span>
         )}
+      </div>
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
+        <label style={{ display: "grid", gap: 5, minWidth: 220 }}>
+          <span style={{ color: "#6b7280", fontSize: 13 }}>Trạng thái CRM</span>
+          <select
+            value={leadStatus}
+            onChange={(event) => onStatusChange(item, event.target.value)}
+            style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff" }}
+          >
+            {LEAD_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, alignItems: "start" }}>
@@ -435,12 +504,16 @@ function CustomerCard({
           </a>
         )}
 
-        <Link
+        <a
           href={searchHref}
+          onClick={(event) => {
+            event.preventDefault();
+            onFindMatches(item, searchHref);
+          }}
           style={{ background: "#2563eb", color: "#fff", textDecoration: "none", padding: "10px 12px", borderRadius: 8, fontWeight: 700 }}
         >
           Tìm nhà phù hợp
-        </Link>
+        </a>
 
         <button
           type="button"
@@ -450,6 +523,35 @@ function CustomerCard({
         >
           {composing ? "Đang soạn..." : "Soạn tin gửi khách"}
         </button>
+
+        <button
+          type="button"
+          onClick={() => onOpenNote(item)}
+          style={{ background: "#fff", color: "#111827", border: "1px solid #d1d5db", padding: "10px 12px", borderRadius: 8, fontWeight: 700, cursor: "pointer" }}
+        >
+          + Ghi chú chăm sóc
+        </button>
+      </div>
+
+      <div style={{ borderTop: "1px solid #e5e7eb", marginTop: 14, paddingTop: 12 }}>
+        <p style={{ margin: "0 0 8px", color: "#374151", fontWeight: 700 }}>Hoạt động gần nhất</p>
+        {item.activities.length > 0 ? (
+          <div style={{ display: "grid", gap: 8 }}>
+            {item.activities.slice(0, 3).map((activity) => (
+              <div key={activity.id} style={{ background: "#f9fafb", borderRadius: 8, padding: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+                  <strong>{activity.type}</strong>
+                  <span style={{ color: "#6b7280", fontSize: 12 }}>
+                    {formatActivityDate(activity.created_at)}
+                  </span>
+                </div>
+                <div style={{ color: "#374151", lineHeight: 1.45 }}>{activity.content}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={{ margin: 0, color: "#6b7280" }}>Chưa có hoạt động.</p>
+        )}
       </div>
     </article>
   );
@@ -460,11 +562,17 @@ function ReminderSection({
   items,
   composingLeadId,
   onComposeMessage,
+  onFindMatches,
+  onOpenNote,
+  onStatusChange,
 }: {
   title: string;
   items: LeadWithFollowUp[];
   composingLeadId: string;
   onComposeMessage: (item: LeadWithFollowUp) => void;
+  onFindMatches: (item: LeadWithFollowUp, href: string) => void;
+  onOpenNote: (item: LeadWithFollowUp) => void;
+  onStatusChange: (item: LeadWithFollowUp, status: string) => void;
 }) {
   return (
     <section style={{ display: "grid", gap: 12 }}>
@@ -484,6 +592,9 @@ function ReminderSection({
               index={index}
               composing={composingLeadId === item.lead.id}
               onComposeMessage={onComposeMessage}
+              onFindMatches={onFindMatches}
+              onOpenNote={onOpenNote}
+              onStatusChange={onStatusChange}
             />
           ))}
         </div>
@@ -497,7 +608,9 @@ function ReminderSection({
 }
 
 export default function CustomersPage() {
+  const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [activities, setActivities] = useState<LeadActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [composeState, setComposeState] = useState<ComposeState>({
@@ -506,6 +619,14 @@ export default function CustomersPage() {
     copyMessage: "",
   });
   const [composingLeadId, setComposingLeadId] = useState("");
+  const [noteModal, setNoteModal] = useState<NoteModalState>({
+    open: false,
+    leadId: "",
+    type: ACTIVITY_TYPES[0],
+    content: "",
+    saving: false,
+    error: "",
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -518,6 +639,7 @@ export default function CustomersPage() {
         }
 
         setLeads(Array.isArray(json.leads) ? json.leads : []);
+        setActivities(Array.isArray(json.activities) ? json.activities : []);
         setError(json.success ? "" : json.error || "Không tải được danh sách khách.");
       })
       .catch((err) => {
@@ -526,6 +648,7 @@ export default function CustomersPage() {
         }
 
         setLeads([]);
+        setActivities([]);
         setError(err instanceof Error ? err.message : "Không tải được danh sách khách.");
       })
       .finally(() => {
@@ -544,6 +667,13 @@ export default function CustomersPage() {
     const crmFields = parseCrmFields(lead.note);
     const followUpDate = extractFollowUp(lead.note, crmFields);
     const followUpStatus = getFollowUpStatus(followUpDate, today);
+    const leadActivities = activities
+      .filter((activity) => activity.lead_id === lead.id)
+      .sort(
+        (a, b) =>
+          new Date(b.created_at || 0).getTime() -
+          new Date(a.created_at || 0).getTime()
+      );
 
     return {
       lead,
@@ -551,8 +681,14 @@ export default function CustomersPage() {
       followUpDate,
       followUpText: formatFollowUpDate(followUpDate),
       followUpStatus,
+      activities: leadActivities,
     };
   });
+
+  const statusCounts = LEAD_STATUSES.map((status) => ({
+    status,
+    count: leads.filter((lead) => (lead.status || LEAD_STATUSES[0]) === status).length,
+  }));
 
   const todayItems = leadsWithFollowUp
     .filter((item) => item.followUpStatus === "today" || item.followUpStatus === "overdue")
@@ -561,6 +697,126 @@ export default function CustomersPage() {
     .filter((item) => item.followUpStatus === "upcoming")
     .sort((a, b) => (a.followUpDate?.getTime() || 0) - (b.followUpDate?.getTime() || 0));
   const unscheduledItems = leadsWithFollowUp.filter((item) => item.followUpStatus === "none");
+
+  const addActivity = async (leadId: string, type: string, content: string) => {
+    const res = await fetch("/api/lead-activities", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        lead_id: leadId,
+        type,
+        content,
+      }),
+    });
+    const json = await res.json();
+
+    if (!res.ok || !json.success) {
+      throw new Error(json.error || "Không lưu được hoạt động.");
+    }
+
+    if (json.activity) {
+      setActivities((current) => [json.activity, ...current]);
+    }
+
+    return json.activity as LeadActivity | undefined;
+  };
+
+  const updateLeadStatus = async (item: LeadWithFollowUp, status: string) => {
+    const lead = item.lead;
+
+    if (!lead.id || status === (lead.status || LEAD_STATUSES[0])) {
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/leads/status", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          lead_id: lead.id,
+          status,
+        }),
+      });
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Không cập nhật được trạng thái.");
+      }
+
+      setLeads((current) =>
+        current.map((currentLead) =>
+          currentLead.id === lead.id
+            ? { ...currentLead, status }
+            : currentLead
+        )
+      );
+
+      if (json.activity) {
+        setActivities((current) => [json.activity, ...current]);
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Không cập nhật được trạng thái.");
+    }
+  };
+
+  const openNoteModal = (item: LeadWithFollowUp) => {
+    setNoteModal({
+      open: true,
+      leadId: item.lead.id,
+      type: ACTIVITY_TYPES[0],
+      content: "",
+      saving: false,
+      error: "",
+    });
+  };
+
+  const saveNoteActivity = async () => {
+    if (!noteModal.content.trim()) {
+      setNoteModal((current) => ({
+        ...current,
+        error: "Nhập nội dung chăm sóc.",
+      }));
+      return;
+    }
+
+    setNoteModal((current) => ({
+      ...current,
+      saving: true,
+      error: "",
+    }));
+
+    try {
+      await addActivity(noteModal.leadId, noteModal.type, noteModal.content.trim());
+      setNoteModal({
+        open: false,
+        leadId: "",
+        type: ACTIVITY_TYPES[0],
+        content: "",
+        saving: false,
+        error: "",
+      });
+    } catch (err) {
+      setNoteModal((current) => ({
+        ...current,
+        saving: false,
+        error: err instanceof Error ? err.message : "Không lưu được ghi chú.",
+      }));
+    }
+  };
+
+  const findMatchesForLead = async (item: LeadWithFollowUp, href: string) => {
+    try {
+      await addActivity(item.lead.id, "Ghi chú", "Tìm nhà phù hợp");
+    } catch (err) {
+      console.error(err);
+    } finally {
+      router.push(href);
+    }
+  };
 
   const openCustomerMessage = async (item: LeadWithFollowUp) => {
     const lead = item.lead;
@@ -572,6 +828,12 @@ export default function CustomersPage() {
     setComposingLeadId(lead.id);
 
     try {
+      try {
+        await addActivity(lead.id, "Đã gửi nhà", "Soạn tin gửi khách");
+      } catch (err) {
+        console.error(err);
+      }
+
       const res = await fetch("/api/leads", {
         method: "POST",
         headers: {
@@ -653,6 +915,17 @@ export default function CustomersPage() {
           </Link>
         </div>
 
+        {!loading && !error && leads.length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10, marginBottom: 20 }}>
+            {statusCounts.map((item) => (
+              <div key={item.status} style={{ background: "#fff", borderRadius: 8, padding: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
+                <div style={{ color: "#6b7280", fontSize: 13, marginBottom: 6 }}>{item.status}</div>
+                <strong style={{ fontSize: 24 }}>{item.count}</strong>
+              </div>
+            ))}
+          </div>
+        )}
+
         {loading && (
           <div style={{ background: "#fff", padding: 20, borderRadius: 10 }}>
             Đang tải danh sách khách...
@@ -678,22 +951,114 @@ export default function CustomersPage() {
               items={todayItems}
               composingLeadId={composingLeadId}
               onComposeMessage={openCustomerMessage}
+              onFindMatches={findMatchesForLead}
+              onOpenNote={openNoteModal}
+              onStatusChange={updateLeadStatus}
             />
             <ReminderSection
               title="Sắp tới"
               items={upcomingItems}
               composingLeadId={composingLeadId}
               onComposeMessage={openCustomerMessage}
+              onFindMatches={findMatchesForLead}
+              onOpenNote={openNoteModal}
+              onStatusChange={updateLeadStatus}
             />
             <ReminderSection
               title="Chưa có lịch hẹn"
               items={unscheduledItems}
               composingLeadId={composingLeadId}
               onComposeMessage={openCustomerMessage}
+              onFindMatches={findMatchesForLead}
+              onOpenNote={openNoteModal}
+              onStatusChange={updateLeadStatus}
             />
           </div>
         )}
       </main>
+
+      {noteModal.open && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(17,24,39,0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 10000,
+          }}
+        >
+          <div style={{ background: "#fff", borderRadius: 12, padding: 18, width: "min(94vw, 520px)", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 12px 30px rgba(0,0,0,0.2)" }}>
+            <h3 style={{ marginTop: 0 }}>+ Ghi chú chăm sóc</h3>
+            <label style={{ display: "grid", gap: 6, marginBottom: 12 }}>
+              <span style={{ color: "#374151", fontWeight: 700 }}>Loại hoạt động</span>
+              <select
+                value={noteModal.type}
+                onChange={(event) =>
+                  setNoteModal((current) => ({
+                    ...current,
+                    type: event.target.value,
+                    error: "",
+                  }))
+                }
+                style={{ padding: 12, borderRadius: 8, border: "1px solid #d1d5db", background: "#fff" }}
+              >
+                {ACTIVITY_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: "grid", gap: 6 }}>
+              <span style={{ color: "#374151", fontWeight: 700 }}>Nội dung</span>
+              <textarea
+                value={noteModal.content}
+                onChange={(event) =>
+                  setNoteModal((current) => ({
+                    ...current,
+                    content: event.target.value,
+                    error: "",
+                  }))
+                }
+                style={{ width: "100%", boxSizing: "border-box", minHeight: 150, padding: 12, borderRadius: 8, border: "1px solid #d1d5db", lineHeight: 1.5, fontSize: 15 }}
+              />
+            </label>
+            {noteModal.error && (
+              <p style={{ color: "#991b1b", fontWeight: 700, marginBottom: 0 }}>
+                {noteModal.error}
+              </p>
+            )}
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 14 }}>
+              <button
+                onClick={() =>
+                  setNoteModal({
+                    open: false,
+                    leadId: "",
+                    type: ACTIVITY_TYPES[0],
+                    content: "",
+                    saving: false,
+                    error: "",
+                  })
+                }
+                disabled={noteModal.saving}
+                style={{ background: "#fff", color: "#111827", border: "1px solid #d1d5db", padding: "10px 14px", borderRadius: 8, cursor: noteModal.saving ? "default" : "pointer" }}
+              >
+                Hủy
+              </button>
+              <button
+                onClick={saveNoteActivity}
+                disabled={noteModal.saving}
+                style={{ background: "#2563eb", color: "#fff", border: "none", padding: "10px 14px", borderRadius: 8, cursor: noteModal.saving ? "default" : "pointer", fontWeight: 700, opacity: noteModal.saving ? 0.7 : 1 }}
+              >
+                {noteModal.saving ? "Đang lưu..." : "Lưu ghi chú"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {composeState.open && (
         <div

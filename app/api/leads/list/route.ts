@@ -20,7 +20,7 @@ export async function GET() {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
     const { data, error } = await supabase
       .from("leads")
-      .select("id, fullname, phone, preferred_districts, note, max_price, created_at")
+      .select("id, fullname, phone, preferred_districts, note, max_price, status, created_at")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -34,9 +34,31 @@ export async function GET() {
       );
     }
 
+    const leadIds = (data || []).map((lead) => lead.id).filter(Boolean);
+    const { data: activities, error: activitiesError } = leadIds.length > 0
+      ? await supabase
+          .from("lead_activities")
+          .select("id, lead_id, type, content, created_at")
+          .in("lead_id", leadIds)
+          .order("created_at", { ascending: false })
+      : { data: [], error: null };
+
+    if (activitiesError) {
+      return NextResponse.json(
+        {
+          success: false,
+          leads: [],
+          activities: [],
+          error: activitiesError.message,
+        },
+        { status: 200 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       leads: data || [],
+      activities: activities || [],
       error: "",
     });
   } catch (error) {
