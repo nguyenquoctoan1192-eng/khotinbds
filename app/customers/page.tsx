@@ -13,6 +13,15 @@ type Lead = {
   created_at: string | null;
 };
 
+type FollowUpStatus = "today" | "overdue" | "upcoming" | "none";
+
+type LeadWithFollowUp = {
+  lead: Lead;
+  followUpDate: Date | null;
+  followUpText: string;
+  followUpStatus: FollowUpStatus;
+};
+
 const formatDistricts = (districts: Lead["preferred_districts"]) => {
   if (Array.isArray(districts)) {
     return districts.filter(Boolean).map(String).join(", ");
@@ -48,14 +57,108 @@ const formatPrice = (price: Lead["max_price"]) => {
   return `${value.toLocaleString("vi-VN")} VNĐ`;
 };
 
-const extractFollowUp = (note: string | null) => {
-  if (!note) {
-    return "";
+const normalizeText = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\u0111/g, "d")
+    .replace(/\u0110/g, "D")
+    .toLowerCase();
+
+const createLocalDate = (value: string) => {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (!match) {
+    return null;
   }
 
-  const match = note.match(/Hen cham soc lai:\s*([^|]+)/i);
+  const year = Number(match[1]);
+  const monthIndex = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const date = new Date(year, monthIndex, day);
 
-  return match?.[1]?.trim() || "";
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== monthIndex ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+};
+
+const startOfLocalDay = (date: Date) =>
+  new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+const extractFollowUp = (note: string | null) => {
+  if (!note) {
+    return null;
+  }
+
+  const normalized = normalizeText(note);
+  const labelMatch = normalized.match(
+    /(?:hen|lich|ngay)?\s*(?:cham soc|goi|lien he|follow[\s-]?up)(?:\s*lai)?\s*:?\s*(\d{4}-\d{2}-\d{2})/
+  );
+  const fallbackMatch = normalized.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+  const value = labelMatch?.[1] || fallbackMatch?.[1] || "";
+
+  return createLocalDate(value);
+};
+
+const formatFollowUpDate = (date: Date | null) => {
+  if (!date) {
+    return "Chưa có";
+  }
+
+  return date.toLocaleDateString("vi-VN");
+};
+
+const getFollowUpStatus = (date: Date | null, today: Date): FollowUpStatus => {
+  if (!date) {
+    return "none";
+  }
+
+  const followUpDay = startOfLocalDay(date).getTime();
+  const todayDay = startOfLocalDay(today).getTime();
+
+  if (followUpDay < todayDay) {
+    return "overdue";
+  }
+
+  if (followUpDay === todayDay) {
+    return "today";
+  }
+
+  return "upcoming";
+};
+
+const getStatusLabel = (status: FollowUpStatus) => {
+  if (status === "today") {
+    return "Hôm nay";
+  }
+
+  if (status === "overdue") {
+    return "Quá hạn";
+  }
+
+  if (status === "upcoming") {
+    return "Sắp tới";
+  }
+
+  return "";
+};
+
+const getStatusStyle = (status: FollowUpStatus) => {
+  if (status === "overdue") {
+    return { background: "#fee2e2", color: "#991b1b" };
+  }
+
+  if (status === "today") {
+    return { background: "#dcfce7", color: "#166534" };
+  }
+
+  return { background: "#dbeafe", color: "#1e40af" };
 };
 
 const buildRequirementQuery = (lead: Lead) =>
@@ -67,19 +170,127 @@ const buildRequirementQuery = (lead: Lead) =>
     .filter(Boolean)
     .join(" ");
 
-const formatDate = (value: string | null) => {
-  if (!value) {
-    return "Chưa có";
-  }
+function CustomerCard({
+  item,
+  index,
+}: {
+  item: LeadWithFollowUp;
+  index: number;
+}) {
+  const lead = item.lead;
+  const id = lead.id || `lead-${index}`;
+  const districts = formatDistricts(lead.preferred_districts);
+  const requirementQuery = buildRequirementQuery(lead);
+  const searchHref = requirementQuery
+    ? `/?q=${encodeURIComponent(requirementQuery)}`
+    : "/";
+  const statusLabel = getStatusLabel(item.followUpStatus);
 
-  const date = new Date(value);
+  return (
+    <article
+      id={`lead-${id}`}
+      style={{ background: "#fff", borderRadius: 8, padding: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 12 }}>
+        <strong style={{ fontSize: 18 }}>{lead.fullname || "Chưa có tên"}</strong>
+        {statusLabel && (
+          <span
+            style={{
+              ...getStatusStyle(item.followUpStatus),
+              borderRadius: 999,
+              padding: "5px 9px",
+              fontSize: 12,
+              fontWeight: 700,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {statusLabel}
+          </span>
+        )}
+      </div>
 
-  if (Number.isNaN(date.getTime())) {
-    return "Chưa có";
-  }
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, alignItems: "start" }}>
+        <div>
+          <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>Tên</p>
+          <span>{lead.fullname || "Chưa có tên"}</span>
+        </div>
+        <div>
+          <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>SĐT</p>
+          <span>{lead.phone || "Chưa có"}</span>
+        </div>
+        <div>
+          <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>Khu vực</p>
+          <span>{districts || "Chưa có"}</span>
+        </div>
+        <div>
+          <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>Nhu cầu</p>
+          <span>{lead.note || "Chưa có"}</span>
+        </div>
+        <div>
+          <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>Ngân sách</p>
+          <span>{formatPrice(lead.max_price)}</span>
+        </div>
+        <div>
+          <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>Ngày hẹn chăm sóc</p>
+          <span>{item.followUpText}</span>
+        </div>
+      </div>
 
-  return date.toLocaleDateString("vi-VN");
-};
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
+        {lead.phone && (
+          <a
+            href={`tel:${lead.phone}`}
+            style={{ background: "#16a34a", color: "#fff", textDecoration: "none", padding: "10px 12px", borderRadius: 8, fontWeight: 700 }}
+          >
+            Gọi điện
+          </a>
+        )}
+
+        <Link
+          href={searchHref}
+          style={{ background: "#2563eb", color: "#fff", textDecoration: "none", padding: "10px 12px", borderRadius: 8, fontWeight: 700 }}
+        >
+          Tìm nhà phù hợp
+        </Link>
+      </div>
+    </article>
+  );
+}
+
+function ReminderSection({
+  title,
+  items,
+}: {
+  title: string;
+  items: LeadWithFollowUp[];
+}) {
+  return (
+    <section style={{ display: "grid", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <h2 style={{ margin: 0, fontSize: 22 }}>{title}</h2>
+        <span style={{ background: "#e5e7eb", color: "#374151", borderRadius: 999, padding: "4px 9px", fontSize: 12, fontWeight: 700 }}>
+          {items.length}
+        </span>
+      </div>
+
+      {items.length > 0 ? (
+        <div style={{ display: "grid", gap: 12 }}>
+          {items.map((item, index) => (
+            <CustomerCard
+              key={item.lead.id || `${title}-${index}`}
+              item={item}
+              index={index}
+            />
+          ))}
+        </div>
+      ) : (
+        <div style={{ background: "#fff", padding: 16, borderRadius: 8, color: "#6b7280" }}>
+          Không có khách trong nhóm này.
+        </div>
+      )}
+    </section>
+  );
+}
 
 export default function CustomersPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -117,6 +328,27 @@ export default function CustomersPage() {
       mounted = false;
     };
   }, []);
+
+  const today = new Date();
+  const leadsWithFollowUp = leads.map((lead) => {
+    const followUpDate = extractFollowUp(lead.note);
+    const followUpStatus = getFollowUpStatus(followUpDate, today);
+
+    return {
+      lead,
+      followUpDate,
+      followUpText: formatFollowUpDate(followUpDate),
+      followUpStatus,
+    };
+  });
+
+  const todayItems = leadsWithFollowUp
+    .filter((item) => item.followUpStatus === "today" || item.followUpStatus === "overdue")
+    .sort((a, b) => (a.followUpDate?.getTime() || 0) - (b.followUpDate?.getTime() || 0));
+  const upcomingItems = leadsWithFollowUp
+    .filter((item) => item.followUpStatus === "upcoming")
+    .sort((a, b) => (a.followUpDate?.getTime() || 0) - (b.followUpDate?.getTime() || 0));
+  const unscheduledItems = leadsWithFollowUp.filter((item) => item.followUpStatus === "none");
 
   return (
     <div style={{ fontFamily: "Arial", minHeight: "100vh", background: "#f3f4f6" }}>
@@ -172,87 +404,10 @@ export default function CustomersPage() {
         )}
 
         {!loading && !error && leads.length > 0 && (
-          <div style={{ display: "grid", gap: 12 }}>
-            {leads.map((lead, index) => {
-              const id = lead.id || `lead-${index}`;
-              const districts = formatDistricts(lead.preferred_districts);
-              const followUp = extractFollowUp(lead.note);
-              const requirementQuery = buildRequirementQuery(lead);
-              const searchHref = requirementQuery
-                ? `/?q=${encodeURIComponent(requirementQuery)}`
-                : "/";
-
-              return (
-                <article
-                  id={`lead-${id}`}
-                  key={id}
-                  style={{ background: "#fff", borderRadius: 10, padding: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}
-                >
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, alignItems: "start" }}>
-                    <div>
-                      <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>Tên khách</p>
-                      <strong>{lead.fullname || "Chưa có tên"}</strong>
-                    </div>
-                    <div>
-                      <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>SĐT</p>
-                      <span>{lead.phone || "Chưa có"}</span>
-                    </div>
-                    <div>
-                      <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>Khu vực</p>
-                      <span>{districts || "Chưa có"}</span>
-                    </div>
-                    <div>
-                      <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>Ngân sách</p>
-                      <span>{formatPrice(lead.max_price)}</span>
-                    </div>
-                    <div>
-                      <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>Ngày tạo</p>
-                      <span>{formatDate(lead.created_at)}</span>
-                    </div>
-                    <div>
-                      <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>Hẹn chăm sóc lại</p>
-                      <span>{followUp || "Chưa có"}</span>
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: 12 }}>
-                    <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>Nhu cầu / ghi chú</p>
-                    <p style={{ margin: 0, lineHeight: 1.5 }}>{lead.note || "Chưa có ghi chú"}</p>
-                  </div>
-
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
-                    <details>
-                      <summary style={{ cursor: "pointer", background: "#f3f4f6", padding: "10px 12px", borderRadius: 8, fontWeight: 700 }}>
-                        Xem chi tiết
-                      </summary>
-                      <div style={{ marginTop: 10, padding: 12, background: "#f9fafb", borderRadius: 8 }}>
-                        <p style={{ marginTop: 0 }}>ID: {id}</p>
-                        <p>Khách: {lead.fullname || "Chưa có tên"}</p>
-                        <p>SĐT: {lead.phone || "Chưa có"}</p>
-                        <p>Khu vực: {districts || "Chưa có"}</p>
-                        <p style={{ marginBottom: 0 }}>Ghi chú: {lead.note || "Chưa có"}</p>
-                      </div>
-                    </details>
-
-                    {lead.phone && (
-                      <a
-                        href={`tel:${lead.phone}`}
-                        style={{ background: "#16a34a", color: "#fff", textDecoration: "none", padding: "10px 12px", borderRadius: 8, fontWeight: 700 }}
-                      >
-                        Gọi điện
-                      </a>
-                    )}
-
-                    <Link
-                      href={searchHref}
-                      style={{ background: "#2563eb", color: "#fff", textDecoration: "none", padding: "10px 12px", borderRadius: 8, fontWeight: 700 }}
-                    >
-                      Tìm nhà phù hợp
-                    </Link>
-                  </div>
-                </article>
-              );
-            })}
+          <div style={{ display: "grid", gap: 24 }}>
+            <ReminderSection title="Cần chăm sóc hôm nay" items={todayItems} />
+            <ReminderSection title="Sắp tới" items={upcomingItems} />
+            <ReminderSection title="Chưa có lịch hẹn" items={unscheduledItems} />
           </div>
         )}
       </main>

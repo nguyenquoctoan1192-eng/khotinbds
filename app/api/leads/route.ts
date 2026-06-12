@@ -41,6 +41,38 @@ export async function POST(req: Request) {
     console.log("lead-match-debug mode:", mode);
     console.log("lead-match-debug preferred_districts:", preferred_districts);
 
+    if (mode === "match") {
+      const { data: listings } = await supabase
+        .from("listings")
+        .select("*");
+
+      const requirement: LeadRequirement = {
+        min_price,
+        max_price,
+        preferred_districts,
+        min_area,
+        bedrooms,
+        note,
+      };
+
+      const matches: MatchResult[] = [];
+
+      for (const listing of listings || []) {
+        const match = scoreListingForLead(listing, requirement);
+
+        if (match && match.score >= MIN_MATCH_SCORE) {
+          matches.push(match);
+        }
+      }
+
+      matches.sort(compareMatchResults);
+
+      return NextResponse.json({
+        success: true,
+        matches,
+      });
+    }
+
     // =================================================
     // 🟢 MODE 1: LEAD + MATCHING (giữ logic cũ)
     // =================================================

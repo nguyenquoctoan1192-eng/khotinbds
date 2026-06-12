@@ -33,7 +33,6 @@ export default function Home() {
   const [saveNote, setSaveNote] = useState("");
   const [savingCustomer, setSavingCustomer] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
-  const [selectedSaveListing, setSelectedSaveListing] = useState<any | null>(null);
 
   const getListingFromResult = (item: any) => item.listing || item;
 
@@ -96,7 +95,7 @@ export default function Home() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          mode: "lead",
+          mode: "match",
           note: parsed.note || null,
           preferred_districts: parsed.preferred_districts,
           max_price: parsed.max_price,
@@ -135,22 +134,6 @@ export default function Home() {
     setLoading(false);
   };
 
-  const getListingNoteContext = (listing: any) => {
-    if (!listing) {
-      return "";
-    }
-
-    const details = [
-      listing.title,
-      listing.district,
-      listing.price
-        ? `${Number(listing.price).toLocaleString("vi-VN")} VND`
-        : null,
-    ].filter(Boolean);
-
-    return details.length > 0 ? `Quan tam: ${details.join(" - ")}` : "";
-  };
-
   const parseBudgetValue = (value: string) => {
     const normalized = value
       .toLowerCase()
@@ -186,18 +169,22 @@ export default function Home() {
       saveTimeframe ? `Thoi gian can thue/mua: ${saveTimeframe}` : "",
       saveFollowUpAt ? `Hen cham soc lai: ${saveFollowUpAt}` : "",
       saveNote ? `Ghi chu: ${saveNote}` : "",
-      getListingNoteContext(selectedSaveListing),
     ]
       .filter(Boolean)
       .join(" | ") || null;
 
-  const openSaveForm = (listing?: any) => {
-    setSelectedSaveListing(listing || null);
-    setSaveDistrict(parsedFilters?.preferred_districts?.[0] || "");
-    setSaveNeed(parsedFilters?.note || "");
+  const openSaveForm = () => {
+    const filters = search.trim()
+      ? parseVietnameseRequirement(search)
+      : parsedFilters;
+
+    setSaveFullname("");
+    setSavePhone("");
+    setSaveDistrict(filters?.preferred_districts?.[0] || "");
+    setSaveNeed(filters?.note || "");
     setSaveBudget(
-      parsedFilters?.max_price
-        ? parsedFilters.max_price.toLocaleString("vi-VN")
+      filters?.max_price
+        ? filters.max_price.toLocaleString("vi-VN")
         : ""
     );
     setSaveNote("");
@@ -280,7 +267,6 @@ export default function Home() {
         <div style={{ position: "relative", zIndex: 10001, pointerEvents: "auto", display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
           <button type="button" style={{ position: "relative", zIndex: 10002, pointerEvents: "auto", background: "transparent", border: "none", color: "#fff", cursor: "pointer" }} onClick={() => router.push("/")}>Trang chủ</button>
           <button type="button" style={{ position: "relative", zIndex: 10002, pointerEvents: "auto", background: "transparent", border: "none", color: "#fff", cursor: "pointer" }} onClick={() => router.push("/post")}>Đăng tin</button>
-          <button type="button" style={{ position: "relative", zIndex: 10002, pointerEvents: "auto", background: "#2563eb", border: "none", color: "#fff", cursor: "pointer", padding: "8px 12px", borderRadius: 8, fontWeight: "bold" }} onClick={openSaveForm}>Lưu khách</button>
           <button type="button" style={{ position: "relative", zIndex: 10002, pointerEvents: "auto", background: "transparent", border: "none", color: "#fff", cursor: "pointer" }} onClick={() => router.push("/customers")}>Thông tin khách</button>
         </div>
       </div>
@@ -301,17 +287,17 @@ export default function Home() {
 
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: 20 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <h2 style={{ marginBottom: 8 }}>
-          {search.trim()
-            ? `Kết quả phù hợp (${listings.length})`
-            : `Bất động sản nổi bật (${listings.length})`}
-        </h2>
-          {search.trim() && listings.length > 0 && (
+          <h2 style={{ marginBottom: 8 }}>
+            {search.trim()
+              ? `Kết quả phù hợp (${listings.length})`
+              : `Bất động sản nổi bật (${listings.length})`}
+          </h2>
+          {search.trim() && (
             <button
               onClick={() => openSaveForm()}
               style={{ background: "#2563eb", color: "#fff", border: "none", padding: "11px 16px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" }}
             >
-              Lưu khách
+              Lưu nhu cầu này thành khách
             </button>
           )}
         </div>
@@ -328,17 +314,6 @@ export default function Home() {
             </p>
             <p>Diện tích tối thiểu: {parsedFilters.min_area || "Không có"}</p>
             <p>Nhu cầu: {parsedFilters.note || "Không có"}</p>
-          </div>
-        )}
-
-        {search.trim() && listings.length > 0 && (
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
-            <button
-              onClick={() => openSaveForm()}
-              style={{ background: "#2563eb", color: "#fff", border: "none", padding: "16px 28px", borderRadius: 12, cursor: "pointer", fontWeight: "bold", fontSize: 18, boxShadow: "0 8px 18px rgba(37,99,235,0.28)" }}
-            >
-              Lưu khách
-            </button>
           </div>
         )}
 
@@ -365,16 +340,6 @@ export default function Home() {
                   />
                   <div style={{ flex: "1 1 auto", minWidth: 0 }}>
                     <h3 style={{ fontSize: 24, fontWeight: 700, color: "#1f2937", marginBottom: 6 }}>{listing.title}</h3>
-                    {search.trim() && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-                        <button
-                          style={{ background: "#2563eb", color: "#fff", border: "none", padding: "12px 18px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" }}
-                          onClick={() => openSaveForm(listing)}
-                        >
-                          Lưu khách
-                        </button>
-                      </div>
-                    )}
                     <p style={{ color: "#dc2626", fontWeight: "bold", fontSize: 22 }}>
                       {Number(listing.price || 0).toLocaleString("vi-VN")} VNĐ
                     </p>
@@ -410,14 +375,6 @@ export default function Home() {
                     </p>
                   </div>
                   <div style={{ display: "flex", flexDirection: isMobile ? "row" : "column", gap: 10, justifyContent: isMobile ? "flex-start" : "flex-end", width: isMobile ? "100%" : "auto", marginTop: isMobile ? 10 : 0, flexShrink: 0, flexWrap: "wrap" }}>
-                    {search.trim() && (
-                      <button
-                        style={{ background: "#2563eb", color: "#fff", border: "none", padding: "12px 18px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" }}
-                        onClick={() => openSaveForm(listing)}
-                      >
-                        Lưu khách
-                      </button>
-                    )}
                     <button style={{ background: "#111827", color: "#fff", border: "none", padding: "12px 18px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" }} onClick={() => router.push(`/listing/${listing.id}`)}>
                       Xem chi tiết
                     </button>
