@@ -13,27 +13,33 @@ type PublicChatProfile = {
   budget: string | null;
   area: string | null;
   structure: string | null;
+  frontage: string | null;
   move_in_time: string | null;
 };
 
 type ChatResult = {
   reply: string;
   profile: PublicChatProfile;
+  conversation_stage: "discovery" | "qualification" | "lead_created" | "nurturing";
+  known_requirements: PublicChatProfile;
   missing_requirements: string[];
+  next_best_question: string;
+  suggested_reply: string;
   ready_to_save: boolean;
   lead_created: boolean;
   lead?: unknown;
 };
 
 const profileKeys: Array<keyof PublicChatProfile> = [
-  "name",
-  "phone",
   "business",
   "location",
   "budget",
   "area",
   "structure",
+  "frontage",
   "move_in_time",
+  "phone",
+  "name",
 ];
 
 const profileLabels: Record<keyof PublicChatProfile, string> = {
@@ -44,6 +50,7 @@ const profileLabels: Record<keyof PublicChatProfile, string> = {
   budget: "budget",
   area: "area",
   structure: "structure",
+  frontage: "frontage",
   move_in_time: "move-in/rental time",
 };
 
@@ -55,6 +62,7 @@ const emptyProfile = (): PublicChatProfile => ({
   budget: null,
   area: null,
   structure: null,
+  frontage: null,
   move_in_time: null,
 });
 
@@ -72,7 +80,7 @@ const normalizeText = (value: string) =>
 const mergeProfiles = (...profiles: Partial<PublicChatProfile>[]): PublicChatProfile =>
   profiles.reduce<PublicChatProfile>((merged, profile) => {
     for (const key of profileKeys) {
-      if (!merged[key] && profile[key]) {
+      if (profile[key]) {
         merged[key] = profile[key] || null;
       }
     }
@@ -106,6 +114,16 @@ const extractProfile = (text: string, existing: Partial<PublicChatProfile>) => {
     if (businessSentence) profile.business = businessSentence[0].trim();
   }
 
+  const frontageMatch = text.match(/(?:mặt tiền|mat tien|hẻm|hem|ô tô|o to|oto|xe hơi|xe hoi|đường lớn|duong lon)/i);
+  if (frontageMatch) {
+    profile.frontage = frontageMatch[0];
+  }
+
+  const latestLocationMatch = text.match(/(?:chuyển sang|chuyen sang|qua|sang)\s+([^,.;\n]+)/i);
+  if (latestLocationMatch?.[1]) {
+    profile.location = latestLocationMatch[1].trim();
+  }
+
   return profile;
 };
 
@@ -114,10 +132,17 @@ const getMissingRequirements = (profile: PublicChatProfile) =>
 
 const isReadyToSave = (profile: PublicChatProfile) =>
   Boolean(
-    profile.phone &&
-      profile.location &&
+    profile.location &&
       profile.business &&
-      (profile.budget || profile.area)
+      profile.budget
+  );
+
+const hasEnoughToAskPhone = (profile: PublicChatProfile) =>
+  Boolean(
+    profile.location &&
+      profile.business &&
+      profile.budget &&
+      (profile.area || profile.structure)
   );
 
 const nextQuestionFor = (profile: PublicChatProfile) => {
@@ -129,7 +154,7 @@ const nextQuestionFor = (profile: PublicChatProfile) => {
     return "Mình ưu tiên khu vực hoặc quận nào nhất để em lọc đúng vị trí ạ?";
   }
 
-  if (!profile.budget && !profile.area) {
+  if (!profile.budget) {
     return "Mình dự kiến ngân sách khoảng bao nhiêu, hoặc cần diện tích tầm bao nhiêu m2 ạ?";
   }
 
@@ -168,6 +193,79 @@ const fallbackReply = (message: string, profile: PublicChatProfile) => {
   }
 
   return `${prefix} ${nextQuestionFor(profile)}`;
+};
+
+const summarizeKnownV2 = (profile: PublicChatProfile) => {
+  const parts = [
+    profile.business ? `${profile.business}` : "",
+    profile.location ? `ở ${profile.location}` : "",
+    profile.budget ? `khoảng ${profile.budget}/tháng` : "",
+    profile.area ? `tầm ${profile.area}` : "",
+    profile.structure ? `kết cấu ${profile.structure}` : "",
+    profile.frontage ? `${profile.frontage}` : "",
+    profile.move_in_time ? `nhận nhà ${profile.move_in_time}` : "",
+  ].filter(Boolean);
+
+  return parts.length ? `Dạ em thấy hiện mình đang tìm ${parts.join(", ")}.` : "";
+};
+
+const nextQuestionForV2 = (profile: PublicChatProfile) => {
+  if (!profile.business) {
+    return "Mình đang cần thuê/mua để kinh doanh ngành gì hay để ở ạ?";
+  }
+
+  if (!profile.location) {
+    return "Mình ưu tiên khu vực nào nhất anh/chị nhỉ?";
+  }
+
+  if (!profile.budget) {
+    return "Ngân sách mình muốn giữ khoảng bao nhiêu một tháng ạ?";
+  }
+
+  if (!profile.area) {
+    return "Em hỏi thêm chút, mình cần khoảng bao nhiêu mét vuông anh/chị nhỉ?";
+  }
+
+  if (!profile.structure) {
+    return "Mình cần kết cấu khoảng mấy phòng hoặc mấy tầng ạ?";
+  }
+
+  if (!profile.frontage) {
+    return "Mình có cần mặt tiền, hẻm xe hơi hay đường lớn không ạ?";
+  }
+
+  if (!profile.move_in_time) {
+    return "Mình dự kiến cần nhận nhà hoặc bắt đầu thuê khi nào ạ?";
+  }
+
+  if (!profile.phone && hasEnoughToAskPhone(profile)) {
+    return "Để em gửi những căn phù hợp nhất qua Zalo cho anh/chị, anh/chị cho em xin số điện thoại nhé.";
+  }
+
+  if (!profile.name) {
+    return "Em tiện xưng hô với mình thế nào ạ?";
+  }
+
+  return "Anh/chị còn tiêu chí nào muốn em lưu ý thêm không ạ?";
+};
+
+const fallbackReplyV2 = (profile: PublicChatProfile) => {
+  const summary =
+    summarizeKnownV2(profile) ||
+    "Dạ em chào anh/chị, em hỗ trợ mình tìm nhà/mặt bằng phù hợp ạ.";
+
+  return `${summary}\n\n${nextQuestionForV2(profile)}`;
+};
+
+const getConversationStage = (
+  profile: PublicChatProfile,
+  leadCreated: boolean,
+  alreadyCreated: boolean
+): ChatResult["conversation_stage"] => {
+  if (leadCreated) return "lead_created";
+  if (alreadyCreated) return "nurturing";
+  if (isReadyToSave(profile)) return "qualification";
+  return "discovery";
 };
 
 const buildSummary = (history: ChatMessage[], profile: PublicChatProfile) => {
@@ -254,6 +352,65 @@ Return JSON only:
 }
 `;
 
+const buildPromptV2 = (
+  history: ChatMessage[],
+  currentMessage: string,
+  profile: PublicChatProfile,
+  nextQuestion: string
+) => `
+Bạn là một môi giới bất động sản thật đang nhắn với khách hàng ở Việt Nam.
+
+Mục tiêu:
+- Tư vấn tự nhiên như một người sale thân thiện, không giống chatbot điền form.
+- Xưng hô anh/chị - em.
+- Câu ngắn gọn, đời thường, chuyên nghiệp.
+- Luôn tóm tắt những gì đã biết trước khi hỏi tiếp.
+- Mỗi lần chỉ hỏi 1 thông tin còn thiếu quan trọng nhất.
+- Không hỏi lại thông tin đã biết trong profile.
+- Không bịa thông tin. Chưa biết thì để null/missing.
+- Nếu khách đổi nhu cầu, dùng thông tin mới nhất.
+- Nếu khách nói ngắn như "Mặt tiền nha em", hiểu đó là frontage.
+- Chỉ xin số điện thoại khi đã hiểu sâu nhu cầu: location + business + budget + (area hoặc structure).
+- Khi đã tạo lead hoặc đủ lead, không kết thúc cuộc trò chuyện; tiếp tục khai thác area, structure, frontage, move_in_time.
+
+Cấm dùng các câu:
+- "Tôi đã ghi nhận"
+- "Tôi đã hiểu"
+- "Vui lòng cung cấp"
+- "Xin cho biết"
+
+Thứ tự hỏi thông tin còn thiếu:
+business/use_case -> location -> budget -> area -> structure -> frontage -> move_in_time -> phone.
+
+Profile đã biết:
+${JSON.stringify(profile, null, 2)}
+
+Câu hỏi tiếp theo nên tập trung vào đúng ý này, nếu vẫn còn thiếu:
+${nextQuestion}
+
+Lịch sử chat:
+${JSON.stringify(history, null, 2)}
+
+Tin nhắn mới nhất của khách:
+${currentMessage}
+
+Trả về JSON duy nhất:
+{
+  "reply": "Một câu trả lời tiếng Việt tự nhiên, có tóm tắt điều đã biết rồi hỏi đúng 1 câu tiếp theo nếu cần",
+  "profile": {
+    "name": string|null,
+    "phone": string|null,
+    "business": string|null,
+    "location": string|null,
+    "budget": string|null,
+    "area": string|null,
+    "structure": string|null,
+    "frontage": string|null,
+    "move_in_time": string|null
+  }
+}
+`;
+
 const parseAiJson = (value: unknown, fallbackProfile: PublicChatProfile) => {
   if (!value || typeof value !== "object") return null;
 
@@ -318,8 +475,9 @@ export async function POST(req: Request) {
       .join("\n");
     const baseProfile = extractProfile(textForExtraction, body.profile || {});
     const apiKey = process.env.OPENAI_API_KEY;
-    let reply = fallbackReply(currentMessage, baseProfile);
+    let reply = fallbackReplyV2(baseProfile);
     let profile = baseProfile;
+    let nextBestQuestion = nextQuestionForV2(baseProfile);
 
     if (apiKey) {
       const res = await fetch("https://api.openai.com/v1/responses", {
@@ -330,7 +488,7 @@ export async function POST(req: Request) {
         },
         body: JSON.stringify({
           model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
-          input: buildPrompt(history, currentMessage, baseProfile),
+          input: buildPromptV2(history, currentMessage, baseProfile, nextBestQuestion),
           text: {
             format: {
               type: "json_schema",
@@ -375,6 +533,7 @@ export async function POST(req: Request) {
           `${textForExtraction}\n${Object.values(parsed.profile).filter(Boolean).join("\n")}`,
           parsed.profile
         );
+        nextBestQuestion = nextQuestionForV2(profile);
       }
     }
 
@@ -395,7 +554,11 @@ export async function POST(req: Request) {
     const result: ChatResult = {
       reply,
       profile,
+      conversation_stage: getConversationStage(profile, leadCreated, Boolean(body.lead_created)),
+      known_requirements: profile,
       missing_requirements: getMissingRequirements(profile),
+      next_best_question: nextQuestionForV2(profile),
+      suggested_reply: reply,
       ready_to_save: readyToSave,
       lead_created: leadCreated,
       lead,

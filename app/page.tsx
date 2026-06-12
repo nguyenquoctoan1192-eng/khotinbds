@@ -21,6 +21,7 @@ type PublicChatProfile = {
   budget: string | null;
   area: string | null;
   structure: string | null;
+  frontage: string | null;
   move_in_time: string | null;
 };
 
@@ -37,6 +38,7 @@ const emptyPublicChatProfile = (): PublicChatProfile => ({
   budget: null,
   area: null,
   structure: null,
+  frontage: null,
   move_in_time: null,
 });
 
