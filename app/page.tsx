@@ -13,6 +13,33 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 );
 
+type PublicChatProfile = {
+  name: string | null;
+  phone: string | null;
+  business: string | null;
+  location: string | null;
+  budget: string | null;
+  area: string | null;
+  structure: string | null;
+  move_in_time: string | null;
+};
+
+type PublicChatMessage = {
+  role: "assistant" | "user";
+  content: string;
+};
+
+const emptyPublicChatProfile = (): PublicChatProfile => ({
+  name: null,
+  phone: null,
+  business: null,
+  location: null,
+  budget: null,
+  area: null,
+  structure: null,
+  move_in_time: null,
+});
+
 export default function Home() {
   const router = useRouter();
   const [listings, setListings] = useState<any[]>([]);
@@ -37,6 +64,21 @@ export default function Home() {
   const [showCustomerMessage, setShowCustomerMessage] = useState(false);
   const [customerMessage, setCustomerMessage] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
+  const [showAiChat, setShowAiChat] = useState(false);
+  const [aiChatMessages, setAiChatMessages] = useState<PublicChatMessage[]>([
+    {
+      role: "assistant",
+      content:
+        "Em chào anh/chị, em là trợ lý AI tư vấn nhà/mặt bằng. Mình đang cần tìm khu vực nào và dùng để ở hay kinh doanh ạ?",
+    },
+  ]);
+  const [aiChatInput, setAiChatInput] = useState("");
+  const [aiChatProfile, setAiChatProfile] = useState<PublicChatProfile>(
+    emptyPublicChatProfile()
+  );
+  const [aiChatLoading, setAiChatLoading] = useState(false);
+  const [aiChatError, setAiChatError] = useState("");
+  const [aiChatLeadCreated, setAiChatLeadCreated] = useState(false);
 
   const getListingFromResult = (item: any) => item.listing || item;
 
@@ -146,6 +188,63 @@ export default function Home() {
   const copyCustomerMessage = async () => {
     await navigator.clipboard.writeText(customerMessage);
     setCopyMessage("Đã copy nội dung");
+  };
+
+  const sendAiChatMessage = async () => {
+    const message = aiChatInput.trim();
+
+    if (!message || aiChatLoading) {
+      return;
+    }
+
+    const nextMessages: PublicChatMessage[] = [
+      ...aiChatMessages,
+      { role: "user", content: message },
+    ];
+
+    setAiChatMessages(nextMessages);
+    setAiChatInput("");
+    setAiChatLoading(true);
+    setAiChatError("");
+
+    try {
+      const res = await fetch("/api/public-ai-chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message,
+          history: nextMessages,
+          profile: aiChatProfile,
+          lead_created: aiChatLeadCreated,
+        }),
+      });
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "AI chưa phản hồi được.");
+      }
+
+      setAiChatProfile(json.profile || emptyPublicChatProfile());
+      setAiChatLeadCreated((current) => current || Boolean(json.lead_created));
+      setAiChatMessages((current) => [
+        ...current,
+        { role: "assistant", content: json.reply },
+      ]);
+    } catch (err) {
+      setAiChatError(err instanceof Error ? err.message : "AI chưa phản hồi được.");
+      setAiChatMessages((current) => [
+        ...current,
+        {
+          role: "assistant",
+          content:
+            "Dạ hiện tại em chưa xử lý được tin nhắn này. Anh/chị thử gửi lại giúp em nhé.",
+        },
+      ]);
+    } finally {
+      setAiChatLoading(false);
+    }
   };
 
   const replaceSearchQuery = (value: string) => {
@@ -554,6 +653,118 @@ export default function Home() {
         >
           ↑
         </button>
+      )}
+
+      {!showAiChat && (
+        <button
+          type="button"
+          onClick={() => setShowAiChat(true)}
+          style={{
+            position: "fixed",
+            right: 20,
+            bottom: showTopButton ? 88 : 20,
+            zIndex: 10001,
+            background: "#111827",
+            color: "#fff",
+            border: "none",
+            borderRadius: 999,
+            padding: "13px 18px",
+            fontWeight: 700,
+            cursor: "pointer",
+            boxShadow: "0 8px 22px rgba(0,0,0,0.28)",
+          }}
+        >
+          💬 Tư vấn AI
+        </button>
+      )}
+
+      {showAiChat && (
+        <div
+          style={{
+            position: "fixed",
+            right: 20,
+            bottom: 20,
+            width: "min(94vw, 380px)",
+            maxHeight: "min(82vh, 620px)",
+            background: "#fff",
+            borderRadius: 12,
+            boxShadow: "0 18px 44px rgba(0,0,0,0.28)",
+            zIndex: 10002,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+          }}
+        >
+          <div style={{ background: "#111827", color: "#fff", padding: 14, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <strong>Tư vấn AI</strong>
+            <button
+              type="button"
+              onClick={() => setShowAiChat(false)}
+              aria-label="Đóng chat"
+              style={{ background: "transparent", color: "#fff", border: "none", fontSize: 20, cursor: "pointer" }}
+            >
+              ×
+            </button>
+          </div>
+
+          <div style={{ padding: 12, overflowY: "auto", display: "grid", gap: 10 }}>
+            {aiChatMessages.map((message, index) => (
+              <div
+                key={`${message.role}-${index}`}
+                style={{
+                  justifySelf: message.role === "user" ? "end" : "start",
+                  maxWidth: "88%",
+                  background: message.role === "user" ? "#2563eb" : "#f3f4f6",
+                  color: message.role === "user" ? "#fff" : "#111827",
+                  borderRadius: 10,
+                  padding: "9px 11px",
+                  lineHeight: 1.45,
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {message.content}
+              </div>
+            ))}
+            {aiChatLoading && (
+              <div style={{ justifySelf: "start", background: "#f3f4f6", borderRadius: 10, padding: "9px 11px", color: "#6b7280" }}>
+                Đang tư vấn...
+              </div>
+            )}
+          </div>
+
+          <div style={{ borderTop: "1px solid #e5e7eb", padding: 12 }}>
+            {aiChatLeadCreated && (
+              <div style={{ background: "#dcfce7", color: "#166534", borderRadius: 8, padding: 9, marginBottom: 10, fontWeight: 700 }}>
+                Đã lưu thông tin, đội ngũ tư vấn sẽ liên hệ sớm.
+              </div>
+            )}
+            {aiChatError && (
+              <div style={{ color: "#991b1b", marginBottom: 8, fontWeight: 700 }}>
+                {aiChatError}
+              </div>
+            )}
+            <textarea
+              placeholder="Nhập tin nhắn..."
+              value={aiChatInput}
+              onChange={(event) => setAiChatInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  sendAiChatMessage();
+                }
+              }}
+              style={{ width: "100%", boxSizing: "border-box", minHeight: 62, maxHeight: 120, resize: "vertical", borderRadius: 8, border: "1px solid #d1d5db", padding: 10, lineHeight: 1.4 }}
+            />
+            <button
+              type="button"
+              onClick={sendAiChatMessage}
+              disabled={aiChatLoading || !aiChatInput.trim()}
+              style={{ width: "100%", marginTop: 8, background: "#2563eb", color: "#fff", border: "none", borderRadius: 8, padding: "10px 12px", fontWeight: 700, cursor: aiChatLoading || !aiChatInput.trim() ? "default" : "pointer", opacity: aiChatLoading || !aiChatInput.trim() ? 0.65 : 1 }}
+            >
+              Gửi
+            </button>
+          </div>
+        </div>
       )}
 
       {showCustomerMessage && (

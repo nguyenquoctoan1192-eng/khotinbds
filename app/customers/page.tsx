@@ -56,6 +56,35 @@ type NoteModalState = {
   error: string;
 };
 
+type SalesAssistantResult = {
+  known_requirements: Record<string, string | null>;
+  missing_requirements: string[];
+  customer_intent: string;
+  objection: string | null;
+  suggested_replies: string[];
+  next_best_question: string;
+};
+
+const SALES_REQUIREMENT_LABELS: Record<string, string> = {
+  business: "Business",
+  location: "Location",
+  budget: "Budget",
+  area: "Area",
+  structure: "Structure",
+  frontage: "Frontage",
+  move_in_time: "Move-in time",
+};
+
+const SALES_REQUIREMENT_ORDER = [
+  "business",
+  "location",
+  "budget",
+  "area",
+  "structure",
+  "frontage",
+  "move_in_time",
+];
+
 const LEAD_STATUSES = [
   "Khách mới",
   "Đang chăm sóc",
@@ -403,6 +432,7 @@ function CustomerCard({
   onFindMatches,
   onOpenNote,
   onStatusChange,
+  onAssistantProfileSaved,
 }: {
   item: LeadWithFollowUp;
   index: number;
@@ -411,6 +441,11 @@ function CustomerCard({
   onFindMatches: (item: LeadWithFollowUp, href: string) => void;
   onOpenNote: (item: LeadWithFollowUp) => void;
   onStatusChange: (item: LeadWithFollowUp, status: string) => void;
+  onAssistantProfileSaved: (
+    leadId: string,
+    updatedNote: string | null,
+    activity?: LeadActivity
+  ) => void;
 }) {
   const lead = item.lead;
   const crmFields = item.crmFields;
@@ -422,6 +457,61 @@ function CustomerCard({
     : "/";
   const statusLabel = getStatusLabel(item.followUpStatus);
   const leadStatus = lead.status || LEAD_STATUSES[0];
+  const [customerMessage, setCustomerMessage] = useState("");
+  const [assistantLoading, setAssistantLoading] = useState(false);
+  const [assistantError, setAssistantError] = useState("");
+  const [assistantResult, setAssistantResult] =
+    useState<SalesAssistantResult | null>(null);
+  const [copiedReplyIndex, setCopiedReplyIndex] = useState<number | null>(null);
+
+  const requestAssistant = async () => {
+    if (!customerMessage.trim()) {
+      setAssistantError("Nhập tin nhắn khách vừa gửi.");
+      return;
+    }
+
+    setAssistantLoading(true);
+    setAssistantError("");
+    setCopiedReplyIndex(null);
+
+    try {
+      const res = await fetch("/api/ai-sales-assistant", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: customerMessage,
+          lead,
+          history: item.activities.map((activity) => ({
+            type: activity.type,
+            content: activity.content,
+            created_at: activity.created_at,
+          })),
+        }),
+      });
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Không tạo được gợi ý trả lời.");
+      }
+
+      setAssistantResult(json.assistant);
+
+      if (json.updated_note || json.activity) {
+        onAssistantProfileSaved(lead.id, json.updated_note || lead.note, json.activity);
+      }
+    } catch (err) {
+      setAssistantError(err instanceof Error ? err.message : "Không tạo được gợi ý trả lời.");
+    } finally {
+      setAssistantLoading(false);
+    }
+  };
+
+  const copySuggestedReply = async (reply: string, index: number) => {
+    await navigator.clipboard.writeText(reply);
+    setCopiedReplyIndex(index);
+  };
 
   return (
     <article
@@ -553,6 +643,92 @@ function CustomerCard({
           <p style={{ margin: 0, color: "#6b7280" }}>Chưa có hoạt động.</p>
         )}
       </div>
+
+      <div style={{ borderTop: "1px solid #e5e7eb", marginTop: 14, paddingTop: 12 }}>
+        <p style={{ margin: "0 0 8px", color: "#374151", fontWeight: 700 }}>AI gợi ý trả lời</p>
+        <textarea
+          placeholder="Tin nhắn khách vừa gửi"
+          value={customerMessage}
+          onChange={(event) => {
+            setCustomerMessage(event.target.value);
+            setAssistantError("");
+          }}
+          style={{ width: "100%", boxSizing: "border-box", minHeight: 92, padding: 12, borderRadius: 8, border: "1px solid #d1d5db", lineHeight: 1.5, fontSize: 15 }}
+        />
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 10 }}>
+          <button
+            type="button"
+            onClick={requestAssistant}
+            disabled={assistantLoading}
+            style={{ background: "#7c3aed", color: "#fff", border: "none", padding: "10px 12px", borderRadius: 8, fontWeight: 700, cursor: assistantLoading ? "default" : "pointer", opacity: assistantLoading ? 0.7 : 1 }}
+          >
+            {assistantLoading ? "Đang gợi ý..." : "AI gợi ý trả lời"}
+          </button>
+          {assistantError && (
+            <span style={{ color: "#991b1b", fontWeight: 700 }}>{assistantError}</span>
+          )}
+        </div>
+
+        {assistantResult && (
+          <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
+            <div style={{ background: "#f9fafb", borderRadius: 8, padding: 10 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+                <div>
+                  <strong>Ý định khách</strong>
+                  <p style={{ margin: "5px 0 0", color: "#374151" }}>{assistantResult.customer_intent || "Chưa rõ"}</p>
+                </div>
+                <div>
+                  <strong>Phản đối</strong>
+                  <p style={{ margin: "5px 0 0", color: "#374151" }}>{assistantResult.objection || "Không có"}</p>
+                </div>
+                <div>
+                  <strong>Câu hỏi nên hỏi tiếp</strong>
+                  <p style={{ margin: "5px 0 0", color: "#374151" }}>{assistantResult.next_best_question}</p>
+                </div>
+              </div>
+              <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+                <div>
+                  <strong>Known Requirements</strong>
+                  <div style={{ display: "grid", gap: 5, marginTop: 6 }}>
+                    {SALES_REQUIREMENT_ORDER.filter(
+                      (key) => assistantResult.known_requirements[key]
+                    ).map((key) => (
+                      <div key={key} style={{ color: "#374151" }}>
+                        {SALES_REQUIREMENT_LABELS[key]}: {assistantResult.known_requirements[key]}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <strong>Missing Requirements</strong>
+                  <div style={{ display: "grid", gap: 5, marginTop: 6, color: "#6b7280" }}>
+                    {assistantResult.missing_requirements.length > 0 ? (
+                      assistantResult.missing_requirements.map((requirement) => (
+                        <div key={requirement}>{requirement}</div>
+                      ))
+                    ) : (
+                      <div>Không còn thiếu thông tin chính.</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {assistantResult.suggested_replies.map((reply, replyIndex) => (
+              <div key={`${replyIndex}-${reply}`} style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: 10 }}>
+                <p style={{ marginTop: 0, lineHeight: 1.5 }}>{reply}</p>
+                <button
+                  type="button"
+                  onClick={() => copySuggestedReply(reply, replyIndex)}
+                  style={{ background: "#111827", color: "#fff", border: "none", padding: "8px 10px", borderRadius: 8, fontWeight: 700, cursor: "pointer" }}
+                >
+                  {copiedReplyIndex === replyIndex ? "Đã copy" : "Copy"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </article>
   );
 }
@@ -565,6 +741,7 @@ function ReminderSection({
   onFindMatches,
   onOpenNote,
   onStatusChange,
+  onAssistantProfileSaved,
 }: {
   title: string;
   items: LeadWithFollowUp[];
@@ -573,6 +750,11 @@ function ReminderSection({
   onFindMatches: (item: LeadWithFollowUp, href: string) => void;
   onOpenNote: (item: LeadWithFollowUp) => void;
   onStatusChange: (item: LeadWithFollowUp, status: string) => void;
+  onAssistantProfileSaved: (
+    leadId: string,
+    updatedNote: string | null,
+    activity?: LeadActivity
+  ) => void;
 }) {
   return (
     <section style={{ display: "grid", gap: 12 }}>
@@ -595,6 +777,7 @@ function ReminderSection({
               onFindMatches={onFindMatches}
               onOpenNote={onOpenNote}
               onStatusChange={onStatusChange}
+              onAssistantProfileSaved={onAssistantProfileSaved}
             />
           ))}
         </div>
@@ -818,6 +1001,22 @@ export default function CustomersPage() {
     }
   };
 
+  const updateAssistantProfileState = (
+    leadId: string,
+    updatedNote: string | null,
+    activity?: LeadActivity
+  ) => {
+    setLeads((current) =>
+      current.map((lead) =>
+        lead.id === leadId ? { ...lead, note: updatedNote } : lead
+      )
+    );
+
+    if (activity) {
+      setActivities((current) => [activity, ...current]);
+    }
+  };
+
   const openCustomerMessage = async (item: LeadWithFollowUp) => {
     const lead = item.lead;
     const districts = formatDistricts(lead.preferred_districts)
@@ -957,6 +1156,7 @@ export default function CustomersPage() {
               onFindMatches={findMatchesForLead}
               onOpenNote={openNoteModal}
               onStatusChange={updateLeadStatus}
+              onAssistantProfileSaved={updateAssistantProfileState}
             />
             <ReminderSection
               title="Sắp tới"
@@ -966,6 +1166,7 @@ export default function CustomersPage() {
               onFindMatches={findMatchesForLead}
               onOpenNote={openNoteModal}
               onStatusChange={updateLeadStatus}
+              onAssistantProfileSaved={updateAssistantProfileState}
             />
             <ReminderSection
               title="Chưa có lịch hẹn"
@@ -975,6 +1176,7 @@ export default function CustomersPage() {
               onFindMatches={findMatchesForLead}
               onOpenNote={openNoteModal}
               onStatusChange={updateLeadStatus}
+              onAssistantProfileSaved={updateAssistantProfileState}
             />
           </div>
         )}
