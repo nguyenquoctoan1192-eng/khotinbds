@@ -890,6 +890,9 @@ export default function CustomersPage() {
           <Link href="/" style={{ color: "#fff", textDecoration: "none" }}>
             Trang chủ
           </Link>
+          <Link href="/dashboard" style={{ color: "#fff", textDecoration: "none" }}>
+            Dashboard
+          </Link>
           <Link href="/post" style={{ color: "#fff", textDecoration: "none" }}>
             Đăng tin
           </Link>

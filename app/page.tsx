@@ -390,6 +390,7 @@ export default function Home() {
         <h2 style={{ cursor: "pointer", pointerEvents: "auto" }} onClick={() => router.push("/")}>BDS</h2>
         <div style={{ position: "relative", zIndex: 10001, pointerEvents: "auto", display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
           <button type="button" style={{ position: "relative", zIndex: 10002, pointerEvents: "auto", background: "transparent", border: "none", color: "#fff", cursor: "pointer" }} onClick={() => router.push("/")}>Trang chủ</button>
+          <button type="button" style={{ position: "relative", zIndex: 10002, pointerEvents: "auto", background: "transparent", border: "none", color: "#fff", cursor: "pointer" }} onClick={() => router.push("/dashboard")}>Dashboard</button>
           <button type="button" style={{ position: "relative", zIndex: 10002, pointerEvents: "auto", background: "transparent", border: "none", color: "#fff", cursor: "pointer" }} onClick={() => router.push("/post")}>Đăng tin</button>
           <button type="button" style={{ position: "relative", zIndex: 10002, pointerEvents: "auto", background: "transparent", border: "none", color: "#fff", cursor: "pointer" }} onClick={() => router.push("/customers")}>Thông tin khách</button>
         </div>
