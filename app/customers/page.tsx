@@ -30,6 +30,12 @@ type CrmFields = {
   note: string;
 };
 
+type ComposeState = {
+  open: boolean;
+  message: string;
+  copyMessage: string;
+};
+
 const formatDistricts = (districts: Lead["preferred_districts"]) => {
   if (Array.isArray(districts)) {
     return districts.filter(Boolean).map(String).join(", ");
@@ -63,6 +69,46 @@ const formatPrice = (price: Lead["max_price"]) => {
   }
 
   return `${value.toLocaleString("vi-VN")} VNĐ`;
+};
+
+const formatListingPrice = (price: unknown) => {
+  const value = Number(price || 0);
+
+  if (!Number.isFinite(value) || value <= 0) {
+    return "Liên hệ";
+  }
+
+  return `${value.toLocaleString("vi-VN")} VNĐ`;
+};
+
+const getReasonLabels = (item: any) => {
+  const breakdown = item.breakdown;
+  const reasons = item.reasons || breakdown?.reasons || [];
+  const labels: string[] = [];
+
+  if (breakdown?.district_score > 0 || reasons.some((reason: string) => reason.includes("District"))) {
+    labels.push("Đúng quận");
+  }
+
+  if (breakdown?.price_score > 0 || reasons.some((reason: string) => reason.includes("Giá"))) {
+    labels.push("Giá gần ngân sách");
+  }
+
+  if (breakdown?.area_score > 0 || reasons.some((reason: string) => reason.includes("Area"))) {
+    labels.push("Diện tích phù hợp");
+  }
+
+  if (breakdown?.business_score > 0) {
+    const businessReason = reasons.find((reason: string) =>
+      /spa|cafe|office|restaurant|business|MT\/MB|VP|frontage|Premise/i.test(reason)
+    );
+    const businessType =
+      businessReason?.match(/spa|cafe|office|restaurant/i)?.[0] || "kinh doanh";
+
+    labels.push(`Phù hợp ${businessType}`);
+  }
+
+  return labels;
 };
 
 const normalizeText = (value: string) =>
@@ -259,12 +305,61 @@ const buildRequirementQuery = (lead: Lead, crmFields: CrmFields) =>
     .filter(Boolean)
     .join(" ");
 
+const buildNeedSummary = (lead: Lead, crmFields: CrmFields) => {
+  const parts = [
+    formatDistricts(lead.preferred_districts)
+      ? `khu vực ${formatDistricts(lead.preferred_districts)}`
+      : "",
+    crmFields.need ? `nhu cầu ${crmFields.need}` : "",
+    getPriceValue(lead.max_price) > 0
+      ? `ngân sách tối đa ${formatPrice(lead.max_price)}`
+      : "",
+    crmFields.rentalTime ? `thời gian thuê/mua ${crmFields.rentalTime}` : "",
+  ].filter(Boolean);
+
+  return parts.join(", ") || "nhu cầu đang tìm";
+};
+
+const buildCustomerShareMessage = (
+  item: LeadWithFollowUp,
+  matches: any[]
+) => {
+  const topMatches = matches.slice(0, 3);
+  const lines = [
+    `Em gửi anh/chị một số căn phù hợp với ${buildNeedSummary(item.lead, item.crmFields)}:`,
+    "",
+    ...topMatches.flatMap((match, index) => {
+      const listing = match.listing || match;
+      const reasons = getReasonLabels(match);
+      const location = [listing.district, listing.address].filter(Boolean).join(" - ");
+
+      return [
+        `${index + 1}. ${listing.title || "Bất động sản phù hợp"}`,
+        location ? `Khu vực: ${location}` : "",
+        `Giá: ${formatListingPrice(listing.price)}`,
+        listing.area ? `Diện tích: ${listing.area}m²` : "",
+        reasons.length > 0
+          ? `Lý do phù hợp: ${reasons.join(", ")}`
+          : "Lý do phù hợp: phù hợp với nhu cầu đã lưu",
+        "",
+      ].filter(Boolean);
+    }),
+    "Anh/chị xem qua, nếu ưng căn nào em gửi thêm hình ảnh và hẹn lịch xem nhà.",
+  ];
+
+  return lines.join("\n");
+};
+
 function CustomerCard({
   item,
   index,
+  composing,
+  onComposeMessage,
 }: {
   item: LeadWithFollowUp;
   index: number;
+  composing: boolean;
+  onComposeMessage: (item: LeadWithFollowUp) => void;
 }) {
   const lead = item.lead;
   const crmFields = item.crmFields;
@@ -346,6 +441,15 @@ function CustomerCard({
         >
           Tìm nhà phù hợp
         </Link>
+
+        <button
+          type="button"
+          onClick={() => onComposeMessage(item)}
+          disabled={composing}
+          style={{ background: "#111827", color: "#fff", border: "none", padding: "10px 12px", borderRadius: 8, fontWeight: 700, cursor: composing ? "default" : "pointer", opacity: composing ? 0.7 : 1 }}
+        >
+          {composing ? "Đang soạn..." : "Soạn tin gửi khách"}
+        </button>
       </div>
     </article>
   );
@@ -354,9 +458,13 @@ function CustomerCard({
 function ReminderSection({
   title,
   items,
+  composingLeadId,
+  onComposeMessage,
 }: {
   title: string;
   items: LeadWithFollowUp[];
+  composingLeadId: string;
+  onComposeMessage: (item: LeadWithFollowUp) => void;
 }) {
   return (
     <section style={{ display: "grid", gap: 12 }}>
@@ -374,6 +482,8 @@ function ReminderSection({
               key={item.lead.id || `${title}-${index}`}
               item={item}
               index={index}
+              composing={composingLeadId === item.lead.id}
+              onComposeMessage={onComposeMessage}
             />
           ))}
         </div>
@@ -390,6 +500,12 @@ export default function CustomersPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [composeState, setComposeState] = useState<ComposeState>({
+    open: false,
+    message: "",
+    copyMessage: "",
+  });
+  const [composingLeadId, setComposingLeadId] = useState("");
 
   useEffect(() => {
     let mounted = true;
@@ -446,6 +562,62 @@ export default function CustomersPage() {
     .sort((a, b) => (a.followUpDate?.getTime() || 0) - (b.followUpDate?.getTime() || 0));
   const unscheduledItems = leadsWithFollowUp.filter((item) => item.followUpStatus === "none");
 
+  const openCustomerMessage = async (item: LeadWithFollowUp) => {
+    const lead = item.lead;
+    const districts = formatDistricts(lead.preferred_districts)
+      .split(",")
+      .map((district) => district.trim())
+      .filter(Boolean);
+
+    setComposingLeadId(lead.id);
+
+    try {
+      const res = await fetch("/api/leads", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          mode: "match",
+          note: [item.crmFields.need, item.crmFields.rentalTime]
+            .filter(Boolean)
+            .join(" ") || null,
+          preferred_districts: districts,
+          max_price: getPriceValue(lead.max_price) > 0
+            ? getPriceValue(lead.max_price)
+            : null,
+        }),
+      });
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Không soạn được nội dung.");
+      }
+
+      setComposeState({
+        open: true,
+        message: buildCustomerShareMessage(item, json.matches || []),
+        copyMessage: "",
+      });
+    } catch (err) {
+      setComposeState({
+        open: true,
+        message: err instanceof Error ? err.message : "Không soạn được nội dung.",
+        copyMessage: "",
+      });
+    } finally {
+      setComposingLeadId("");
+    }
+  };
+
+  const copyCustomerMessage = async () => {
+    await navigator.clipboard.writeText(composeState.message);
+    setComposeState((current) => ({
+      ...current,
+      copyMessage: "Đã copy nội dung",
+    }));
+  };
+
   return (
     <div style={{ fontFamily: "Arial", minHeight: "100vh", background: "#f3f4f6" }}>
       <div style={{ background: "#111827", color: "#fff", padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -501,12 +673,82 @@ export default function CustomersPage() {
 
         {!loading && !error && leads.length > 0 && (
           <div style={{ display: "grid", gap: 24 }}>
-            <ReminderSection title="Cần chăm sóc hôm nay" items={todayItems} />
-            <ReminderSection title="Sắp tới" items={upcomingItems} />
-            <ReminderSection title="Chưa có lịch hẹn" items={unscheduledItems} />
+            <ReminderSection
+              title="Cần chăm sóc hôm nay"
+              items={todayItems}
+              composingLeadId={composingLeadId}
+              onComposeMessage={openCustomerMessage}
+            />
+            <ReminderSection
+              title="Sắp tới"
+              items={upcomingItems}
+              composingLeadId={composingLeadId}
+              onComposeMessage={openCustomerMessage}
+            />
+            <ReminderSection
+              title="Chưa có lịch hẹn"
+              items={unscheduledItems}
+              composingLeadId={composingLeadId}
+              onComposeMessage={openCustomerMessage}
+            />
           </div>
         )}
       </main>
+
+      {composeState.open && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(17,24,39,0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 10000,
+          }}
+        >
+          <div style={{ background: "#fff", borderRadius: 12, padding: 18, width: "min(94vw, 640px)", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 12px 30px rgba(0,0,0,0.2)" }}>
+            <h3 style={{ marginTop: 0 }}>Soạn tin gửi khách</h3>
+            <textarea
+              value={composeState.message}
+              onChange={(e) =>
+                setComposeState((current) => ({
+                  ...current,
+                  message: e.target.value,
+                  copyMessage: "",
+                }))
+              }
+              style={{ width: "100%", boxSizing: "border-box", minHeight: 300, padding: 12, borderRadius: 8, border: "1px solid #d1d5db", lineHeight: 1.5, fontSize: 15 }}
+            />
+            {composeState.copyMessage && (
+              <p style={{ color: "#15803d", fontWeight: 700, marginBottom: 0 }}>
+                {composeState.copyMessage}
+              </p>
+            )}
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 14 }}>
+              <button
+                onClick={copyCustomerMessage}
+                style={{ background: "#2563eb", color: "#fff", border: "none", padding: "10px 14px", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}
+              >
+                Copy nội dung
+              </button>
+              <button
+                onClick={() =>
+                  setComposeState({
+                    open: false,
+                    message: "",
+                    copyMessage: "",
+                  })
+                }
+                style={{ background: "#fff", color: "#111827", border: "1px solid #d1d5db", padding: "10px 14px", borderRadius: 8, cursor: "pointer" }}
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

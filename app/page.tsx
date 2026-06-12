@@ -18,6 +18,7 @@ export default function Home() {
   const [listings, setListings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [queryReady, setQueryReady] = useState(false);
   const [parsedFilters, setParsedFilters] =
     useState<ParsedRequirementFilters | null>(null);
   const [showTopButton, setShowTopButton] = useState(false);
@@ -145,6 +146,35 @@ export default function Home() {
   const copyCustomerMessage = async () => {
     await navigator.clipboard.writeText(customerMessage);
     setCopyMessage("Đã copy nội dung");
+  };
+
+  const replaceSearchQuery = (value: string) => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const url = new URL(window.location.href);
+
+    if (value.trim()) {
+      url.searchParams.set("q", value);
+    } else {
+      url.searchParams.delete("q");
+    }
+
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${url.pathname}${url.search}${url.hash}`
+    );
+  };
+
+  const updateSearch = (value: string) => {
+    setSearch(value);
+    replaceSearchQuery(value);
+  };
+
+  const clearSearch = () => {
+    updateSearch("");
   };
 
   const fetchListings = async () => {
@@ -313,8 +343,12 @@ export default function Home() {
   };
 
   useEffect(() => {
+    if (!queryReady) {
+      return;
+    }
+
     fetchListings();
-  }, [search]);
+  }, [queryReady, search]);
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search).get("q");
@@ -322,6 +356,8 @@ export default function Home() {
     if (query && query !== search) {
       setSearch(query);
     }
+
+    setQueryReady(true);
   }, []);
 
   useEffect(() => {
@@ -354,12 +390,24 @@ export default function Home() {
       </div>
 
       <div style={{ maxWidth: 900, margin: "-30px auto 20px", background: "#fff", padding: 20, borderRadius: 16, boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}>
-        <input
-          placeholder="VD: tìm nhà khu vực phú nhuận, làm spa, giá 50tr đổ lại, dt 80m2"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ width: "100%", padding: 18, borderRadius: 14, border: "1px solid #ddd", fontSize: 16, outline: "none" }}
-        />
+        <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
+          <input
+            placeholder="VD: tìm nhà khu vực phú nhuận, làm spa, giá 50tr đổ lại, dt 80m2"
+            value={search}
+            onChange={(e) => updateSearch(e.target.value)}
+            style={{ flex: 1, minWidth: 0, padding: 18, borderRadius: 14, border: "1px solid #ddd", fontSize: 16, outline: "none" }}
+          />
+          {search.trim() && (
+            <button
+              type="button"
+              onClick={clearSearch}
+              aria-label="Xóa tìm kiếm"
+              style={{ width: 52, borderRadius: 14, border: "1px solid #ddd", background: "#fff", cursor: "pointer", fontWeight: 700, fontSize: 18 }}
+            >
+              X
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: 20 }}>
