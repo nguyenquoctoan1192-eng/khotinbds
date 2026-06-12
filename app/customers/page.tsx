@@ -17,9 +17,17 @@ type FollowUpStatus = "today" | "overdue" | "upcoming" | "none";
 
 type LeadWithFollowUp = {
   lead: Lead;
+  crmFields: CrmFields;
   followUpDate: Date | null;
   followUpText: string;
   followUpStatus: FollowUpStatus;
+};
+
+type CrmFields = {
+  need: string;
+  rentalTime: string;
+  followUpDate: string;
+  note: string;
 };
 
 const formatDistricts = (districts: Lead["preferred_districts"]) => {
@@ -65,6 +73,82 @@ const normalizeText = (value: string) =>
     .replace(/\u0110/g, "D")
     .toLowerCase();
 
+const stripKnownPrefix = (value: string) => {
+  const normalized = normalizeText(value);
+  const colonIndex = value.indexOf(":");
+
+  if (
+    colonIndex >= 0 &&
+    /^(nhu\s*cau|need|thoi\s*gian.*(?:thue|mua)|rental_time|hen\s*cham\s*soc\s*lai|follow_up_date|ghi\s*chu|note)\s*:/.test(normalized)
+  ) {
+    return value.slice(colonIndex + 1).trim();
+  }
+
+  return value.trim();
+};
+
+const parseCrmFields = (note: string | null): CrmFields => {
+  const fields: CrmFields = {
+    need: "",
+    rentalTime: "",
+    followUpDate: "",
+    note: "",
+  };
+
+  if (!note) {
+    return fields;
+  }
+
+  const unlabeledParts: string[] = [];
+  const parts = note
+    .split("|")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  for (const part of parts) {
+    const keyValueMatch = part.match(/^\s*([a-z_]+)\s*=\s*(.+)\s*$/i);
+
+    if (keyValueMatch) {
+      const key = keyValueMatch[1].toLowerCase();
+      const value = stripKnownPrefix(keyValueMatch[2]);
+
+      if (key === "need") {
+        fields.need = value;
+      } else if (key === "rental_time") {
+        fields.rentalTime = value;
+      } else if (key === "follow_up_date") {
+        fields.followUpDate = value;
+      } else if (key === "note") {
+        fields.note = value;
+      }
+
+      continue;
+    }
+
+    const normalized = normalizeText(part);
+
+    if (/^nhu\s*cau\s*:/.test(normalized)) {
+      fields.need = stripKnownPrefix(part);
+    } else if (/^thoi\s*gian.*(?:thue|mua)\s*:/.test(normalized)) {
+      fields.rentalTime = stripKnownPrefix(part);
+    } else if (/^hen\s*cham\s*soc\s*lai\s*:/.test(normalized)) {
+      fields.followUpDate = stripKnownPrefix(part);
+    } else if (/^ghi\s*chu\s*:/.test(normalized)) {
+      fields.note = stripKnownPrefix(part);
+    } else {
+      unlabeledParts.push(stripKnownPrefix(part));
+    }
+  }
+
+  if (!fields.need && unlabeledParts.length > 0) {
+    fields.need = unlabeledParts.join(" | ");
+  } else if (unlabeledParts.length > 0) {
+    fields.note = [fields.note, ...unlabeledParts].filter(Boolean).join(" | ");
+  }
+
+  return fields;
+};
+
 const createLocalDate = (value: string) => {
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
 
@@ -91,7 +175,11 @@ const createLocalDate = (value: string) => {
 const startOfLocalDay = (date: Date) =>
   new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
-const extractFollowUp = (note: string | null) => {
+const extractFollowUp = (note: string | null, crmFields?: CrmFields) => {
+  if (crmFields?.followUpDate) {
+    return createLocalDate(crmFields.followUpDate);
+  }
+
   if (!note) {
     return null;
   }
@@ -161,11 +249,12 @@ const getStatusStyle = (status: FollowUpStatus) => {
   return { background: "#dbeafe", color: "#1e40af" };
 };
 
-const buildRequirementQuery = (lead: Lead) =>
+const buildRequirementQuery = (lead: Lead, crmFields: CrmFields) =>
   [
     formatDistricts(lead.preferred_districts),
-    lead.note || "",
+    crmFields.need,
     getPriceValue(lead.max_price) > 0 ? `${getPriceValue(lead.max_price)}` : "",
+    crmFields.rentalTime,
   ]
     .filter(Boolean)
     .join(" ");
@@ -178,9 +267,10 @@ function CustomerCard({
   index: number;
 }) {
   const lead = item.lead;
+  const crmFields = item.crmFields;
   const id = lead.id || `lead-${index}`;
   const districts = formatDistricts(lead.preferred_districts);
-  const requirementQuery = buildRequirementQuery(lead);
+  const requirementQuery = buildRequirementQuery(lead, crmFields);
   const searchHref = requirementQuery
     ? `/?q=${encodeURIComponent(requirementQuery)}`
     : "/";
@@ -224,7 +314,11 @@ function CustomerCard({
         </div>
         <div>
           <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>Nhu cầu</p>
-          <span>{lead.note || "Chưa có"}</span>
+          <span>{crmFields.need || "Chưa có"}</span>
+        </div>
+        <div>
+          <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>Thời gian thuê/mua</p>
+          <span>{crmFields.rentalTime || "Chưa có"}</span>
         </div>
         <div>
           <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>Ngân sách</p>
@@ -331,11 +425,13 @@ export default function CustomersPage() {
 
   const today = new Date();
   const leadsWithFollowUp = leads.map((lead) => {
-    const followUpDate = extractFollowUp(lead.note);
+    const crmFields = parseCrmFields(lead.note);
+    const followUpDate = extractFollowUp(lead.note, crmFields);
     const followUpStatus = getFollowUpStatus(followUpDate, today);
 
     return {
       lead,
+      crmFields,
       followUpDate,
       followUpText: formatFollowUpDate(followUpDate),
       followUpStatus,

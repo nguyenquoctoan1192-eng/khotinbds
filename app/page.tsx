@@ -33,6 +33,9 @@ export default function Home() {
   const [saveNote, setSaveNote] = useState("");
   const [savingCustomer, setSavingCustomer] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
+  const [showCustomerMessage, setShowCustomerMessage] = useState(false);
+  const [customerMessage, setCustomerMessage] = useState("");
+  const [copyMessage, setCopyMessage] = useState("");
 
   const getListingFromResult = (item: any) => item.listing || item;
 
@@ -78,6 +81,70 @@ export default function Home() {
     }
 
     return labels;
+  };
+
+  const formatListingPrice = (price: unknown) => {
+    const value = Number(price || 0);
+
+    if (!Number.isFinite(value) || value <= 0) {
+      return "Liên hệ";
+    }
+
+    return `${value.toLocaleString("vi-VN")} VNĐ`;
+  };
+
+  const buildNeedSummary = (filters: ParsedRequirementFilters | null) => {
+    const parts = [
+      filters?.preferred_districts?.length
+        ? `khu vực ${filters.preferred_districts.join(", ")}`
+        : "",
+      filters?.max_price
+        ? `ngân sách tối đa ${filters.max_price.toLocaleString("vi-VN")} VNĐ`
+        : "",
+      filters?.min_area ? `diện tích từ ${filters.min_area}m²` : "",
+      filters?.note ? `nhu cầu ${filters.note}` : "",
+    ].filter(Boolean);
+
+    return parts.join(", ") || search.trim() || "nhu cầu đang tìm";
+  };
+
+  const buildCustomerShareMessage = () => {
+    const filters = parsedFilters || parseVietnameseRequirement(search);
+    const topMatches = listings.slice(0, 3);
+    const lines = [
+      `Em gửi anh/chị một số căn phù hợp với ${buildNeedSummary(filters)}:`,
+      "",
+      ...topMatches.flatMap((item, index) => {
+        const listing = getListingFromResult(item);
+        const reasons = getReasonLabels(item);
+        const location = [listing.district, listing.address].filter(Boolean).join(" - ");
+
+        return [
+          `${index + 1}. ${listing.title || "Bất động sản phù hợp"}`,
+          location ? `Khu vực: ${location}` : "",
+          `Giá: ${formatListingPrice(listing.price)}`,
+          listing.area ? `Diện tích: ${listing.area}m²` : "",
+          reasons.length > 0
+            ? `Lý do phù hợp: ${reasons.join(", ")}`
+            : "Lý do phù hợp: phù hợp với nhu cầu đã tìm",
+          "",
+        ].filter(Boolean);
+      }),
+      "Anh/chị xem qua, nếu ưng căn nào em gửi thêm hình ảnh và hẹn lịch xem nhà.",
+    ];
+
+    return lines.join("\n");
+  };
+
+  const openCustomerMessage = () => {
+    setCustomerMessage(buildCustomerShareMessage());
+    setCopyMessage("");
+    setShowCustomerMessage(true);
+  };
+
+  const copyCustomerMessage = async () => {
+    await navigator.clipboard.writeText(customerMessage);
+    setCopyMessage("Đã copy nội dung");
   };
 
   const fetchListings = async () => {
@@ -163,12 +230,22 @@ export default function Home() {
     return amount;
   };
 
+  const cleanCrmValue = (value: string) =>
+    value
+      .replace(/^\s*(?:nhu\s*cau|nhu\s*cầu|need)\s*:\s*/i, "")
+      .replace(/^\s*(?:thoi\s*gian\s*can\s*thue\/mua|thoi\s*gian\s*thue\/mua|thời\s*gian\s*cần\s*thuê\/mua|thời\s*gian\s*thuê\/mua|rental_time)\s*:\s*/i, "")
+      .replace(/^\s*(?:hen\s*cham\s*soc\s*lai|hẹn\s*chăm\s*sóc\s*lại|follow_up_date)\s*:\s*/i, "")
+      .replace(/^\s*(?:ghi\s*chu|ghi\s*chú|note)\s*:\s*/i, "")
+      .trim();
+
   const buildCrmNote = (fallbackNote?: string) =>
     [
-      saveNeed ? `Nhu cau: ${saveNeed}` : fallbackNote,
-      saveTimeframe ? `Thoi gian can thue/mua: ${saveTimeframe}` : "",
-      saveFollowUpAt ? `Hen cham soc lai: ${saveFollowUpAt}` : "",
-      saveNote ? `Ghi chu: ${saveNote}` : "",
+      cleanCrmValue(saveNeed || fallbackNote || "")
+        ? `need=${cleanCrmValue(saveNeed || fallbackNote || "")}`
+        : "",
+      cleanCrmValue(saveTimeframe) ? `rental_time=${cleanCrmValue(saveTimeframe)}` : "",
+      cleanCrmValue(saveFollowUpAt) ? `follow_up_date=${cleanCrmValue(saveFollowUpAt)}` : "",
+      cleanCrmValue(saveNote) ? `note=${cleanCrmValue(saveNote)}` : "",
     ]
       .filter(Boolean)
       .join(" | ") || null;
@@ -293,12 +370,22 @@ export default function Home() {
               : `Bất động sản nổi bật (${listings.length})`}
           </h2>
           {search.trim() && (
-            <button
-              onClick={() => openSaveForm()}
-              style={{ background: "#2563eb", color: "#fff", border: "none", padding: "11px 16px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" }}
-            >
-              Lưu nhu cầu này thành khách
-            </button>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button
+                onClick={() => openSaveForm()}
+                style={{ background: "#2563eb", color: "#fff", border: "none", padding: "11px 16px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" }}
+              >
+                Lưu nhu cầu này thành khách
+              </button>
+              {listings.length > 0 && (
+                <button
+                  onClick={openCustomerMessage}
+                  style={{ background: "#111827", color: "#fff", border: "none", padding: "11px 16px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" }}
+                >
+                  Soạn tin gửi khách
+                </button>
+              )}
+            </div>
           )}
         </div>
 
@@ -407,6 +494,49 @@ export default function Home() {
         >
           ↑
         </button>
+      )}
+
+      {showCustomerMessage && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(17,24,39,0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 10000,
+          }}
+        >
+          <div style={{ background: "#fff", borderRadius: 12, padding: 18, width: "min(94vw, 640px)", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 12px 30px rgba(0,0,0,0.2)" }}>
+            <h3 style={{ marginTop: 0 }}>Soạn tin gửi khách</h3>
+            <textarea
+              value={customerMessage}
+              onChange={(e) => setCustomerMessage(e.target.value)}
+              style={{ width: "100%", boxSizing: "border-box", minHeight: 300, padding: 12, borderRadius: 8, border: "1px solid #d1d5db", lineHeight: 1.5, fontSize: 15 }}
+            />
+            {copyMessage && (
+              <p style={{ color: "#15803d", fontWeight: 700, marginBottom: 0 }}>
+                {copyMessage}
+              </p>
+            )}
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 14 }}>
+              <button
+                onClick={copyCustomerMessage}
+                style={{ background: "#2563eb", color: "#fff", border: "none", padding: "10px 14px", borderRadius: 8, cursor: "pointer", fontWeight: "bold" }}
+              >
+                Copy nội dung
+              </button>
+              <button
+                onClick={() => setShowCustomerMessage(false)}
+                style={{ background: "#fff", color: "#111827", border: "1px solid #d1d5db", padding: "10px 14px", borderRadius: 8, cursor: "pointer" }}
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showSaveForm && (

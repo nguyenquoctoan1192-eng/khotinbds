@@ -23,6 +23,9 @@ export default function FindHomePage() {
   const [saveNote, setSaveNote] = useState("");
   const [savingCustomer, setSavingCustomer] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
+  const [showCustomerMessage, setShowCustomerMessage] = useState(false);
+  const [customerMessage, setCustomerMessage] = useState("");
+  const [copyMessage, setCopyMessage] = useState("");
   const getExistingMatches = () =>
     results
       .map((item) => {
@@ -65,6 +68,89 @@ export default function FindHomePage() {
     }
 
     return labels;
+  };
+
+  const formatListingPrice = (price: unknown) => {
+    const value = Number(price || 0);
+
+    if (!Number.isFinite(value) || value <= 0) {
+      return "Liên hệ";
+    }
+
+    return `${value.toLocaleString("vi-VN")} VNĐ`;
+  };
+
+  const buildNeedSummary = (filters: ParsedRequirementFilters | null) => {
+    const parts = [
+      fullname ? `khách ${fullname}` : "",
+      filters?.preferred_districts?.length
+        ? `khu vực ${filters.preferred_districts.join(", ")}`
+        : district
+          ? `khu vực ${district}`
+          : "",
+      filters?.max_price
+        ? `ngân sách tối đa ${filters.max_price.toLocaleString("vi-VN")} VNĐ`
+        : maxPrice
+          ? `ngân sách tối đa ${maxPrice}`
+          : "",
+      filters?.min_area ? `diện tích từ ${filters.min_area}m²` : "",
+      filters?.note ? `nhu cầu ${filters.note}` : "",
+    ].filter(Boolean);
+
+    return parts.join(", ") || requirementText.trim() || "nhu cầu đang tìm";
+  };
+
+  const buildCustomerShareMessage = () => {
+    const filters = parsedFilters || parseVietnameseRequirement(requirementText);
+    const topMatches = results.slice(0, 3);
+    const lines = [
+      `Em gửi anh/chị một số căn phù hợp với ${buildNeedSummary(filters)}:`,
+      "",
+      ...topMatches.flatMap((item, index) => {
+        const listing = item.listing || item;
+        const reasons = getReasonLabels(item);
+        const location = [listing.district, listing.address].filter(Boolean).join(" - ");
+
+        return [
+          `${index + 1}. ${listing.title || "Bất động sản phù hợp"}`,
+          location ? `Khu vực: ${location}` : "",
+          `Giá: ${formatListingPrice(listing.price)}`,
+          listing.area ? `Diện tích: ${listing.area}m²` : "",
+          reasons.length > 0
+            ? `Lý do phù hợp: ${reasons.join(", ")}`
+            : "Lý do phù hợp: phù hợp với nhu cầu đã tìm",
+          "",
+        ].filter(Boolean);
+      }),
+      "Anh/chị xem qua, nếu ưng căn nào em gửi thêm hình ảnh và hẹn lịch xem nhà.",
+    ];
+
+    return lines.join("\n");
+  };
+
+  const openCustomerMessage = () => {
+    setCustomerMessage(buildCustomerShareMessage());
+    setCopyMessage("");
+    setShowCustomerMessage(true);
+  };
+
+  const copyCustomerMessage = async () => {
+    await navigator.clipboard.writeText(customerMessage);
+    setCopyMessage("Đã copy nội dung");
+  };
+
+  const cleanCrmValue = (value: string) =>
+    value
+      .replace(/^\s*(?:nhu\s*cau|nhu\s*cầu|need)\s*:\s*/i, "")
+      .replace(/^\s*(?:thoi\s*gian\s*can\s*thue\/mua|thoi\s*gian\s*thue\/mua|thời\s*gian\s*cần\s*thuê\/mua|thời\s*gian\s*thuê\/mua|rental_time)\s*:\s*/i, "")
+      .replace(/^\s*(?:hen\s*cham\s*soc\s*lai|hẹn\s*chăm\s*sóc\s*lại|follow_up_date)\s*:\s*/i, "")
+      .replace(/^\s*(?:ghi\s*chu|ghi\s*chú|note)\s*:\s*/i, "")
+      .trim();
+
+  const buildCrmNote = (need: string) => {
+    const cleanNeed = cleanCrmValue(need);
+
+    return cleanNeed ? `need=${cleanNeed}` : null;
   };
 
   const searchHomes = async () => {
@@ -149,7 +235,7 @@ export default function FindHomePage() {
         fullname: saveFullname,
         phone: savePhone,
         mode: "lead",
-        note: saveNote || filters.note || null,
+        note: buildCrmNote(saveNote || filters.note || ""),
         preferred_districts: filters.preferred_districts,
         max_price: filters.max_price,
         min_area: filters.min_area,
@@ -254,7 +340,8 @@ export default function FindHomePage() {
 
       {results.length > 0 && (
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 12 }}>
-          <button onClick={openSaveForm}>Lưu khách</button>
+          <button onClick={openSaveForm}>Lưu nhu cầu này thành khách</button>
+          <button onClick={openCustomerMessage}>Soạn tin gửi khách</button>
           {saveMessage && <span style={{ color: "#15803d", fontWeight: 700 }}>{saveMessage}</span>}
         </div>
       )}
@@ -305,6 +392,58 @@ export default function FindHomePage() {
           </div>
         );
       })}
+
+      {showCustomerMessage && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(17,24,39,0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 10000,
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              padding: 18,
+              width: "min(94vw, 640px)",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              boxShadow: "0 12px 30px rgba(0,0,0,0.2)",
+            }}
+          >
+            <h3 style={{ marginTop: 0 }}>Soạn tin gửi khách</h3>
+            <textarea
+              value={customerMessage}
+              onChange={(e) => setCustomerMessage(e.target.value)}
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                minHeight: 300,
+                padding: 12,
+                borderRadius: 8,
+                border: "1px solid #d1d5db",
+                lineHeight: 1.5,
+                fontSize: 15,
+              }}
+            />
+            {copyMessage && (
+              <p style={{ color: "#15803d", fontWeight: 700, marginBottom: 0 }}>
+                {copyMessage}
+              </p>
+            )}
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 14 }}>
+              <button onClick={copyCustomerMessage}>Copy nội dung</button>
+              <button onClick={() => setShowCustomerMessage(false)}>Đóng</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showSaveForm && (
         <div
