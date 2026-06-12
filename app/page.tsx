@@ -177,6 +177,17 @@ export default function Home() {
     updateSearch("");
   };
 
+  const buildListingUrl = (listingId: string) => {
+    const params = new URLSearchParams();
+
+    if (search.trim()) {
+      params.set("fromSearch", search.trim());
+    }
+
+    const query = params.toString();
+    return query ? `/listing/${listingId}?${query}` : `/listing/${listingId}`;
+  };
+
   const fetchListings = async () => {
     setLoading(true);
     setSaveMessage("");
@@ -510,7 +521,7 @@ export default function Home() {
                     </p>
                   </div>
                   <div style={{ display: "flex", flexDirection: isMobile ? "row" : "column", gap: 10, justifyContent: isMobile ? "flex-start" : "flex-end", width: isMobile ? "100%" : "auto", marginTop: isMobile ? 10 : 0, flexShrink: 0, flexWrap: "wrap" }}>
-                    <button style={{ background: "#111827", color: "#fff", border: "none", padding: "12px 18px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" }} onClick={() => router.push(`/listing/${listing.id}`)}>
+                    <button style={{ background: "#111827", color: "#fff", border: "none", padding: "12px 18px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" }} onClick={() => router.push(buildListingUrl(listing.id))}>
                       Xem chi tiết
                     </button>
                   </div>

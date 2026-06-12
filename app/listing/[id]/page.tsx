@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -11,8 +11,15 @@ const supabase = createClient(
 
 export default function ListingDetail() {
   const params = useParams();
+  const searchParams = useSearchParams();
 
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
+  const fromSearch = searchParams.get("fromSearch")?.trim() || "";
+  const returnUrl = searchParams.get("returnUrl") || "";
+  const safeReturnUrl = returnUrl.startsWith("/") ? returnUrl : "";
+  const searchReturnUrl = fromSearch
+    ? `/?q=${encodeURIComponent(fromSearch)}`
+    : safeReturnUrl;
 
   const [showPhone, setShowPhone] = useState(false);
   const [listing, setListing] = useState<any>(null);
@@ -59,7 +66,14 @@ export default function ListingDetail() {
       {/* NAV */}
       <div style={styles.nav}>
         <h2 style={styles.logo}>🏠 BDS</h2>
-        <a href="/" style={styles.backBtn}>← Trang chủ</a>
+        <div style={styles.navLinks}>
+          {searchReturnUrl && (
+            <a href={searchReturnUrl} style={styles.backBtn}>
+              Quay lại kết quả tìm kiếm
+            </a>
+          )}
+          <a href="/" style={styles.backBtn}>← Trang chủ</a>
+        </div>
       </div>
 
       {/* WRAPPER */}
@@ -178,6 +192,13 @@ const styles: any = {
   logo: {
     fontSize: 18,
     fontWeight: "bold",
+  },
+
+  navLinks: {
+    display: "flex",
+    gap: 10,
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
   },
 
   backBtn: {
