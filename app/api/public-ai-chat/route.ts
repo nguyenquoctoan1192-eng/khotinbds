@@ -77,6 +77,145 @@ const normalizeText = (value: string) =>
     .replace(/\u0110/g, "D")
     .toLowerCase();
 
+const canonicalDistricts = [
+  ...Array.from({ length: 12 }, (_, index) => ({
+    label: `Quận ${index + 1}`,
+    aliases: [`quan ${index + 1}`, `q${index + 1}`, `q. ${index + 1}`, `q.${index + 1}`],
+  })),
+  { label: "Quận Phú Nhuận", aliases: ["quan phu nhuan", "phu nhuan"] },
+  { label: "Quận Bình Thạnh", aliases: ["quan binh thanh", "binh thanh"] },
+  { label: "Quận Gò Vấp", aliases: ["quan go vap", "go vap"] },
+  { label: "Quận Tân Bình", aliases: ["quan tan binh", "tan binh"] },
+  { label: "Quận Tân Phú", aliases: ["quan tan phu", "tan phu"] },
+  { label: "TP Thủ Đức", aliases: ["tp thu duc", "thanh pho thu duc", "quan thu duc", "thu duc"] },
+  { label: "Quận Bình Tân", aliases: ["quan binh tan", "binh tan"] },
+  { label: "Huyện Nhà Bè", aliases: ["huyen nha be", "nha be"] },
+  { label: "Huyện Hóc Môn", aliases: ["huyen hoc mon", "hoc mon"] },
+  { label: "Huyện Bình Chánh", aliases: ["huyen binh chanh", "binh chanh"] },
+  { label: "Huyện Củ Chi", aliases: ["huyen cu chi", "cu chi"] },
+  { label: "Huyện Cần Giờ", aliases: ["huyen can gio", "can gio"] },
+];
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const normalizeSpaces = (value: string) => value.replace(/\s+/g, " ").trim();
+
+const extractDistrict = (text: string) => {
+  const normalized = normalizeSpaces(normalizeText(text).replace(/\./g, ". "));
+
+  for (let district = 1; district <= 12; district += 1) {
+    const pattern = new RegExp(`\\b(?:quan\\s*${district}|q\\.?\\s*${district})\\b`);
+    if (pattern.test(normalized)) return `Quận ${district}`;
+  }
+
+  for (const district of canonicalDistricts.slice(12)) {
+    if (
+      district.aliases.some((alias) =>
+        new RegExp(`\\b${escapeRegExp(normalizeSpaces(alias))}\\b`).test(normalized)
+      )
+    ) {
+      return district.label;
+    }
+  }
+
+  return null;
+};
+
+const toNumber = (value: string) => Number(value.replace(",", "."));
+
+const extractDimensions = (text: string) => {
+  const normalized = normalizeText(text);
+  const patterns = [
+    /(?:ngang|rong|mat tien)\s*(\d+(?:[.,]\d+)?)\s*m?\s*(?:dai|sau)\s*(\d+(?:[.,]\d+)?)\s*m?/,
+    /\b(\d+(?:[.,]\d+)?)\s*m?\s*x\s*(\d+(?:[.,]\d+)?)\s*m?\b/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern);
+    if (!match) continue;
+
+    const width = toNumber(match[1]);
+    const length = toNumber(match[2]);
+
+    if (Number.isFinite(width) && Number.isFinite(length) && width > 0 && length > 0) {
+      return {
+        width,
+        length,
+        area: width * length,
+        label: `ngang ${match[1].replace(",", ".")} dài ${match[2].replace(",", ".")}`,
+      };
+    }
+  }
+
+  return null;
+};
+
+const extractBudget = (text: string) => {
+  const normalized = normalizeText(text).replace(/\s+/g, " ");
+  const matches = Array.from(
+    normalized.matchAll(/(?:gia|ngan sach|tam|khoang|duoi|toi da)?\s*(\d+(?:[.,]\d+)?)\s*(tr|trieu|ty|ti|k)?\b/g)
+  );
+
+  for (const match of matches) {
+    const amount = toNumber(match[1]);
+    const unit = match[2] || "";
+
+    if (!Number.isFinite(amount)) continue;
+    if (unit === "tr" || unit === "trieu") return String(Math.round(amount * 1000000));
+    if (unit === "ty" || unit === "ti") return String(Math.round(amount * 1000000000));
+    if (unit === "k") return String(Math.round(amount * 1000));
+    if (amount >= 1000000) return String(Math.round(amount));
+  }
+
+  return null;
+};
+
+const extractBusiness = (text: string) => {
+  const normalized = normalizeText(text);
+
+  if (/\bmb\b|mat bang|mat bang kinh doanh|thue mat bang|tim mat bang/.test(normalized)) {
+    return "mặt bằng kinh doanh";
+  }
+
+  if (/kinh doanh|mo tiem|ban hang|shop|showroom|spa|cafe|ca phe|nha hang|restaurant/.test(normalized)) {
+    return text.match(/spa|cafe|cà phê|ca phe|office|văn phòng|van phong|restaurant|nhà hàng|nha hang|shop|showroom|kinh doanh|mở tiệm|mo tiem|bán hàng|ban hang/i)?.[0] || "kinh doanh";
+  }
+
+  if (/\bo\b|de o|o gia dinh|can ho|nha o/.test(normalized)) {
+    return "để ở";
+  }
+
+  return null;
+};
+
+const formatBudgetForReply = (budget: string | null) => {
+  if (!budget) return null;
+  const amount = Number(budget);
+
+  if (Number.isFinite(amount)) {
+    if (amount >= 1000000000) return `${amount / 1000000000} tỷ`;
+    if (amount >= 1000000) return `${amount / 1000000}tr`;
+  }
+
+  return budget;
+};
+
+const isGenericBusiness = (business: string | null) =>
+  Boolean(business && /mặt bằng kinh doanh|mat bang kinh doanh|kinh doanh/i.test(business));
+
+const asksForKnownField = (reply: string, profile: PublicChatProfile) => {
+  const normalized = normalizeText(reply);
+
+  return Boolean(
+    (profile.location && /(khu vuc|quan nao|o dau|vi tri nao|location)/.test(normalized)) ||
+      (profile.budget && /(ngan sach|gia khoang bao nhieu|bao nhieu mot thang|budget)/.test(normalized)) ||
+      (profile.area && /(dien tich|bao nhieu met vuong|m2|area)/.test(normalized)) ||
+      (profile.business &&
+        !isGenericBusiness(profile.business) &&
+        /(kinh doanh gi|nganh gi|de o hay kinh doanh|business)/.test(normalized))
+  );
+};
+
 const mergeProfiles = (...profiles: Partial<PublicChatProfile>[]): PublicChatProfile =>
   profiles.reduce<PublicChatProfile>((merged, profile) => {
     for (const key of profileKeys) {
@@ -100,14 +239,29 @@ const extractProfile = (text: string, existing: Partial<PublicChatProfile>) => {
   const locationMatch = text.match(/(?:bình thạnh|phú nhuận|gò vấp|tân bình|thủ đức|quận\s*\d+|q\.\s*\d+|quận\s*[^\s,.;]+)/i);
   const nameMatch = text.match(/(?:tôi tên|mình tên|em tên|anh tên|chị tên|tên là)\s+([A-Za-zÀ-ỹ\s]{2,30})/i);
 
+  const extractedBudget = extractBudget(text);
+  const extractedBusiness = extractBusiness(text);
+  const extractedDistrict = extractDistrict(text);
+  const dimensions = extractDimensions(text);
+
   if (!profile.phone && phoneMatch) profile.phone = phoneMatch[0].replace(/\D/g, "");
+  if (extractedBudget) profile.budget = extractedBudget;
   if (!profile.budget && budgetMatch) profile.budget = budgetMatch[0];
   if (!profile.area && areaMatch) profile.area = areaMatch[0];
+  if (extractedBusiness) profile.business = extractedBusiness;
   if (!profile.business && businessMatch) profile.business = businessMatch[0];
   if (!profile.structure && structureMatch) profile.structure = structureMatch[0];
   if (!profile.move_in_time && moveInMatch) profile.move_in_time = moveInMatch[0];
+  if (extractedDistrict) profile.location = extractedDistrict;
   if (!profile.location && locationMatch) profile.location = locationMatch[0];
   if (!profile.name && nameMatch?.[1]) profile.name = nameMatch[1].trim();
+
+  if (dimensions) {
+    profile.area = String(dimensions.area);
+    if (!profile.structure || /ngang|dai|dài|x/i.test(profile.structure)) {
+      profile.structure = dimensions.label;
+    }
+  }
 
   if (!profile.business && /thue|thuê|mua|can|cần/.test(normalized)) {
     const businessSentence = text.match(/[^.?!]*(?:thuê|mua|cần|kinh doanh|mở)[^.?!]*/i);
@@ -121,7 +275,7 @@ const extractProfile = (text: string, existing: Partial<PublicChatProfile>) => {
 
   const latestLocationMatch = text.match(/(?:chuyển sang|chuyen sang|qua|sang)\s+([^,.;\n]+)/i);
   if (latestLocationMatch?.[1]) {
-    profile.location = latestLocationMatch[1].trim();
+    profile.location = extractDistrict(latestLocationMatch[1]) || latestLocationMatch[1].trim();
   }
 
   return profile;
@@ -164,6 +318,12 @@ const nextQuestionFor = (profile: PublicChatProfile) => {
 
   if (!profile.name) {
     return "Em tiện xưng hô với mình thế nào ạ?";
+  }
+
+  if (isGenericBusiness(profile.business)) {
+    return "Dạ ok anh, em nắm mình tìm mặt bằng " +
+      `${profile.location || ""} khoảng ${formatBudgetForReply(profile.budget) || profile.budget || ""}` +
+      `${profile.structure ? `, ${profile.structure}` : ""}. Anh định kinh doanh ngành gì để em lọc mặt bằng sát hơn ạ?`;
   }
 
   if (!profile.structure) {
@@ -226,6 +386,12 @@ const nextQuestionForV2 = (profile: PublicChatProfile) => {
     return "Em hỏi thêm chút, mình cần khoảng bao nhiêu mét vuông anh/chị nhỉ?";
   }
 
+  if (isGenericBusiness(profile.business)) {
+    return "Dạ ok anh, em nắm mình tìm mặt bằng " +
+      `${profile.location || ""} khoảng ${formatBudgetForReply(profile.budget) || profile.budget || ""}` +
+      `${profile.structure ? `, ${profile.structure}` : ""}. Anh định kinh doanh ngành gì để em lọc mặt bằng sát hơn ạ?`;
+  }
+
   if (!profile.structure) {
     return "Mình cần kết cấu khoảng mấy phòng hoặc mấy tầng ạ?";
   }
@@ -250,6 +416,15 @@ const nextQuestionForV2 = (profile: PublicChatProfile) => {
 };
 
 const fallbackReplyV2 = (profile: PublicChatProfile) => {
+  if (
+    isGenericBusiness(profile.business) &&
+    profile.location &&
+    profile.budget &&
+    profile.area
+  ) {
+    return nextQuestionForV2(profile);
+  }
+
   const summary =
     summarizeKnownV2(profile) ||
     "Dạ em chào anh/chị, em hỗ trợ mình tìm nhà/mặt bằng phù hợp ạ.";
@@ -367,6 +542,7 @@ Mục tiêu:
 - Luôn tóm tắt những gì đã biết trước khi hỏi tiếp.
 - Mỗi lần chỉ hỏi 1 thông tin còn thiếu quan trọng nhất.
 - Không hỏi lại thông tin đã biết trong profile.
+- Never ask for a field that is already known in known_requirements/profile.
 - Không bịa thông tin. Chưa biết thì để null/missing.
 - Nếu khách đổi nhu cầu, dùng thông tin mới nhất.
 - Nếu khách nói ngắn như "Mặt tiền nha em", hiểu đó là frontage.
@@ -534,6 +710,9 @@ export async function POST(req: Request) {
           parsed.profile
         );
         nextBestQuestion = nextQuestionForV2(profile);
+        if (asksForKnownField(reply, profile)) {
+          reply = fallbackReplyV2(profile);
+        }
       }
     }
 
