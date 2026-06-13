@@ -16,6 +16,8 @@ const supabase = createClient(
 type PublicChatProfile = {
   name: string | null;
   phone: string | null;
+  purpose: string | null;
+  business_type: string | null;
   business: string | null;
   location: string | null;
   budget: string | null;
@@ -33,6 +35,8 @@ type PublicChatMessage = {
 const emptyPublicChatProfile = (): PublicChatProfile => ({
   name: null,
   phone: null,
+  purpose: null,
+  business_type: null,
   business: null,
   location: null,
   budget: null,
@@ -97,6 +101,28 @@ export default function Home() {
         };
       })
       .filter((match) => match.listing_id);
+
+  const understoodAiFields = [
+    ["Mục đích", aiChatProfile.purpose],
+    ["Khu vực", aiChatProfile.location],
+    ["Ngân sách", aiChatProfile.budget],
+    ["Diện tích", aiChatProfile.area],
+    ["Kết cấu", aiChatProfile.structure],
+  ].filter(([, value]) => value);
+
+  const missingAiFields = [
+    ["Mục đích", aiChatProfile.purpose],
+    [
+      "Ngành kinh doanh",
+      aiChatProfile.purpose === "kinh doanh" ? aiChatProfile.business_type : "skip",
+    ],
+    ["Khu vực", aiChatProfile.location],
+    ["Ngân sách", aiChatProfile.budget],
+    ["Diện tích", aiChatProfile.area],
+    ["Kết cấu", aiChatProfile.structure],
+  ]
+    .filter(([, value]) => !value)
+    .map(([label]) => label);
 
   const getReasonLabels = (item: any) => {
     const breakdown = item.breakdown;
@@ -309,6 +335,7 @@ export default function Home() {
           preferred_districts: parsed.preferred_districts,
           max_price: parsed.max_price,
           min_area: parsed.min_area,
+          keywordSearch: parsed.keywordSearch,
         }),
       });
 
@@ -562,6 +589,9 @@ export default function Home() {
             </p>
             <p>Diện tích tối thiểu: {parsedFilters.min_area || "Không có"}</p>
             <p>Nhu cầu: {parsedFilters.note || "Không có"}</p>
+            {parsedFilters.keywordSearch && (
+              <p>Từ khóa: {parsedFilters.keywordSearch}</p>
+            )}
           </div>
         )}
 
@@ -709,6 +739,32 @@ export default function Home() {
             </button>
           </div>
 
+          <div style={{ borderBottom: "1px solid #e5e7eb", padding: 12, background: "#f9fafb", fontSize: 13 }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>AI đã hiểu:</div>
+            {understoodAiFields.length > 0 ? (
+              <div style={{ display: "grid", gap: 4 }}>
+                {understoodAiFields.map(([label, value]) => (
+                  <div key={String(label)}>
+                    ✓ {label}: {value}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ color: "#6b7280" }}>Chưa có thông tin rõ.</div>
+            )}
+
+            <div style={{ fontWeight: 700, marginTop: 10, marginBottom: 6 }}>Còn thiếu:</div>
+            {missingAiFields.length > 0 ? (
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {missingAiFields.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            ) : (
+              <div style={{ color: "#15803d" }}>Nhu cầu chính đã khá rõ.</div>
+            )}
+          </div>
+
           <div style={{ padding: 12, overflowY: "auto", display: "grid", gap: 10 }}>
             {aiChatMessages.map((message, index) => (
               <div
@@ -735,11 +791,6 @@ export default function Home() {
           </div>
 
           <div style={{ borderTop: "1px solid #e5e7eb", padding: 12 }}>
-            {aiChatLeadCreated && (
-              <div style={{ background: "#dcfce7", color: "#166534", borderRadius: 8, padding: 9, marginBottom: 10, fontWeight: 700 }}>
-                Đã lưu thông tin, đội ngũ tư vấn sẽ liên hệ sớm.
-              </div>
-            )}
             {aiChatError && (
               <div style={{ color: "#991b1b", marginBottom: 8, fontWeight: 700 }}>
                 {aiChatError}

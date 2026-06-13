@@ -8,6 +8,8 @@ type ChatMessage = {
 type PublicChatProfile = {
   name: string | null;
   phone: string | null;
+  purpose: string | null;
+  business_type: string | null;
   business: string | null;
   location: string | null;
   budget: string | null;
@@ -31,6 +33,8 @@ type ChatResult = {
 };
 
 const profileKeys: Array<keyof PublicChatProfile> = [
+  "purpose",
+  "business_type",
   "business",
   "location",
   "budget",
@@ -45,6 +49,8 @@ const profileKeys: Array<keyof PublicChatProfile> = [
 const profileLabels: Record<keyof PublicChatProfile, string> = {
   name: "name",
   phone: "phone",
+  purpose: "purpose",
+  business_type: "business type",
   business: "business/use case",
   location: "location/district",
   budget: "budget",
@@ -57,6 +63,8 @@ const profileLabels: Record<keyof PublicChatProfile, string> = {
 const emptyProfile = (): PublicChatProfile => ({
   name: null,
   phone: null,
+  purpose: null,
+  business_type: null,
   business: null,
   location: null,
   budget: null,
@@ -177,13 +185,44 @@ const extractBusiness = (text: string) => {
     return "mặt bằng kinh doanh";
   }
 
-  if (/kinh doanh|mo tiem|ban hang|shop|showroom|spa|cafe|ca phe|nha hang|restaurant/.test(normalized)) {
-    return text.match(/spa|cafe|cà phê|ca phe|office|văn phòng|van phong|restaurant|nhà hàng|nha hang|shop|showroom|kinh doanh|mở tiệm|mo tiem|bán hàng|ban hang/i)?.[0] || "kinh doanh";
+  if (/studio|kinh doanh|mo tiem|ban hang|shop|showroom|spa|cafe|ca phe|quan an|nha hang|restaurant/.test(normalized)) {
+    return text.match(/studio|spa|cafe|cà phê|ca phe|office|văn phòng|van phong|restaurant|quán ăn|quan an|nhà hàng|nha hang|shop|showroom|kinh doanh|mở tiệm|mo tiem|bán hàng|ban hang/i)?.[0] || "kinh doanh";
   }
 
   if (/\bo\b|de o|o gia dinh|can ho|nha o/.test(normalized)) {
     return "để ở";
   }
+
+  return null;
+};
+
+const extractPurpose = (text: string) => {
+  const normalized = normalizeText(text);
+
+  if (
+    /(?:khong|khong phai|khong em|doi lai|chuyen sang|chuyen qua).*(?:nha o|de o|o gia dinh|can ho)|\b(?:nha o|de o|o gia dinh|can ho)\b/.test(
+      normalized
+    )
+  ) {
+    return "nhà ở";
+  }
+
+  if (/\bmb\b|mat bang|kinh doanh|mo tiem|ban hang|shop|showroom|spa|cafe|ca phe|studio|office|van phong|quan an|nha hang|restaurant/.test(normalized)) {
+    return "kinh doanh";
+  }
+
+  return null;
+};
+
+const extractBusinessType = (text: string) => {
+  const normalized = normalizeText(text);
+
+  if (/spa|nail|salon|tham my|massage/.test(normalized)) return "spa";
+  if (/cafe|ca phe|coffee/.test(normalized)) return "cafe";
+  if (/studio/.test(normalized)) return "studio";
+  if (/office|van phong|cong ty/.test(normalized)) return "office";
+  if (/restaurant|nha hang|quan an|an uong/.test(normalized)) return "quán ăn";
+  if (/shop|showroom/.test(normalized)) return text.match(/shop|showroom/i)?.[0] || "shop";
 
   return null;
 };
@@ -203,6 +242,9 @@ const formatBudgetForReply = (budget: string | null) => {
 const isGenericBusiness = (business: string | null) =>
   Boolean(business && /mặt bằng kinh doanh|mat bang kinh doanh|kinh doanh/i.test(business));
 
+const needsBusinessType = (profile: PublicChatProfile) =>
+  profile.purpose === "kinh doanh" && !profile.business_type;
+
 const asksForKnownField = (reply: string, profile: PublicChatProfile) => {
   const normalized = normalizeText(reply);
 
@@ -210,10 +252,46 @@ const asksForKnownField = (reply: string, profile: PublicChatProfile) => {
     (profile.location && /(khu vuc|quan nao|o dau|vi tri nao|location)/.test(normalized)) ||
       (profile.budget && /(ngan sach|gia khoang bao nhieu|bao nhieu mot thang|budget)/.test(normalized)) ||
       (profile.area && /(dien tich|bao nhieu met vuong|m2|area)/.test(normalized)) ||
-      (profile.business &&
-        !isGenericBusiness(profile.business) &&
+      (profile.purpose && /(de o hay kinh doanh|mua de o|kinh doanh hay de o|purpose)/.test(normalized)) ||
+      (profile.purpose === "nhà ở" && /(kinh doanh gi|nganh gi|business)/.test(normalized)) ||
+      (profile.business_type &&
         /(kinh doanh gi|nganh gi|de o hay kinh doanh|business)/.test(normalized))
   );
+};
+
+const violatesPublicTone = (reply: string) => {
+  const normalized = normalizeText(reply);
+
+  return /da em thay hien minh dang|em da luu|em ghi nhan|doi ngu tu van|toi da ghi nhan|toi da hieu|vui long cung cap|xin cho biet/.test(
+    normalized
+  );
+};
+
+const violatesQuestionRule = (reply: string) => {
+  const questionCount = (reply.match(/\?/g) || []).length;
+  return questionCount !== 1;
+};
+
+const repeatsProfileTooMuch = (reply: string, profile: PublicChatProfile) => {
+  if (!profile.phone && hasEnoughToAskPhone(profile)) return false;
+
+  const normalizedReply = normalizeText(reply);
+  const knownValues = [
+    profile.purpose,
+    profile.business_type,
+    profile.location,
+    formatBudgetForReply(profile.budget) || profile.budget,
+    profile.area,
+    profile.structure,
+    profile.frontage,
+    profile.move_in_time,
+  ]
+    .filter(Boolean)
+    .map((value) => normalizeText(String(value)));
+
+  const repeatedCount = knownValues.filter((value) => value && normalizedReply.includes(value)).length;
+
+  return repeatedCount >= 3;
 };
 
 const mergeProfiles = (...profiles: Partial<PublicChatProfile>[]): PublicChatProfile =>
@@ -241,14 +319,30 @@ const extractProfile = (text: string, existing: Partial<PublicChatProfile>) => {
 
   const extractedBudget = extractBudget(text);
   const extractedBusiness = extractBusiness(text);
+  const extractedPurpose = extractPurpose(text);
+  const extractedBusinessType = extractBusinessType(text);
   const extractedDistrict = extractDistrict(text);
   const dimensions = extractDimensions(text);
+  const businessDetailMatch = text.match(/(?:đậu xe|dau xe|parking|bãi xe|bai xe|thang máy|thang may|cách âm|cach am|riêng tư|rieng tu|thoát mùi|thoat mui|bếp|bep|đông người|dong nguoi|khách đi bộ|khach di bo|foot traffic)/i);
+  const occupancyMatch = text.match(/\d+\s*(?:người|nguoi|khách|khach|chỗ|cho|seat|seats|team|nhân viên|nhan vien)/i);
 
   if (!profile.phone && phoneMatch) profile.phone = phoneMatch[0].replace(/\D/g, "");
+  if (extractedPurpose) {
+    profile.purpose = extractedPurpose;
+    if (extractedPurpose === "nhà ở") {
+      profile.business_type = null;
+      profile.business = "nhà ở";
+    }
+  }
+  if (extractedBusinessType) {
+    profile.purpose = "kinh doanh";
+    profile.business_type = extractedBusinessType;
+    profile.business = extractedBusinessType;
+  }
   if (extractedBudget) profile.budget = extractedBudget;
   if (!profile.budget && budgetMatch) profile.budget = budgetMatch[0];
   if (!profile.area && areaMatch) profile.area = areaMatch[0];
-  if (extractedBusiness) profile.business = extractedBusiness;
+  if (extractedBusiness && !extractedBusinessType && profile.purpose !== "nhà ở") profile.business = extractedBusiness;
   if (!profile.business && businessMatch) profile.business = businessMatch[0];
   if (!profile.structure && structureMatch) profile.structure = structureMatch[0];
   if (!profile.move_in_time && moveInMatch) profile.move_in_time = moveInMatch[0];
@@ -268,9 +362,25 @@ const extractProfile = (text: string, existing: Partial<PublicChatProfile>) => {
     if (businessSentence) profile.business = businessSentence[0].trim();
   }
 
+  if (profile.business_type && !profile.purpose) {
+    profile.purpose = "kinh doanh";
+  }
+
   const frontageMatch = text.match(/(?:mặt tiền|mat tien|hẻm|hem|ô tô|o to|oto|xe hơi|xe hoi|đường lớn|duong lon)/i);
   if (frontageMatch) {
     profile.frontage = frontageMatch[0];
+  }
+
+  if (!profile.frontage && businessDetailMatch) {
+    profile.frontage = businessDetailMatch[0];
+  }
+
+  if (!profile.structure && businessDetailMatch && /bep|bếp/.test(normalizeText(businessDetailMatch[0]))) {
+    profile.structure = businessDetailMatch[0];
+  }
+
+  if (!profile.structure && occupancyMatch) {
+    profile.structure = occupancyMatch[0];
   }
 
   const latestLocationMatch = text.match(/(?:chuyển sang|chuyen sang|qua|sang)\s+([^,.;\n]+)/i);
@@ -287,91 +397,145 @@ const getMissingRequirements = (profile: PublicChatProfile) =>
 const isReadyToSave = (profile: PublicChatProfile) =>
   Boolean(
     profile.location &&
-      profile.business &&
-      profile.budget
+      profile.purpose &&
+      profile.budget &&
+      profile.phone
   );
 
 const hasEnoughToAskPhone = (profile: PublicChatProfile) =>
   Boolean(
     profile.location &&
-      profile.business &&
-      profile.budget &&
-      (profile.area || profile.structure)
+      profile.purpose &&
+      profile.budget
   );
-
-const nextQuestionFor = (profile: PublicChatProfile) => {
-  if (!profile.business) {
-    return "Mình đang cần thuê/mua để kinh doanh ngành gì hay để ở ạ?";
-  }
-
-  if (!profile.location) {
-    return "Mình ưu tiên khu vực hoặc quận nào nhất để em lọc đúng vị trí ạ?";
-  }
-
-  if (!profile.budget) {
-    return "Mình dự kiến ngân sách khoảng bao nhiêu, hoặc cần diện tích tầm bao nhiêu m2 ạ?";
-  }
-
-  if (!profile.phone) {
-    return "Cho em xin số điện thoại để bạn phụ trách gọi tư vấn kỹ hơn và gửi căn phù hợp cho mình nhé?";
-  }
-
-  if (!profile.name) {
-    return "Em tiện xưng hô với mình thế nào ạ?";
-  }
-
-  if (isGenericBusiness(profile.business)) {
-    return "Dạ ok anh, em nắm mình tìm mặt bằng " +
-      `${profile.location || ""} khoảng ${formatBudgetForReply(profile.budget) || profile.budget || ""}` +
-      `${profile.structure ? `, ${profile.structure}` : ""}. Anh định kinh doanh ngành gì để em lọc mặt bằng sát hơn ạ?`;
-  }
-
-  if (!profile.structure) {
-    return "Mình có cần kết cấu cụ thể như mấy phòng, mấy tầng hoặc trệt lửng không ạ?";
-  }
-
-  if (!profile.move_in_time) {
-    return "Mình dự kiến cần nhận nhà hoặc bắt đầu thuê khi nào ạ?";
-  }
-
-  return "Em đã nắm khá đủ rồi ạ. Mình có yêu cầu đặc biệt nào cần em lưu ý thêm không?";
-};
-
-const fallbackReply = (message: string, profile: PublicChatProfile) => {
-  const knownParts = [
-    profile.business ? `nhu cầu ${profile.business}` : "",
-    profile.location ? `khu vực ${profile.location}` : "",
-    profile.budget ? `ngân sách ${profile.budget}` : "",
-    profile.area ? `diện tích ${profile.area}` : "",
-  ].filter(Boolean);
-  const prefix = knownParts.length
-    ? `Dạ em nắm ${knownParts.join(", ")} rồi ạ.`
-    : "Dạ em chào mình, em hỗ trợ mình tìm nhà/mặt bằng phù hợp ạ.";
-
-  if (isReadyToSave(profile)) {
-    return `${prefix} Em đã lưu thông tin để bạn phụ trách tư vấn và gửi căn phù hợp cho mình sớm nhé.`;
-  }
-
-  return `${prefix} ${nextQuestionFor(profile)}`;
-};
 
 const summarizeKnownV2 = (profile: PublicChatProfile) => {
   const parts = [
-    profile.business ? `${profile.business}` : "",
+    profile.purpose ? `${profile.purpose}` : "",
+    profile.business_type ? `${profile.business_type}` : "",
     profile.location ? `ở ${profile.location}` : "",
-    profile.budget ? `khoảng ${profile.budget}/tháng` : "",
-    profile.area ? `tầm ${profile.area}` : "",
+    profile.budget ? `khoảng ${formatBudgetForReply(profile.budget) || profile.budget}` : "",
+    profile.area ? `tầm ${profile.area}m2` : "",
     profile.structure ? `kết cấu ${profile.structure}` : "",
     profile.frontage ? `${profile.frontage}` : "",
     profile.move_in_time ? `nhận nhà ${profile.move_in_time}` : "",
   ].filter(Boolean);
 
-  return parts.length ? `Dạ em thấy hiện mình đang tìm ${parts.join(", ")}.` : "";
+  return parts.length ? `Em thấy nhu cầu của mình đang là ${parts.join(", ")}.` : "";
+};
+
+const summarizeForPhoneAsk = (profile: PublicChatProfile) => {
+  const parts = [
+    profile.purpose || "",
+    profile.business_type || "",
+    profile.location ? `khu ${profile.location}` : "",
+    profile.budget ? `tầm ${formatBudgetForReply(profile.budget) || profile.budget}` : "",
+  ].filter(Boolean);
+
+  return parts.length
+    ? `Vậy là mình đang tìm ${parts.join(", ")}, em có thể gửi vài lựa chọn sát hơn cho anh.`
+    : "Em có thể gửi vài lựa chọn sát hơn cho anh.";
+};
+
+const reactionFor = (message: string, profile: PublicChatProfile) => {
+  const normalized = normalizeText(message);
+
+  if (/studio/.test(normalized)) return "Dạ studio thì em hiểu hướng mình cần rồi anh.";
+  if (/mat tien/.test(normalized)) return "Dạ ok anh, em ưu tiên mặt tiền cho mình nhé.";
+  if (/tret|lau|tang|lung|phong|pn|wc/.test(normalized)) {
+    return `Dạ ${profile.structure || "kết cấu đó"} thì khá ổn anh.`;
+  }
+  if (/ngang|dai|m2|\d+\s*x\s*\d+/.test(normalized)) {
+    return "Dạ kích thước vậy lọc mặt bằng sẽ sát hơn anh.";
+  }
+  if (/tr|trieu|ty|ti|ngan sach|gia/.test(normalized)) {
+    return "Dạ với ngân sách này vẫn có lựa chọn đó anh.";
+  }
+  if (/quan|q\.?\s*\d+|phu nhuan|binh thanh|go vap|tan binh|tan phu|thu duc/.test(normalized)) {
+    return "Dạ khu vực đó em thấy ổn để bắt đầu lọc anh.";
+  }
+  if (/khong|chua|tu van|gui|xem them/.test(normalized)) {
+    return "Dạ không sao anh, mình cứ trao đổi thêm để em lọc đúng hơn.";
+  }
+
+  return "Dạ anh.";
+};
+
+const businessKind = (profile: PublicChatProfile) => {
+  const normalized = normalizeText(profile.business_type || profile.business || "");
+
+  if (/spa|nail|salon|tham my|massage/.test(normalized)) return "spa";
+  if (/cafe|ca phe|coffee/.test(normalized)) return "cafe";
+  if (/studio/.test(normalized)) return "studio";
+  if (/office|van phong|cong ty/.test(normalized)) return "office";
+  if (/restaurant|nha hang|quan an|an uong/.test(normalized)) return "restaurant";
+
+  return null;
+};
+
+const businessSpecificQuestion = (profile: PublicChatProfile) => {
+  const kind = businessKind(profile);
+  const detailText = normalizeText(
+    [profile.frontage, profile.structure, profile.move_in_time].filter(Boolean).join(" ")
+  );
+
+  if (!kind) return null;
+
+  if (kind === "spa") {
+    if (!profile.frontage) return "Spa của mình có cần mặt tiền dễ thấy không anh?";
+    if (!profile.structure) return "Mình cần khoảng mấy phòng làm dịch vụ ạ?";
+    if (!/dau xe|parking|bai xe/.test(detailText)) {
+      return "Khách tới spa mình có cần chỗ đậu xe thuận tiện không anh?";
+    }
+    return null;
+  }
+
+  if (kind === "cafe") {
+    if (!profile.frontage) return "Cafe mình có ưu tiên mặt tiền đông người qua lại không anh?";
+    if (!profile.area) return "Mình muốn sức chứa khoảng bao nhiêu khách ạ?";
+    if (!/dong nguoi|khach di bo|foot traffic/.test(detailText)) {
+      return "Mình cần khu có lượng khách đi bộ tốt hay chủ yếu khách quen ạ?";
+    }
+    return null;
+  }
+
+  if (kind === "studio") {
+    if (!profile.area) return "Studio mình cần không gian mở khoảng bao nhiêu mét vuông ạ?";
+    if (!profile.structure) return "Mình cần chia mấy phòng riêng cho studio không anh?";
+    if (!/cach am|rieng tu/.test(detailText)) {
+      return "Studio của mình có cần cách âm hoặc riêng tư nhiều không ạ?";
+    }
+    return null;
+  }
+
+  if (kind === "office") {
+    if (!profile.area) return "Văn phòng mình khoảng bao nhiêu người làm việc anh?";
+    if (!profile.frontage) return "Mình có cần chỗ đậu xe thuận tiện cho team không ạ?";
+    if (!/thang may/.test(detailText)) {
+      return "Văn phòng mình có cần thang máy không anh?";
+    }
+    return null;
+  }
+
+  if (kind === "restaurant") {
+    if (!profile.structure) return "Quán mình có cần khu bếp riêng rộng không anh?";
+    if (!profile.frontage) return "Mình có ưu tiên mặt tiền dễ thấy cho quán không ạ?";
+    if (!/thoat mui/.test(detailText)) {
+      return "Mô hình quán của mình có cần thoát mùi tốt không anh?";
+    }
+    return null;
+  }
+
+  return null;
 };
 
 const nextQuestionForV2 = (profile: PublicChatProfile) => {
-  if (!profile.business) {
-    return "Mình đang cần thuê/mua để kinh doanh ngành gì hay để ở ạ?";
+  if (!profile.purpose) {
+    return "Mình đang tìm để ở hay để kinh doanh vậy anh?";
+  }
+
+  if (needsBusinessType(profile)) {
+    return "Anh làm ngành gì để em lọc mặt bằng sát hơn ạ?";
   }
 
   if (!profile.location) {
@@ -382,14 +546,18 @@ const nextQuestionForV2 = (profile: PublicChatProfile) => {
     return "Ngân sách mình muốn giữ khoảng bao nhiêu một tháng ạ?";
   }
 
-  if (!profile.area) {
-    return "Em hỏi thêm chút, mình cần khoảng bao nhiêu mét vuông anh/chị nhỉ?";
+  if (!profile.phone && hasEnoughToAskPhone(profile)) {
+    return `${summarizeForPhoneAsk(profile)}\n\nAnh cho em xin Zalo hoặc số điện thoại nhé, em gửi hình và các căn phù hợp cho mình xem trước.`;
   }
 
-  if (isGenericBusiness(profile.business)) {
-    return "Dạ ok anh, em nắm mình tìm mặt bằng " +
-      `${profile.location || ""} khoảng ${formatBudgetForReply(profile.budget) || profile.budget || ""}` +
-      `${profile.structure ? `, ${profile.structure}` : ""}. Anh định kinh doanh ngành gì để em lọc mặt bằng sát hơn ạ?`;
+  const tailoredQuestion = businessSpecificQuestion(profile);
+
+  if (tailoredQuestion) {
+    return tailoredQuestion;
+  }
+
+  if (!profile.area) {
+    return "Em hỏi thêm chút, mình cần khoảng bao nhiêu mét vuông anh/chị nhỉ?";
   }
 
   if (!profile.structure) {
@@ -404,10 +572,6 @@ const nextQuestionForV2 = (profile: PublicChatProfile) => {
     return "Mình dự kiến cần nhận nhà hoặc bắt đầu thuê khi nào ạ?";
   }
 
-  if (!profile.phone && hasEnoughToAskPhone(profile)) {
-    return "Để em gửi những căn phù hợp nhất qua Zalo cho anh/chị, anh/chị cho em xin số điện thoại nhé.";
-  }
-
   if (!profile.name) {
     return "Em tiện xưng hô với mình thế nào ạ?";
   }
@@ -415,21 +579,21 @@ const nextQuestionForV2 = (profile: PublicChatProfile) => {
   return "Anh/chị còn tiêu chí nào muốn em lưu ý thêm không ạ?";
 };
 
-const fallbackReplyV2 = (profile: PublicChatProfile) => {
-  if (
-    isGenericBusiness(profile.business) &&
-    profile.location &&
-    profile.budget &&
-    profile.area
-  ) {
-    return nextQuestionForV2(profile);
+const fallbackReplyV2 = (message: string, profile: PublicChatProfile) => {
+  const reaction = reactionFor(message, profile);
+  const shouldAskPhone = !profile.phone && hasEnoughToAskPhone(profile);
+  const question = nextQuestionForV2(profile);
+
+  if (shouldAskPhone) {
+    return `${reaction}\n\n${question}`;
   }
 
-  const summary =
-    summarizeKnownV2(profile) ||
-    "Dạ em chào anh/chị, em hỗ trợ mình tìm nhà/mặt bằng phù hợp ạ.";
+  const helpfulComment =
+    profile.location && profile.budget
+      ? "Tầm này em có thể lọc trước vài căn phù hợp cho mình."
+      : "Mình cứ nói nhu cầu tự nhiên, em sẽ lọc dần cho sát anh.";
 
-  return `${summary}\n\n${nextQuestionForV2(profile)}`;
+  return `${reaction}\n\n${helpfulComment}\n\n${question}`;
 };
 
 const getConversationStage = (
@@ -486,6 +650,83 @@ const parseAreaValue = (area: string | null) => {
   return match ? Number(match[0]) : null;
 };
 
+const formatListingPrice = (price: unknown) => {
+  const value = Number(price || 0);
+
+  if (!Number.isFinite(value) || value <= 0) return "liên hệ";
+  if (value >= 1000000000) return `${value / 1000000000} tỷ`;
+  if (value >= 1000000) return `${value / 1000000}tr`;
+
+  return value.toLocaleString("vi-VN");
+};
+
+const buildListingSuggestions = async (req: Request, profile: PublicChatProfile) => {
+  if (!profile.location || !profile.budget) return "";
+
+  const origin = new URL(req.url).origin;
+  const res = await fetch(`${origin}/api/leads`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      mode: "match",
+      preferred_districts: [profile.location],
+      max_price: parseBudgetValue(profile.budget),
+      min_area: parseAreaValue(profile.area),
+      note: [profile.business_type, profile.purpose].filter(Boolean).join(", ") || null,
+    }),
+  });
+
+  if (!res.ok) return "";
+
+  const json = await res.json();
+  const matches = Array.isArray(json.matches) ? json.matches.slice(0, 3) : [];
+
+  if (matches.length === 0) return "";
+
+  const lines = matches.map((item: any, index: number) => {
+    const listing = item.listing || item;
+    const location = [listing.district, listing.address].filter(Boolean).join(" - ");
+    const details = [
+      listing.title || "Bất động sản phù hợp",
+      location,
+      `giá ${formatListingPrice(listing.price)}`,
+      listing.area ? `${listing.area}m2` : "",
+    ].filter(Boolean);
+
+    return `${index + 1}. ${details.join(" | ")}`;
+  });
+
+  return `Có vài căn khá sát nhu cầu anh:\n\n${lines.join("\n")}`;
+};
+
+const addSuggestionsToReply = (reply: string, suggestions: string) => {
+  if (!suggestions || reply.includes("Có vài căn khá sát nhu cầu")) return reply;
+
+  const lastQuestionIndex = reply.lastIndexOf("?");
+
+  if (lastQuestionIndex === -1) {
+    return `${reply}\n\n${suggestions}`;
+  }
+
+  const beforeQuestion = reply.slice(0, lastQuestionIndex + 1);
+  const questionStart = Math.max(
+    beforeQuestion.lastIndexOf("\n"),
+    beforeQuestion.lastIndexOf("."),
+    beforeQuestion.lastIndexOf("!")
+  );
+
+  if (questionStart === -1) {
+    return `${suggestions}\n\n${reply}`;
+  }
+
+  const intro = reply.slice(0, questionStart + 1).trim();
+  const question = reply.slice(questionStart + 1).trim();
+
+  return `${intro}\n\n${suggestions}\n\n${question}`;
+};
+
 const buildPrompt = (
   history: ChatMessage[],
   currentMessage: string,
@@ -517,6 +758,8 @@ Return JSON only:
   "profile": {
     "name": string|null,
     "phone": string|null,
+    "purpose": string|null,
+    "business_type": string|null,
     "business": string|null,
     "location": string|null,
     "budget": string|null,
@@ -533,35 +776,206 @@ const buildPromptV2 = (
   profile: PublicChatProfile,
   nextQuestion: string
 ) => `
-Bạn là một môi giới bất động sản thật đang nhắn với khách hàng ở Việt Nam.
+# SYSTEM PROMPT - AI SALES BẤT ĐỘNG SẢN
 
-Mục tiêu:
-- Tư vấn tự nhiên như một người sale thân thiện, không giống chatbot điền form.
-- Xưng hô anh/chị - em.
-- Câu ngắn gọn, đời thường, chuyên nghiệp.
-- Luôn tóm tắt những gì đã biết trước khi hỏi tiếp.
-- Mỗi lần chỉ hỏi 1 thông tin còn thiếu quan trọng nhất.
-- Không hỏi lại thông tin đã biết trong profile.
-- Never ask for a field that is already known in known_requirements/profile.
-- Không bịa thông tin. Chưa biết thì để null/missing.
-- Nếu khách đổi nhu cầu, dùng thông tin mới nhất.
-- Nếu khách nói ngắn như "Mặt tiền nha em", hiểu đó là frontage.
-- Chỉ xin số điện thoại khi đã hiểu sâu nhu cầu: location + business + budget + (area hoặc structure).
-- Khi đã tạo lead hoặc đủ lead, không kết thúc cuộc trò chuyện; tiếp tục khai thác area, structure, frontage, move_in_time.
+Bạn là một chuyên viên môi giới bất động sản có nhiều kinh nghiệm.
 
-Cấm dùng các câu:
-- "Tôi đã ghi nhận"
-- "Tôi đã hiểu"
-- "Vui lòng cung cấp"
-- "Xin cho biết"
+Nhiệm vụ của bạn không phải là chatbot thu thập dữ liệu.
 
-Thứ tự hỏi thông tin còn thiếu:
-business/use_case -> location -> budget -> area -> structure -> frontage -> move_in_time -> phone.
+Nhiệm vụ của bạn là trò chuyện tự nhiên với khách hàng, xây dựng thiện cảm, hiểu nhu cầu và giúp khách tìm được bất động sản phù hợp.
 
-Profile đã biết:
+## Cách nói chuyện
+
+* Xưng hô: anh/chị - em.
+* Giọng điệu thân thiện.
+* Tự nhiên như người thật.
+* Ngắn gọn.
+* Không nói kiểu robot.
+
+Không dùng các kiểu câu robot, câu yêu cầu kiểu biểu mẫu, hoặc thông báo rằng hệ thống/đội sale đã lưu lead.
+
+Ưu tiên:
+
+* Dạ anh.
+* Dạ chị.
+* Em thấy...
+* Vậy là...
+* Nghe hợp lý anh.
+* Cái này khá phù hợp đó anh.
+
+---
+
+## Quy tắc quan trọng nhất
+
+KHÔNG được nhảy thẳng vào câu hỏi.
+
+Mỗi lần khách trả lời, phải theo trình tự:
+
+1. Phản hồi điều khách vừa nói.
+2. Tóm tắt những gì đã biết.
+3. Hỏi đúng 1 thông tin còn thiếu.
+
+Ví dụ:
+
+Khách:
+"1 trệt 2 lầu là được em"
+
+Sai:
+
+"Anh cần bao nhiêu mét vuông?"
+
+Đúng:
+
+"Dạ 1 trệt 2 lầu thì khá ổn anh.
+
+Hiện em đang nắm mình cần mặt bằng Quận 1 khoảng 50 triệu và kết cấu 1 trệt 2 lầu.
+
+Anh cần khoảng bao nhiêu mét vuông để em lọc sát hơn ạ?"
+
+---
+
+## Không hỏi lại
+
+Nếu hệ thống đã biết:
+
+* khu vực
+* ngân sách
+* diện tích
+* kết cấu
+* mặt tiền
+* thời gian nhận nhà
+* ngành nghề
+
+thì KHÔNG được hỏi lại.
+
+Ví dụ:
+
+Đã biết:
+
+location = Quận 1
+
+KHÔNG được hỏi:
+
+"Anh ưu tiên khu vực nào?"
+
+---
+
+## Tập trung vào cuộc trò chuyện
+
+Khách vừa nói gì thì phải phản hồi điều đó trước.
+
+Ví dụ:
+
+Khách:
+"Mặt tiền nha em"
+
+Sai:
+
+"Dạ em xem lại nhu cầu của mình..."
+
+Đúng:
+
+"Dạ ok anh, em ưu tiên mặt tiền cho mình nhé."
+
+Sau đó mới tiếp tục.
+
+---
+
+## Một lần chỉ hỏi một thứ
+
+Không được hỏi:
+
+"Anh cần diện tích bao nhiêu, kết cấu thế nào và khi nào nhận nhà?"
+
+Chỉ hỏi:
+
+"Anh cần khoảng bao nhiêu mét vuông ạ?"
+
+## Câu hỏi theo ngành nghề
+
+Khi đã biết ngành nghề, hỏi tự nhiên theo ngành, không hỏi như checklist.
+
+* spa: ưu tiên hỏi lần lượt về mặt tiền, số phòng dịch vụ, chỗ đậu xe.
+* cafe: ưu tiên hỏi lần lượt về mặt tiền, lượng người qua lại, sức chứa/chỗ ngồi.
+* studio: ưu tiên hỏi lần lượt về không gian mở, số phòng riêng, cách âm/riêng tư.
+* office/văn phòng: ưu tiên hỏi lần lượt về số người làm việc, chỗ đậu xe, thang máy.
+* restaurant/quán ăn/nhà hàng: ưu tiên hỏi lần lượt về khu bếp, mặt tiền, thoát mùi.
+
+Mỗi lần chỉ chọn một ý phù hợp nhất để hỏi tiếp.
+
+---
+
+## Thứ tự khai thác
+
+Ưu tiên:
+
+1. Loại nhu cầu
+2. Khu vực
+3. Ngân sách
+4. Diện tích
+5. Kết cấu
+6. Mặt tiền
+7. Thời gian nhận nhà
+8. Số điện thoại
+
+---
+
+## Xin số điện thoại
+
+KHÔNG xin số điện thoại quá sớm.
+
+Chỉ xin khi đã hiểu:
+
+* khu vực
+* ngân sách
+* loại nhu cầu
+
+Sau đó nói:
+
+"Dạ em nắm nhu cầu của anh khá rõ rồi.
+
+Anh cho em xin Zalo hoặc số điện thoại nhé, em gửi hình và các căn phù hợp cho mình xem trước."
+
+---
+
+## Nếu khách chưa muốn cho số
+
+Không ép.
+
+Tiếp tục tư vấn.
+
+Tiếp tục khai thác nhu cầu.
+
+---
+
+## Luôn tạo cảm giác đang được một môi giới thật hỗ trợ
+
+Khách phải có cảm giác:
+
+"Người này đang lắng nghe mình"
+
+chứ không phải:
+
+"Mình đang điền form cho chatbot".
+
+---
+
+## Mục tiêu cuối cùng
+
+1. Hiểu đúng nhu cầu.
+2. Tạo thiện cảm.
+3. Thu lead.
+4. Chuyển lead cho sale phụ trách khu vực.
+5. Tiếp tục làm giàu dữ liệu CRM trong quá trình trò chuyện.
+
+## Dữ liệu hệ thống đã biết
+
+known_requirements/profile:
 ${JSON.stringify(profile, null, 2)}
 
-Câu hỏi tiếp theo nên tập trung vào đúng ý này, nếu vẫn còn thiếu:
+Không hỏi lại bất kỳ trường nào đã có giá trị trong known_requirements/profile.
+
+Câu hỏi tiếp theo nên tập trung vào đúng ý này nếu vẫn còn thiếu:
 ${nextQuestion}
 
 Lịch sử chat:
@@ -572,10 +986,12 @@ ${currentMessage}
 
 Trả về JSON duy nhất:
 {
-  "reply": "Một câu trả lời tiếng Việt tự nhiên, có tóm tắt điều đã biết rồi hỏi đúng 1 câu tiếp theo nếu cần",
+  "reply": "Một câu trả lời tiếng Việt tự nhiên theo đúng thứ tự: phản hồi điều khách vừa nói, tóm tắt điều đã biết, rồi hỏi đúng 1 thông tin còn thiếu nếu cần",
   "profile": {
     "name": string|null,
     "phone": string|null,
+    "purpose": string|null,
+    "business_type": string|null,
     "business": string|null,
     "location": string|null,
     "budget": string|null,
@@ -649,9 +1065,12 @@ export async function POST(req: Request) {
     const textForExtraction = [...history, { role: "user", content: currentMessage }]
       .map((message) => message.content)
       .join("\n");
-    const baseProfile = extractProfile(textForExtraction, body.profile || {});
+    const baseProfile = extractProfile(
+      currentMessage,
+      extractProfile(textForExtraction, body.profile || {})
+    );
     const apiKey = process.env.OPENAI_API_KEY;
-    let reply = fallbackReplyV2(baseProfile);
+    let reply = fallbackReplyV2(currentMessage, baseProfile);
     let profile = baseProfile;
     let nextBestQuestion = nextQuestionForV2(baseProfile);
 
@@ -706,12 +1125,20 @@ export async function POST(req: Request) {
       if (parsed) {
         reply = parsed.reply;
         profile = extractProfile(
-          `${textForExtraction}\n${Object.values(parsed.profile).filter(Boolean).join("\n")}`,
-          parsed.profile
+          currentMessage,
+          extractProfile(
+            `${textForExtraction}\n${Object.values(parsed.profile).filter(Boolean).join("\n")}`,
+            parsed.profile
+          )
         );
         nextBestQuestion = nextQuestionForV2(profile);
-        if (asksForKnownField(reply, profile)) {
-          reply = fallbackReplyV2(profile);
+        if (
+          asksForKnownField(reply, profile) ||
+          violatesPublicTone(reply) ||
+          violatesQuestionRule(reply) ||
+          repeatsProfileTooMuch(reply, profile)
+        ) {
+          reply = fallbackReplyV2(currentMessage, profile);
         }
       }
     }
@@ -719,6 +1146,11 @@ export async function POST(req: Request) {
     const readyToSave = isReadyToSave(profile);
     let leadCreated = false;
     let lead: unknown;
+    const suggestions = await buildListingSuggestions(req, profile);
+
+    if (suggestions) {
+      reply = addSuggestionsToReply(reply, suggestions);
+    }
 
     if (readyToSave && !body.lead_created) {
       lead = await createLead(
@@ -727,7 +1159,6 @@ export async function POST(req: Request) {
         profile
       );
       leadCreated = true;
-      reply = `${reply} Em đã lưu thông tin để đội ngũ tư vấn liên hệ và gửi căn phù hợp cho mình sớm ạ.`;
     }
 
     const result: ChatResult = {
