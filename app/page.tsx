@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import {
@@ -58,6 +58,8 @@ const emptyPublicChatProfile = (): PublicChatProfile => ({
 
 export default function Home() {
   const router = useRouter();
+  const aiChatContainerRef = useRef<HTMLDivElement | null>(null);
+  const aiChatEndRef = useRef<HTMLDivElement | null>(null);
   const [listings, setListings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -95,6 +97,24 @@ export default function Home() {
   const [aiChatLoading, setAiChatLoading] = useState(false);
   const [aiChatError, setAiChatError] = useState("");
   const [aiChatLeadCreated, setAiChatLeadCreated] = useState(false);
+
+  useEffect(() => {
+    const scrollToLatestMessage = () => {
+      aiChatEndRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
+      });
+    };
+
+    if (!showAiChat || !aiChatContainerRef.current) {
+      return;
+    }
+
+    scrollToLatestMessage();
+    const timer = window.setTimeout(scrollToLatestMessage, 50);
+
+    return () => window.clearTimeout(timer);
+  }, [aiChatMessages, aiChatLoading, showAiChat]);
 
   const getListingFromResult = (item: any) => item.listing || item;
 
@@ -744,7 +764,18 @@ export default function Home() {
             </button>
           </div>
 
-          <div style={{ padding: 12, overflowY: "auto", display: "grid", gap: 10 }}>
+          <div
+            ref={aiChatContainerRef}
+            style={{
+              padding: 12,
+              overflowY: "auto",
+              display: "grid",
+              gap: 10,
+              minHeight: 0,
+              flex: 1,
+              maxHeight: "min(60vh, 460px)",
+            }}
+          >
             {aiChatMessages.map((message, index) => {
               const isUser = message.role === "user";
               const suggestions = message.property_suggestions || [];
@@ -829,6 +860,7 @@ export default function Home() {
                 Đang tư vấn...
               </div>
             )}
+            <div ref={aiChatEndRef} />
           </div>
 
           <div style={{ borderTop: "1px solid #e5e7eb", padding: 12 }}>

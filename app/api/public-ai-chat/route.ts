@@ -284,6 +284,29 @@ const extractBusinessType = (text: string) => {
   return null;
 };
 
+const extractMoveInTime = (text: string) => {
+  const normalized = normalizeSpaces(normalizeText(text));
+  const patterns = [
+    /\bdau thang sau\b/,
+    /\bcuoi thang nay\b/,
+    /\bdau thang\s+\d{1,2}\b/,
+    /\bthang\s+\d{1,2}\s+(?:don vao|nhan nha|vao o|bat dau thue)\b/,
+    /\btuan sau\b/,
+    /\btrong thang nay\b/,
+    /\bnhan nha ngay\b/,
+    /\bdon vao ngay\b/,
+    /\bvao o ngay\b/,
+    /\bbat dau thue ngay\b/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern);
+    if (match) return match[0];
+  }
+
+  return null;
+};
+
 const formatBudgetForReply = (budget: string | null) => {
   if (!budget) return null;
   const amount = Number(budget);
@@ -309,6 +332,7 @@ const asksForKnownField = (reply: string, profile: PublicChatProfile) => {
     (profile.location && /(khu vuc|quan nao|o dau|vi tri nao|location)/.test(normalized)) ||
       (profile.budget && /(ngan sach|gia khoang bao nhieu|bao nhieu mot thang|budget)/.test(normalized)) ||
       (profile.area && /(dien tich|bao nhieu met vuong|m2|area)/.test(normalized)) ||
+      (profile.move_in_time && /(nhan nha|bat dau thue|khi nao|thoi gian nao|don vao)/.test(normalized)) ||
       (profile.purpose && /(de o hay kinh doanh|mua de o|kinh doanh hay de o|purpose)/.test(normalized)) ||
       (profile.purpose === "nhà ở" && /(kinh doanh gi|nganh gi|business)/.test(normalized)) ||
       (profile.business_type &&
@@ -376,6 +400,7 @@ const extractProfile = (text: string, existing: Partial<PublicChatProfile>) => {
   const businessMatch = text.match(/\b(spa|cafe|cà phê|office|văn phòng|restaurant|nhà hàng|shop|showroom|kinh doanh|ở|để ở|mở tiệm|bán hàng)\b/i);
   const structureMatch = text.match(/(?:\d+\s*(?:phòng|pn|wc|tầng|lầu)|trệt|lửng|sân thượng)/i);
   const moveInMatch = text.match(/(?:tháng này|tháng sau|tuần này|tuần sau|vào ở ngay|nhận nhà ngay|đầu tháng|cuối tháng|\d{1,2}\/\d{1,2})/i);
+  const extractedMoveInTime = phoneOnlyMessage ? null : extractMoveInTime(text);
   const locationMatch = text.match(/(?:bình thạnh|phú nhuận|gò vấp|tân bình|thủ đức|quận\s*\d+|q\.\s*\d+|quận\s*[^\s,.;]+)/i);
   const nameMatch = text.match(/(?:tôi tên|mình tên|em tên|anh tên|chị tên|tên là)\s+([A-Za-zÀ-ỹ\s]{2,30})/i);
 
@@ -407,6 +432,7 @@ const extractProfile = (text: string, existing: Partial<PublicChatProfile>) => {
   if (extractedBusiness && !extractedBusinessType && profile.purpose !== "nhà ở") profile.business = extractedBusiness;
   if (!phoneOnlyMessage && !profile.business && businessMatch) profile.business = businessMatch[0];
   if (!phoneOnlyMessage && !profile.structure && structureMatch) profile.structure = structureMatch[0];
+  if (!phoneOnlyMessage && extractedMoveInTime) profile.move_in_time = extractedMoveInTime;
   if (!phoneOnlyMessage && !profile.move_in_time && moveInMatch) profile.move_in_time = moveInMatch[0];
   if (!phoneOnlyMessage && extractedDistrict) profile.location = extractedDistrict;
   if (!phoneOnlyMessage && !profile.location && locationMatch) profile.location = locationMatch[0];
@@ -501,6 +527,14 @@ const summarizeForPhoneAsk = (profile: PublicChatProfile) => {
 
 const reactionFor = (message: string, profile: PublicChatProfile) => {
   const normalized = normalizeText(message);
+
+  if (/studio/.test(normalized)) return "Dạ studio thì em ưu tiên không gian thoáng và riêng tư cho mình.";
+  if (/mat tien/.test(normalized)) return "Dạ, vậy em ưu tiên mặt tiền dễ nhận diện cho mình.";
+  if (/hem|xe hoi|hxh|hxt|oto|o to/.test(normalized)) return "Dạ, vậy em ưu tiên các căn hẻm xe hơi cho mình.";
+  if (/ngang|dai|m2|\d+\s*x\s*\d+/.test(normalized)) return "Dạ, kích thước đó khá dễ tìm anh.";
+  if (/dau thang|cuoi thang|thang\s+\d+|tuan sau|trong thang|nhan nha|don vao|vao o/.test(normalized)) {
+    return "Dạ, vậy thời gian nhận nhà của mình khá thoải mái anh.";
+  }
 
   if (/studio/.test(normalized)) return "Dạ studio thì em hiểu hướng mình cần rồi anh.";
   if (/mat tien/.test(normalized)) return "Dạ ok anh, em ưu tiên mặt tiền cho mình nhé.";
@@ -650,12 +684,73 @@ const fallbackReplyV2 = (message: string, profile: PublicChatProfile) => {
     return `${reaction}\n\n${question}`;
   }
 
+  return `${reaction}\n\n${question}`;
+
   const helpfulComment =
     profile.location && profile.budget
       ? "Tầm này em có thể lọc trước vài căn phù hợp cho mình."
       : "Mình cứ nói nhu cầu tự nhiên, em sẽ lọc dần cho sát anh.";
 
   return `${reaction}\n\n${helpfulComment}\n\n${question}`;
+};
+
+const openingSentence = (text: string) =>
+  normalizeSpaces(String(text || "").split(/\n+/)[0]?.split(/(?<=[.!?])\s+/)[0] || "");
+
+const recentAssistantOpenings = (history: ChatMessage[]) =>
+  history
+    .filter((message) => message.role === "assistant")
+    .slice(-3)
+    .map((message) => normalizeText(openingSentence(message.content)))
+    .filter(Boolean);
+
+const removeRepetitiveBridgePhrases = (reply: string) =>
+  reply
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => {
+      const normalized = normalizeText(line).replace(/[.?!]+$/g, "");
+
+      return ![
+        "tam nay em co the loc truoc vai can phu hop cho minh",
+        "da em hieu roi",
+      ].includes(normalized);
+    })
+    .join("\n\n");
+
+const hasRepeatedOpening = (reply: string, history: ChatMessage[]) => {
+  const opening = normalizeText(openingSentence(reply));
+
+  if (!opening) return false;
+
+  const recent = recentAssistantOpenings(history);
+  const repetitiveOpenings = [
+    "tam nay em co the loc truoc vai can phu hop cho minh",
+    "da em hieu roi",
+    "da anh",
+  ];
+
+  return recent.includes(opening) || repetitiveOpenings.includes(opening);
+};
+
+const enforceFreshOpening = (
+  reply: string,
+  history: ChatMessage[],
+  message: string,
+  profile: PublicChatProfile
+) => {
+  reply = removeRepetitiveBridgePhrases(reply);
+
+  if (!hasRepeatedOpening(reply, history)) return reply;
+
+  const currentOpening = openingSentence(reply);
+  const replacement = reactionFor(message, profile);
+
+  if (!currentOpening || normalizeText(currentOpening) === normalizeText(replacement)) {
+    return reply.replace(currentOpening, "Em ghi chú tiêu chí này để lọc sát hơn cho mình");
+  }
+
+  return reply.replace(currentOpening, replacement);
 };
 
 const getConversationStage = (
@@ -1377,6 +1472,7 @@ export async function POST(req: Request) {
     }
 
     const textForExtraction = [...history, { role: "user", content: currentMessage }]
+      .filter((message) => message.role === "user")
       .map((message) => message.content)
       .join("\n");
     const extractedProfile = extractProfile(
@@ -1425,10 +1521,16 @@ export async function POST(req: Request) {
 
     let nextBestQuestion = nextQuestionForV2(extractedProfile);
     const propertySuggestions = await buildListingSuggestions(req, extractedProfile);
+    const normalizedCurrentMessage = normalizeText(currentMessage);
+    const isRequirementAnswer = Boolean(
+      extractMoveInTime(currentMessage) ||
+        extractDimensions(currentMessage) ||
+        /mat tien|hem|xe hoi|hxh|hxt|oto|o to|ngang|dai|m2|\d+\s*x\s*\d+/.test(normalizedCurrentMessage)
+    );
     const playbookSelection = selectPlaybook({
       message: currentMessage,
       profile: extractedProfile,
-      hasPropertySuggestions: propertySuggestions.length > 0,
+      hasPropertySuggestions: !isRequirementAnswer && propertySuggestions.length > 0,
       nextQuestion: nextBestQuestion,
     });
     const baseProfile: PublicChatProfile = {
@@ -1439,6 +1541,7 @@ export async function POST(req: Request) {
     let reply = playbookSelection.playbook
       ? playbookSelection.skeleton
       : fallbackReplyV2(currentMessage, baseProfile);
+    reply = enforceFreshOpening(reply, history, currentMessage, baseProfile);
     let profile = baseProfile;
 
     if (apiKey) {
@@ -1510,6 +1613,7 @@ export async function POST(req: Request) {
           playbookSelection.intent,
           propertySuggestions.length > 0
         );
+        reply = enforceFreshOpening(reply, history, currentMessage, profile);
         if (
           asksForKnownField(reply, profile) ||
           violatesPublicTone(reply) ||
@@ -1519,6 +1623,7 @@ export async function POST(req: Request) {
           reply = playbookSelection.playbook
             ? playbookSelection.skeleton
             : fallbackReplyV2(currentMessage, profile);
+          reply = enforceFreshOpening(reply, history, currentMessage, profile);
         }
       }
     }
