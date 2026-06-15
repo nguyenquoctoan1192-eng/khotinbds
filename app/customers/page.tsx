@@ -8,6 +8,10 @@ import {
   getLeadTemperatureLabel,
   getLeadTemperatureRank,
 } from "@/lib/leadScoring";
+import {
+  calculateNextBestAction,
+  getNextActionLabel,
+} from "@/lib/nextBestAction";
 
 type Lead = {
   id: string;
@@ -415,6 +419,22 @@ const formatActivityDate = (value: string | null) => {
   return new Date(value).toLocaleString("vi-VN");
 };
 
+const getDaysSince = (value: string | null | undefined) => {
+  if (!value) {
+    return 0;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return 0;
+  }
+
+  const diff = Date.now() - date.getTime();
+
+  return Math.max(0, Math.floor(diff / 86400000));
+};
+
 const buildRequirementQuery = (lead: Lead, crmFields: CrmFields) =>
   [
     formatDistricts(lead.preferred_districts),
@@ -506,6 +526,15 @@ function CustomerCard({
   const leadStatus = lead.status || LEAD_STATUSES[0];
   const temperature = getLeadTemperature(lead);
   const leadScore = getLeadScore(lead);
+  const latestActivity = item.activities[0] || null;
+  const nextBestAction = calculateNextBestAction({
+    lead_score: leadScore,
+    lead_temperature: temperature,
+    latest_activity: latestActivity,
+    days_since_last_activity: getDaysSince(latestActivity?.created_at || lead.created_at),
+    status: lead.status,
+    phone: lead.phone,
+  });
   const [customerMessage, setCustomerMessage] = useState("");
   const [assistantLoading, setAssistantLoading] = useState(false);
   const [assistantError, setAssistantError] = useState("");
@@ -598,6 +627,48 @@ function CustomerCard({
             {statusLabel}
           </span>
         )}
+          <span
+            title={nextBestAction.reason}
+            style={{
+              background:
+                nextBestAction.priority === "High"
+                  ? "#fee2e2"
+                  : nextBestAction.priority === "Medium"
+                    ? "#dbeafe"
+                    : "#f3f4f6",
+              color:
+                nextBestAction.priority === "High"
+                  ? "#991b1b"
+                  : nextBestAction.priority === "Medium"
+                    ? "#1e40af"
+                    : "#374151",
+              borderRadius: 999,
+              padding: "5px 9px",
+              fontSize: 12,
+              fontWeight: 700,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {getNextActionLabel(nextBestAction.next_action)}
+          </span>
+        </div>
+      </div>
+
+      <div
+        style={{
+          background: "#f9fafb",
+          border: "1px solid #e5e7eb",
+          borderRadius: 8,
+          padding: 10,
+          marginBottom: 12,
+        }}
+      >
+        <div style={{ color: "#6b7280", fontSize: 13, marginBottom: 4 }}>
+          next_action - {nextBestAction.priority}
+        </div>
+        <strong>{getNextActionLabel(nextBestAction.next_action)}</strong>
+        <div style={{ color: "#4b5563", marginTop: 4, lineHeight: 1.4 }}>
+          {nextBestAction.reason}
         </div>
       </div>
 

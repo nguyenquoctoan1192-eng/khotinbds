@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { calculateLeadScoring } from "@/lib/leadScoring";
+import {
+  calculateNextBestAction,
+  getNextActionLabel,
+  getNextActionPriorityRank,
+  type NextBestActionResult,
+} from "@/lib/nextBestAction";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +21,20 @@ type Lead = {
   lead_score: number | null;
   lead_temperature: string | null;
   created_at: string | null;
+};
+
+type LeadActivity = {
+  id: string;
+  lead_id: string;
+  type: string;
+  content: string;
+  created_at: string | null;
+};
+
+type LeadWithNextAction = {
+  lead: Lead;
+  latestActivity: LeadActivity | null;
+  nextBestAction: NextBestActionResult;
 };
 
 const STATUSES = [
@@ -82,6 +102,21 @@ const getLeadTemperature = (lead: Lead) =>
     note: lead.note,
   }).lead_temperature;
 
+const getLeadScore = (lead: Lead) => {
+  const storedScore = Number(lead.lead_score);
+
+  if (Number.isFinite(storedScore) && storedScore >= 0) {
+    return storedScore;
+  }
+
+  return calculateLeadScoring({
+    phone: lead.phone,
+    max_price: lead.max_price,
+    preferred_districts: lead.preferred_districts,
+    note: lead.note,
+  }).lead_score;
+};
+
 const createLocalDate = (value: string) => {
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
 
@@ -132,6 +167,26 @@ const formatDate = (value: string | null) => {
   return new Date(value).toLocaleDateString("vi-VN");
 };
 
+const getDaysSince = (value: string | null | undefined) => {
+  if (!value) {
+    return 0;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return 0;
+  }
+
+  return Math.max(0, Math.floor((Date.now() - date.getTime()) / 86400000));
+};
+
+const sortByNextAction = (a: LeadWithNextAction, b: LeadWithNextAction) =>
+  getNextActionPriorityRank(a.nextBestAction.priority) -
+    getNextActionPriorityRank(b.nextBestAction.priority) ||
+  getDaysSince(b.latestActivity?.created_at || b.lead.created_at) -
+    getDaysSince(a.latestActivity?.created_at || a.lead.created_at);
+
 const getLeads = async () => {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -139,6 +194,7 @@ const getLeads = async () => {
   if (!supabaseUrl || !serviceRoleKey) {
     return {
       leads: [] as Lead[],
+      activities: [] as LeadActivity[],
       error: "Thiếu cấu hình Supabase để tải dashboard.",
     };
   }
@@ -149,15 +205,114 @@ const getLeads = async () => {
     .select("id, fullname, phone, preferred_districts, note, max_price, status, lead_score, lead_temperature, created_at")
     .order("created_at", { ascending: false });
 
+  const leadIds = (data || []).map((lead) => lead.id).filter(Boolean);
+  const { data: activities, error: activitiesError } = leadIds.length > 0
+    ? await supabase
+        .from("lead_activities")
+        .select("id, lead_id, type, content, created_at")
+        .in("lead_id", leadIds)
+        .order("created_at", { ascending: false })
+    : { data: [], error: null };
+
   return {
     leads: (data || []) as Lead[],
-    error: error?.message || "",
+    activities: (activities || []) as LeadActivity[],
+    error: error?.message || activitiesError?.message || "",
   };
 };
 
+function NextActionList({
+  title,
+  items,
+}: {
+  title: string;
+  items: LeadWithNextAction[];
+}) {
+  return (
+    <section style={{ background: "#fff", borderRadius: 8, padding: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
+        <h2 style={{ margin: 0, fontSize: 20 }}>{title}</h2>
+        <span style={{ background: "#e5e7eb", color: "#374151", borderRadius: 999, padding: "4px 9px", fontSize: 12, fontWeight: 700 }}>
+          {items.length}
+        </span>
+      </div>
+      {items.length > 0 ? (
+        <div style={{ display: "grid", gap: 10 }}>
+          {items.slice(0, 6).map((item) => (
+            <Link
+              key={`${title}-${item.lead.id}`}
+              href={`/customers#lead-${item.lead.id}`}
+              style={{
+                display: "grid",
+                gap: 4,
+                color: "#111827",
+                textDecoration: "none",
+                background: "#f9fafb",
+                border: "1px solid #e5e7eb",
+                borderRadius: 8,
+                padding: 10,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                <strong>{item.lead.fullname || "Chua co ten"}</strong>
+                <span
+                  style={{
+                    color:
+                      item.nextBestAction.priority === "High"
+                        ? "#991b1b"
+                        : item.nextBestAction.priority === "Medium"
+                          ? "#1e40af"
+                          : "#374151",
+                    fontWeight: 700,
+                    fontSize: 12,
+                  }}
+                >
+                  {item.nextBestAction.priority}
+                </span>
+              </div>
+              <div style={{ color: "#374151", fontWeight: 700 }}>
+                {getNextActionLabel(item.nextBestAction.next_action)}
+              </div>
+              <div style={{ color: "#6b7280", fontSize: 13, lineHeight: 1.4 }}>
+                {item.nextBestAction.reason}
+              </div>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <div style={{ color: "#6b7280" }}>Chua co lead trong nhom nay.</div>
+      )}
+    </section>
+  );
+}
+
 export default async function DashboardPage() {
-  const { leads, error } = await getLeads();
+  const { leads, activities, error } = await getLeads();
   const today = startOfLocalDay(new Date()).getTime();
+  const leadsWithNextAction = leads.map((lead) => {
+    const leadActivities = activities
+      .filter((activity) => activity.lead_id === lead.id)
+      .sort(
+        (a, b) =>
+          new Date(b.created_at || 0).getTime() -
+          new Date(a.created_at || 0).getTime()
+      );
+    const latestActivity = leadActivities[0] || null;
+    const nextBestAction = calculateNextBestAction({
+      lead_score: getLeadScore(lead),
+      lead_temperature: getLeadTemperature(lead),
+      latest_activity: latestActivity,
+      days_since_last_activity: getDaysSince(latestActivity?.created_at || lead.created_at),
+      status: lead.status,
+      phone: lead.phone,
+    });
+
+    return {
+      lead,
+      latestActivity,
+      nextBestAction,
+    };
+  });
   const leadsWithFollowUp = leads.map((lead) => ({
     lead,
     followUpDate: extractFollowUp(lead.note),
@@ -179,6 +334,18 @@ export default async function DashboardPage() {
     })),
   ];
   const recentLeads = leads.slice(0, 10);
+  const todaysActions = leadsWithNextAction
+    .filter((item) => item.nextBestAction.next_action !== "wait")
+    .sort(sortByNextAction);
+  const callNowItems = leadsWithNextAction
+    .filter((item) => item.nextBestAction.next_action === "call_now")
+    .sort(sortByNextAction);
+  const followUpItems = leadsWithNextAction
+    .filter((item) => item.nextBestAction.next_action === "follow_up")
+    .sort(sortByNextAction);
+  const waitingItems = leadsWithNextAction
+    .filter((item) => item.nextBestAction.next_action === "wait")
+    .sort(sortByNextAction);
 
   return (
     <div style={{ fontFamily: "Arial", minHeight: "100vh", background: "#f3f4f6" }}>
@@ -242,6 +409,13 @@ export default async function DashboardPage() {
             <h2 style={{ marginTop: 0, fontSize: 20 }}>Quá hạn chăm sóc</h2>
             <strong style={{ fontSize: 34, color: "#991b1b" }}>{overdue.length}</strong>
           </div>
+        </section>
+
+        <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16, marginBottom: 22 }}>
+          <NextActionList title="Việc cần làm hôm nay" items={todaysActions} />
+          <NextActionList title="Cần gọi ngay" items={callNowItems} />
+          <NextActionList title="Cần follow-up" items={followUpItems} />
+          <NextActionList title="Chờ phản hồi" items={waitingItems} />
         </section>
 
         <section style={{ background: "#fff", borderRadius: 8, padding: 16 }}>
