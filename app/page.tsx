@@ -31,6 +31,7 @@ type PublicChatMessage = {
   role: "assistant" | "user";
   content: string;
   reply_parts?: string[];
+  suggestion_followup_parts?: string[];
   property_suggestions?: PropertySuggestion[];
 };
 
@@ -38,6 +39,7 @@ type PropertySuggestion = {
   area_label: string;
   structure_label: string;
   price_label: string;
+  comment_label?: string;
 };
 
 const emptyPublicChatProfile = (): PublicChatProfile => ({
@@ -249,6 +251,11 @@ export default function Home() {
           content: json.reply,
           reply_parts: Array.isArray(json.reply_parts)
             ? json.reply_parts.filter(
+                (part: unknown): part is string => typeof part === "string" && Boolean(part.trim())
+              )
+            : undefined,
+          suggestion_followup_parts: Array.isArray(json.suggestion_followup_parts)
+            ? json.suggestion_followup_parts.filter(
                 (part: unknown): part is string => typeof part === "string" && Boolean(part.trim())
               )
             : undefined,
@@ -740,6 +747,7 @@ export default function Home() {
             {aiChatMessages.map((message, index) => {
               const isUser = message.role === "user";
               const suggestions = message.property_suggestions || [];
+              const followupParts = message.suggestion_followup_parts || [];
               const bubbleParts =
                 !isUser && message.reply_parts?.length
                   ? message.reply_parts
@@ -788,10 +796,30 @@ export default function Home() {
                           <div style={{ fontWeight: 700 }}>{suggestion.area_label}</div>
                           <div>Diện tích: {suggestion.structure_label}</div>
                           <div>Giá: {suggestion.price_label}</div>
+                          {suggestion.comment_label && (
+                            <div style={{ marginTop: 6, color: "#4b5563" }}>
+                              {suggestion.comment_label}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
                   )}
+                  {!isUser && followupParts.length > 0 && followupParts.map((part, followupIndex) => (
+                    <div
+                      key={`${message.role}-${index}-followup-${followupIndex}`}
+                      style={{
+                        background: "#f3f4f6",
+                        color: "#111827",
+                        borderRadius: 10,
+                        padding: "9px 11px",
+                        lineHeight: 1.45,
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {part}
+                    </div>
+                  ))}
                 </div>
               );
             })}

@@ -23,11 +23,13 @@ type PropertySuggestion = {
   area_label: string;
   structure_label: string;
   price_label: string;
+  comment_label: string;
 };
 
 type ChatResult = {
   reply: string;
   reply_parts: string[];
+  suggestion_followup_parts: string[];
   profile: PublicChatProfile;
   conversation_stage: "discovery" | "qualification" | "lead_created" | "nurturing";
   next_best_question: string;
@@ -794,32 +796,65 @@ const formatPublicStructure = (
   return "Đang cập nhật";
 };
 
+const buildSuggestionComment = (
+  suggestion: Omit<PropertySuggestion, "comment_label">,
+  rawArea: unknown,
+  profile: PublicChatProfile
+) => {
+  const profileText = normalizeText([profile.business_type, profile.business, profile.purpose].filter(Boolean).join(" "));
+  const areaText = normalizeText(`${suggestion.area_label} ${suggestion.structure_label}`);
+  const area = Number(rawArea || 0);
+
+  if (/studio/.test(profileText)) return "phù hợp mở studio";
+  if (/spa|nail|salon|tham my|massage/.test(profileText)) return "phù hợp spa";
+  if (/cafe|ca phe|coffee|quan an|nha hang|restaurant/.test(profileText)) return "mặt bằng dễ nhận diện";
+  if (/nha o|de o|o gia dinh/.test(profileText)) return "phù hợp gia đình ở";
+  if (/mat tien|mt|2mt|goc mt/.test(areaText)) return "mặt bằng dễ nhận diện";
+  if (Number.isFinite(area) && area >= 80) return "diện tích rộng";
+
+  return "ngân sách tốt";
+};
+
 const buildReplyParts = (reply: string, suggestions: PropertySuggestion[]) => {
   const parts = reply
     .split(/\n{2,}/)
     .map((part) => part.replace(/\s+/g, " ").trim())
     .filter(Boolean);
   const safeParts = parts.length > 0 ? parts : [reply.trim()].filter(Boolean);
-  const mentionsSuggestions = /gửi|gui|căn|can|lựa chọn|lua chon/i.test(
-    normalizeText(safeParts.join(" "))
-  );
 
-  if (suggestions.length > 0 && !mentionsSuggestions) {
-    const questionIndex = safeParts.findIndex((part) => part.includes("?"));
-    const suggestionLine = "Em gửi anh xem thử vài căn khá sát nhu cầu nha.";
+  if (suggestions.length > 0) {
+    const intro = safeParts.find((part) => {
+      const normalized = normalizeText(part);
+      return (
+        !part.includes("?") &&
+        !/(zalo|so dien thoai|sdt|cho em xin|gui anh xem|vai can|lua chon)/.test(normalized)
+      );
+    });
 
-    if (questionIndex >= 0) {
-      return [
-        ...safeParts.slice(0, questionIndex),
-        suggestionLine,
-        ...safeParts.slice(questionIndex),
-      ];
-    }
-
-    return [...safeParts, suggestionLine];
+    return [
+      intro || "Dạ em lọc được vài lựa chọn khá sát nhu cầu anh.",
+      "Em gửi anh xem từng căn, mỗi căn có một điểm mạnh riêng nha.",
+    ];
   }
 
   return safeParts;
+};
+
+const buildSuggestionFollowupParts = (
+  suggestions: PropertySuggestion[],
+  profile: PublicChatProfile
+) => {
+  if (suggestions.length === 0) return [];
+
+  const compare =
+    suggestions.length === 1
+      ? "Căn này em thấy gọn nhu cầu, mình có thể xem thêm hình trước rồi quyết định đi thực tế."
+      : "So nhanh thì mỗi căn có một lợi thế: có căn mạnh về vị trí, có căn lợi hơn về diện tích hoặc ngân sách.";
+  const phoneAsk = profile.phone
+    ? "Anh dùng Zalo số này luôn để em gửi thêm hình thực tế và lịch xem cho mình nhé?"
+    : "Anh cho em xin Zalo hoặc số điện thoại nhé, em gửi thêm hình thực tế và lọc tiếp căn sát hơn cho mình.";
+
+  return [compare, phoneAsk];
 };
 
 const buildListingSuggestions = async (
@@ -852,7 +887,7 @@ const buildListingSuggestions = async (
 
   return matches.map((item: any) => {
     const listing = item.listing || item;
-    return {
+    const suggestion = {
       area_label: formatPublicSuggestionArea(
         listing.address,
         listing.district,
@@ -866,6 +901,11 @@ const buildListingSuggestions = async (
         listing.area
       ),
       price_label: formatListingPrice(listing.price),
+    };
+
+    return {
+      ...suggestion,
+      comment_label: buildSuggestionComment(suggestion, listing.area, profile),
     };
   });
 };
@@ -1293,6 +1333,7 @@ export async function POST(req: Request) {
     let lead: unknown;
     const propertySuggestions = await buildListingSuggestions(req, profile);
     const replyParts = buildReplyParts(reply, propertySuggestions);
+    const suggestionFollowupParts = buildSuggestionFollowupParts(propertySuggestions, profile);
 
     if (readyToSave && !body.lead_created) {
       lead = await createLead(
@@ -1306,6 +1347,7 @@ export async function POST(req: Request) {
     const result: ChatResult = {
       reply,
       reply_parts: replyParts,
+      suggestion_followup_parts: suggestionFollowupParts,
       profile,
       conversation_stage: getConversationStage(profile, leadCreated, Boolean(body.lead_created)),
       next_best_question: nextQuestionForV2(profile),
