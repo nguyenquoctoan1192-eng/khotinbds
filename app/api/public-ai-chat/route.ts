@@ -19,14 +19,19 @@ type PublicChatProfile = {
   move_in_time: string | null;
 };
 
+type PropertySuggestion = {
+  area_label: string;
+  price_label: string;
+  size_label: string;
+};
+
 type ChatResult = {
   reply: string;
   profile: PublicChatProfile;
   conversation_stage: "discovery" | "qualification" | "lead_created" | "nurturing";
-  known_requirements: PublicChatProfile;
-  missing_requirements: string[];
   next_best_question: string;
   suggested_reply: string;
+  property_suggestions: PropertySuggestion[];
   ready_to_save: boolean;
   lead_created: boolean;
   lead?: unknown;
@@ -652,16 +657,60 @@ const parseAreaValue = (area: string | null) => {
 
 const formatListingPrice = (price: unknown) => {
   const value = Number(price || 0);
+  const formatAmount = (amount: number) =>
+    Number.isInteger(amount)
+      ? String(amount)
+      : amount.toFixed(1).replace(/\.0$/, "");
 
-  if (!Number.isFinite(value) || value <= 0) return "liên hệ";
-  if (value >= 1000000000) return `${value / 1000000000} tỷ`;
-  if (value >= 1000000) return `${value / 1000000}tr`;
+  if (!Number.isFinite(value) || value <= 0) return "Liên hệ";
+  if (value >= 1000000000) return `${formatAmount(value / 1000000000)} tỷ/tháng`;
+  if (value >= 1000000) return `${formatAmount(value / 1000000)} triệu/tháng`;
 
-  return value.toLocaleString("vi-VN");
+  return `${value.toLocaleString("vi-VN")} VNĐ/tháng`;
 };
 
-const buildListingSuggestions = async (req: Request, profile: PublicChatProfile) => {
-  if (!profile.location || !profile.budget) return "";
+const stripExactAddressParts = (value: string) => {
+  let cleaned = value
+    .replace(/\b\d+[a-z]?(?:\s*[/-]\s*\d+[a-z]?)+\b/gi, " ")
+    .replace(/\b(?:p|phuong|phường)\.?\s*\d+[a-z]?\b/gi, " ")
+    .replace(/\b(?:q|quan|quận)\.?\s*\d+[a-z]?\b/gi, " ")
+    .replace(/\b(?:hẻm|hem|ngõ|ngo|hxh|hẻm xe hơi)\s*\d+[a-z]?(?:\s*[/-]\s*\d+[a-z]?)*\b/gi, " ");
+
+  if (!/^\s*\d+\s+(?:tháng|thang)\b/i.test(cleaned)) {
+    cleaned = cleaned.replace(/^\s*(?:số|so)?\s*\d+[a-z]?\s+/i, "");
+  }
+
+  return normalizeSpaces(cleaned.replace(/[|]+/g, " "));
+};
+
+const sanitizeSuggestionArea = (rawAddress: unknown, rawDistrict: unknown) => {
+  const district = compactString(rawDistrict) || "";
+  const address = compactString(rawAddress) || "";
+  const street = address
+    .split(",")
+    .map(stripExactAddressParts)
+    .find((part) => part && /[A-Za-zÀ-ỹ]/.test(part) && normalizeText(part) !== normalizeText(district));
+
+  if (street && district && !normalizeText(street).includes(normalizeText(district))) {
+    return `${street}, ${district}`;
+  }
+
+  return street || district || "Khu vực phù hợp";
+};
+
+const formatListingSize = (area: unknown) => {
+  const value = Number(area || 0);
+
+  if (!Number.isFinite(value) || value <= 0) return "Liên hệ";
+
+  return `${Number.isInteger(value) ? value : value.toFixed(1).replace(/\.0$/, "")}m²`;
+};
+
+const buildListingSuggestions = async (
+  req: Request,
+  profile: PublicChatProfile
+): Promise<PropertySuggestion[]> => {
+  if (!profile.location || !profile.budget) return [];
 
   const origin = new URL(req.url).origin;
   const res = await fetch(`${origin}/api/leads`, {
@@ -678,54 +727,24 @@ const buildListingSuggestions = async (req: Request, profile: PublicChatProfile)
     }),
   });
 
-  if (!res.ok) return "";
+  if (!res.ok) return [];
 
   const json = await res.json();
   const matches = Array.isArray(json.matches) ? json.matches.slice(0, 3) : [];
 
-  if (matches.length === 0) return "";
+  if (matches.length === 0) return [];
 
-  const lines = matches.map((item: any, index: number) => {
+  return matches.map((item: any) => {
     const listing = item.listing || item;
-    const location = [listing.district, listing.address].filter(Boolean).join(" - ");
-    const details = [
-      listing.title || "Bất động sản phù hợp",
-      location,
-      `giá ${formatListingPrice(listing.price)}`,
-      listing.area ? `${listing.area}m2` : "",
-    ].filter(Boolean);
-
-    return `${index + 1}. ${details.join(" | ")}`;
+    return {
+      area_label: sanitizeSuggestionArea(listing.address, listing.district),
+      price_label: formatListingPrice(listing.price),
+      size_label: formatListingSize(listing.area),
+    };
   });
-
-  return `Có vài căn khá sát nhu cầu anh:\n\n${lines.join("\n")}`;
 };
 
-const addSuggestionsToReply = (reply: string, suggestions: string) => {
-  if (!suggestions || reply.includes("Có vài căn khá sát nhu cầu")) return reply;
 
-  const lastQuestionIndex = reply.lastIndexOf("?");
-
-  if (lastQuestionIndex === -1) {
-    return `${reply}\n\n${suggestions}`;
-  }
-
-  const beforeQuestion = reply.slice(0, lastQuestionIndex + 1);
-  const questionStart = Math.max(
-    beforeQuestion.lastIndexOf("\n"),
-    beforeQuestion.lastIndexOf("."),
-    beforeQuestion.lastIndexOf("!")
-  );
-
-  if (questionStart === -1) {
-    return `${suggestions}\n\n${reply}`;
-  }
-
-  const intro = reply.slice(0, questionStart + 1).trim();
-  const question = reply.slice(questionStart + 1).trim();
-
-  return `${intro}\n\n${suggestions}\n\n${question}`;
-};
 
 const buildPrompt = (
   history: ChatMessage[],
@@ -970,10 +989,10 @@ chứ không phải:
 
 ## Dữ liệu hệ thống đã biết
 
-known_requirements/profile:
+Profile da biet noi bo:
 ${JSON.stringify(profile, null, 2)}
 
-Không hỏi lại bất kỳ trường nào đã có giá trị trong known_requirements/profile.
+Khong hoi lai bat ky truong nao da co gia tri trong profile noi bo.
 
 Câu hỏi tiếp theo nên tập trung vào đúng ý này nếu vẫn còn thiếu:
 ${nextQuestion}
@@ -1146,11 +1165,7 @@ export async function POST(req: Request) {
     const readyToSave = isReadyToSave(profile);
     let leadCreated = false;
     let lead: unknown;
-    const suggestions = await buildListingSuggestions(req, profile);
-
-    if (suggestions) {
-      reply = addSuggestionsToReply(reply, suggestions);
-    }
+    const propertySuggestions = await buildListingSuggestions(req, profile);
 
     if (readyToSave && !body.lead_created) {
       lead = await createLead(
@@ -1165,10 +1180,9 @@ export async function POST(req: Request) {
       reply,
       profile,
       conversation_stage: getConversationStage(profile, leadCreated, Boolean(body.lead_created)),
-      known_requirements: profile,
-      missing_requirements: getMissingRequirements(profile),
       next_best_question: nextQuestionForV2(profile),
       suggested_reply: reply,
+      property_suggestions: propertySuggestions,
       ready_to_save: readyToSave,
       lead_created: leadCreated,
       lead,

@@ -30,6 +30,13 @@ type PublicChatProfile = {
 type PublicChatMessage = {
   role: "assistant" | "user";
   content: string;
+  property_suggestions?: PropertySuggestion[];
+};
+
+type PropertySuggestion = {
+  area_label: string;
+  price_label: string;
+  size_label: string;
 };
 
 const emptyPublicChatProfile = (): PublicChatProfile => ({
@@ -101,28 +108,6 @@ export default function Home() {
         };
       })
       .filter((match) => match.listing_id);
-
-  const understoodAiFields = [
-    ["Mục đích", aiChatProfile.purpose],
-    ["Khu vực", aiChatProfile.location],
-    ["Ngân sách", aiChatProfile.budget],
-    ["Diện tích", aiChatProfile.area],
-    ["Kết cấu", aiChatProfile.structure],
-  ].filter(([, value]) => value);
-
-  const missingAiFields = [
-    ["Mục đích", aiChatProfile.purpose],
-    [
-      "Ngành kinh doanh",
-      aiChatProfile.purpose === "kinh doanh" ? aiChatProfile.business_type : "skip",
-    ],
-    ["Khu vực", aiChatProfile.location],
-    ["Ngân sách", aiChatProfile.budget],
-    ["Diện tích", aiChatProfile.area],
-    ["Kết cấu", aiChatProfile.structure],
-  ]
-    .filter(([, value]) => !value)
-    .map(([label]) => label);
 
   const getReasonLabels = (item: any) => {
     const breakdown = item.breakdown;
@@ -258,7 +243,13 @@ export default function Home() {
       setAiChatLeadCreated((current) => current || Boolean(json.lead_created));
       setAiChatMessages((current) => [
         ...current,
-        { role: "assistant", content: json.reply },
+        {
+          role: "assistant",
+          content: json.reply,
+          property_suggestions: Array.isArray(json.property_suggestions)
+            ? json.property_suggestions.slice(0, 3)
+            : [],
+        },
       ]);
     } catch (err) {
       setAiChatError(err instanceof Error ? err.message : "AI chưa phản hồi được.");
@@ -739,50 +730,58 @@ export default function Home() {
             </button>
           </div>
 
-          <div style={{ borderBottom: "1px solid #e5e7eb", padding: 12, background: "#f9fafb", fontSize: 13 }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>AI đã hiểu:</div>
-            {understoodAiFields.length > 0 ? (
-              <div style={{ display: "grid", gap: 4 }}>
-                {understoodAiFields.map(([label, value]) => (
-                  <div key={String(label)}>
-                    ✓ {label}: {value}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ color: "#6b7280" }}>Chưa có thông tin rõ.</div>
-            )}
-
-            <div style={{ fontWeight: 700, marginTop: 10, marginBottom: 6 }}>Còn thiếu:</div>
-            {missingAiFields.length > 0 ? (
-              <ul style={{ margin: 0, paddingLeft: 18 }}>
-                {missingAiFields.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            ) : (
-              <div style={{ color: "#15803d" }}>Nhu cầu chính đã khá rõ.</div>
-            )}
-          </div>
-
           <div style={{ padding: 12, overflowY: "auto", display: "grid", gap: 10 }}>
-            {aiChatMessages.map((message, index) => (
-              <div
-                key={`${message.role}-${index}`}
-                style={{
-                  justifySelf: message.role === "user" ? "end" : "start",
-                  maxWidth: "88%",
-                  background: message.role === "user" ? "#2563eb" : "#f3f4f6",
-                  color: message.role === "user" ? "#fff" : "#111827",
-                  borderRadius: 10,
-                  padding: "9px 11px",
-                  lineHeight: 1.45,
-                  whiteSpace: "pre-wrap",
-                }}
-              >
-                {message.content}
-              </div>
-            ))}
+            {aiChatMessages.map((message, index) => {
+              const isUser = message.role === "user";
+              const suggestions = message.property_suggestions || [];
+
+              return (
+                <div
+                  key={`${message.role}-${index}`}
+                  style={{
+                    justifySelf: isUser ? "end" : "start",
+                    maxWidth: "88%",
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div
+                    style={{
+                      background: isUser ? "#2563eb" : "#f3f4f6",
+                      color: isUser ? "#fff" : "#111827",
+                      borderRadius: 10,
+                      padding: "9px 11px",
+                      lineHeight: 1.45,
+                      whiteSpace: "pre-wrap",
+                    }}
+                  >
+                    {message.content}
+                  </div>
+                  {!isUser && suggestions.length > 0 && (
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {suggestions.slice(0, 3).map((suggestion, suggestionIndex) => (
+                        <div
+                          key={`${suggestion.area_label}-${suggestionIndex}`}
+                          style={{
+                            background: "#fff",
+                            border: "1px solid #e5e7eb",
+                            borderRadius: 10,
+                            padding: "10px 11px",
+                            color: "#111827",
+                            lineHeight: 1.5,
+                            boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+                          }}
+                        >
+                          <div>📍 {suggestion.area_label}</div>
+                          <div>💰 {suggestion.price_label}</div>
+                          <div>📐 {suggestion.size_label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
             {aiChatLoading && (
               <div style={{ justifySelf: "start", background: "#f3f4f6", borderRadius: 10, padding: "9px 11px", color: "#6b7280" }}>
                 Đang tư vấn...
