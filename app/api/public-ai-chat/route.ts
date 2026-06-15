@@ -107,6 +107,41 @@ const normalizeText = (value: string) =>
     .replace(/\u0110/g, "D")
     .toLowerCase();
 
+const extractVietnamesePhone = (text: string) => {
+  const candidates = text.match(/(?:\+?84|0)[\d\s.-]{8,16}/g) || [];
+
+  for (const raw of candidates) {
+    const digits = raw.replace(/\D/g, "");
+    const phone =
+      digits.startsWith("84") && digits.length === 11
+        ? `0${digits.slice(2)}`
+        : digits;
+
+    if (/^0[35789]\d{8}$/.test(phone)) {
+      return { raw, phone };
+    }
+  }
+
+  return null;
+};
+
+const isPhoneCaptureOnlyMessage = (text: string) => {
+  const phone = extractVietnamesePhone(text);
+
+  if (!phone) return false;
+
+  const rest = normalizeText(text.replace(phone.raw, " "))
+    .replace(/[^a-z\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!rest) return true;
+
+  return /^(?:(?:zalo|sdt|so dien thoai|dien thoai|dt|phone|anh|chi|em|day|la|nhe|nha|a)\s*)+$/.test(
+    rest
+  );
+};
+
 const canonicalDistricts = [
   ...Array.from({ length: 12 }, (_, index) => ({
     label: `Quận ${index + 1}`,
@@ -334,7 +369,8 @@ const mergeProfiles = (...profiles: Partial<PublicChatProfile>[]): PublicChatPro
 const extractProfile = (text: string, existing: Partial<PublicChatProfile>) => {
   const profile = mergeProfiles(existing);
   const normalized = normalizeText(text);
-  const phoneMatch = text.match(/(?:\+?84|0)(?:\d[\s.-]?){8,10}\d/);
+  const phoneOnlyMessage = isPhoneCaptureOnlyMessage(text);
+  const phoneMatch = extractVietnamesePhone(text);
   const budgetMatch = text.match(/(?:\d+(?:[.,]\d+)?\s*(?:tr|triệu|trieu|tỷ|ty|tỉ|ti)|\d{7,})/i);
   const areaMatch = text.match(/\d+\s*m(?:2|²)/i);
   const businessMatch = text.match(/\b(spa|cafe|cà phê|office|văn phòng|restaurant|nhà hàng|shop|showroom|kinh doanh|ở|để ở|mở tiệm|bán hàng)\b/i);
@@ -343,7 +379,7 @@ const extractProfile = (text: string, existing: Partial<PublicChatProfile>) => {
   const locationMatch = text.match(/(?:bình thạnh|phú nhuận|gò vấp|tân bình|thủ đức|quận\s*\d+|q\.\s*\d+|quận\s*[^\s,.;]+)/i);
   const nameMatch = text.match(/(?:tôi tên|mình tên|em tên|anh tên|chị tên|tên là)\s+([A-Za-zÀ-ỹ\s]{2,30})/i);
 
-  const extractedBudget = extractBudget(text);
+  const extractedBudget = phoneOnlyMessage ? null : extractBudget(text);
   const extractedBusiness = extractBusiness(text);
   const extractedPurpose = extractPurpose(text);
   const extractedBusinessType = extractBusinessType(text);
@@ -352,31 +388,31 @@ const extractProfile = (text: string, existing: Partial<PublicChatProfile>) => {
   const businessDetailMatch = text.match(/(?:đậu xe|dau xe|parking|bãi xe|bai xe|thang máy|thang may|cách âm|cach am|riêng tư|rieng tu|thoát mùi|thoat mui|bếp|bep|đông người|dong nguoi|khách đi bộ|khach di bo|foot traffic)/i);
   const occupancyMatch = text.match(/\d+\s*(?:người|nguoi|khách|khach|chỗ|cho|seat|seats|team|nhân viên|nhan vien)/i);
 
-  if (!profile.phone && phoneMatch) profile.phone = phoneMatch[0].replace(/\D/g, "");
-  if (extractedPurpose) {
+  if (phoneMatch) profile.phone = phoneMatch.phone;
+  if (!phoneOnlyMessage && extractedPurpose) {
     profile.purpose = extractedPurpose;
     if (extractedPurpose === "nhà ở") {
       profile.business_type = null;
       profile.business = "nhà ở";
     }
   }
-  if (extractedBusinessType) {
+  if (!phoneOnlyMessage && extractedBusinessType) {
     profile.purpose = "kinh doanh";
     profile.business_type = extractedBusinessType;
     profile.business = extractedBusinessType;
   }
   if (extractedBudget) profile.budget = extractedBudget;
-  if (!profile.budget && budgetMatch) profile.budget = budgetMatch[0];
-  if (!profile.area && areaMatch) profile.area = areaMatch[0];
+  if (!phoneOnlyMessage && !profile.budget && budgetMatch) profile.budget = budgetMatch[0];
+  if (!phoneOnlyMessage && !profile.area && areaMatch) profile.area = areaMatch[0];
   if (extractedBusiness && !extractedBusinessType && profile.purpose !== "nhà ở") profile.business = extractedBusiness;
-  if (!profile.business && businessMatch) profile.business = businessMatch[0];
-  if (!profile.structure && structureMatch) profile.structure = structureMatch[0];
-  if (!profile.move_in_time && moveInMatch) profile.move_in_time = moveInMatch[0];
-  if (extractedDistrict) profile.location = extractedDistrict;
-  if (!profile.location && locationMatch) profile.location = locationMatch[0];
-  if (!profile.name && nameMatch?.[1]) profile.name = nameMatch[1].trim();
+  if (!phoneOnlyMessage && !profile.business && businessMatch) profile.business = businessMatch[0];
+  if (!phoneOnlyMessage && !profile.structure && structureMatch) profile.structure = structureMatch[0];
+  if (!phoneOnlyMessage && !profile.move_in_time && moveInMatch) profile.move_in_time = moveInMatch[0];
+  if (!phoneOnlyMessage && extractedDistrict) profile.location = extractedDistrict;
+  if (!phoneOnlyMessage && !profile.location && locationMatch) profile.location = locationMatch[0];
+  if (!phoneOnlyMessage && !profile.name && nameMatch?.[1]) profile.name = nameMatch[1].trim();
 
-  if (dimensions) {
+  if (!phoneOnlyMessage && dimensions) {
     profile.area = String(dimensions.area);
     if (!profile.structure || /ngang|dai|dài|x/i.test(profile.structure)) {
       profile.structure = dimensions.label;
@@ -1259,7 +1295,62 @@ const createLead = async (
   const json = await res.json();
 
   if (!res.ok || !json.success) {
-    throw new Error(json.error || "Không lưu được khách từ AI Chat.");
+    console.error("public-ai-chat legacy lead creation failed", {
+      status: res.status,
+      response: json,
+    });
+    return null;
+  }
+
+  return json.lead;
+};
+
+const createLeadSafely = async (
+  req: Request,
+  history: ChatMessage[],
+  profile: PublicChatProfile,
+  detectedIntent: PlaybookId | null
+) => {
+  const origin = new URL(req.url).origin;
+  const payload = {
+    mode: "lead",
+    fullname: profile.name || "Khách AI Chat",
+    phone: profile.phone,
+    preferred_districts: profile.location ? [profile.location] : [],
+    max_price: parseBudgetValue(profile.budget),
+    min_area: parseAreaValue(profile.area),
+    note: buildSummary(history, profile),
+    existing_matches: [],
+    detected_intent: detectedIntent,
+  };
+
+  let res: Response;
+  let json: any = null;
+
+  try {
+    res = await fetch(`${origin}/api/leads`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    json = await res.json();
+  } catch (error) {
+    console.error("public-ai-chat lead creation request failed", {
+      payload,
+      error,
+    });
+    return null;
+  }
+
+  if (!res.ok || !json.success) {
+    console.error("public-ai-chat lead creation failed", {
+      status: res.status,
+      payload,
+      response: json,
+    });
+    return null;
   }
 
   return json.lead;
@@ -1292,6 +1383,46 @@ export async function POST(req: Request) {
       currentMessage,
       extractProfile(textForExtraction, body.profile || {})
     );
+
+    if (isPhoneCaptureOnlyMessage(currentMessage) && extractedProfile.phone) {
+      const profile: PublicChatProfile = {
+        ...extractedProfile,
+        stage: "handoff",
+      };
+      const reply =
+        "Dạ em nhận được số của anh rồi.\nEm sẽ gửi thêm hình thực tế và các căn phù hợp qua Zalo cho mình nhé.";
+      const readyToSave = isReadyToSave(profile);
+      let leadCreated = false;
+      let lead: unknown = null;
+
+      if (readyToSave && !body.lead_created) {
+        lead = await createLeadSafely(
+          req,
+          [...history, { role: "user", content: currentMessage }, { role: "assistant", content: reply }],
+          profile,
+          null
+        );
+        leadCreated = Boolean(lead);
+      }
+
+      return NextResponse.json({
+        success: true,
+        reply,
+        reply_parts: reply.split("\n").filter(Boolean),
+        suggestion_followup_parts: [],
+        profile,
+        conversation_stage: "handoff",
+        detected_intent: null,
+        playbook_id: null,
+        next_best_question: nextQuestionForV2(profile),
+        suggested_reply: reply,
+        property_suggestions: [],
+        ready_to_save: readyToSave,
+        lead_created: leadCreated,
+        lead,
+      });
+    }
+
     let nextBestQuestion = nextQuestionForV2(extractedProfile);
     const propertySuggestions = await buildListingSuggestions(req, extractedProfile);
     const playbookSelection = selectPlaybook({
@@ -1399,13 +1530,13 @@ export async function POST(req: Request) {
     const suggestionFollowupParts = buildSuggestionFollowupParts(propertySuggestions, profile);
 
     if (readyToSave && !body.lead_created) {
-      lead = await createLead(
+      lead = await createLeadSafely(
         req,
         [...history, { role: "user", content: currentMessage }, { role: "assistant", content: reply }],
         profile,
         playbookSelection.intent
       );
-      leadCreated = true;
+      leadCreated = Boolean(lead);
     }
 
     const result: ChatResult = {

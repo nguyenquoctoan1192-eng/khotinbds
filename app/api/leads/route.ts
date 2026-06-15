@@ -167,23 +167,41 @@ export async function POST(req: Request) {
         note,
         detected_intent,
       });
-      const { data: lead, error: leadError } = await supabase
+      const leadPayload = {
+        fullname,
+        phone,
+        min_price,
+        max_price,
+        preferred_districts,
+        min_area,
+        bedrooms,
+        note,
+      };
+      let { data: lead, error: leadError } = await supabase
         .from("leads")
         .insert([
           {
-            fullname,
-            phone,
-            min_price,
-            max_price,
-            preferred_districts,
-            min_area,
-            bedrooms,
-            note,
+            ...leadPayload,
             ...leadScoring,
           },
         ])
         .select()
         .single();
+
+      if (
+        leadError &&
+        String(leadError.message || "").includes("lead_score")
+      ) {
+        console.error("lead scoring columns missing; saving lead without score", leadError);
+        const fallbackInsert = await supabase
+          .from("leads")
+          .insert([leadPayload])
+          .select()
+          .single();
+
+        lead = fallbackInsert.data;
+        leadError = fallbackInsert.error;
+      }
 
       if (leadError) throw leadError;
 

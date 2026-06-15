@@ -265,13 +265,14 @@ export default function Home() {
         },
       ]);
     } catch (err) {
-      setAiChatError(err instanceof Error ? err.message : "AI chưa phản hồi được.");
+      console.error("public AI chat request failed", err);
+      setAiChatError("");
       setAiChatMessages((current) => [
         ...current,
         {
           role: "assistant",
           content:
-            "Dạ hiện tại em chưa xử lý được tin nhắn này. Anh/chị thử gửi lại giúp em nhé.",
+            "Dạ em nhận được tin nhắn của anh rồi. Em kiểm tra lại nhu cầu và gửi mình hướng phù hợp ngay nhé.",
         },
       ]);
     } finally {

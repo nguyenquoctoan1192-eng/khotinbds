@@ -18,10 +18,28 @@ export async function GET() {
 
   try {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
-    const { data, error } = await supabase
+    const leadSelect = await supabase
       .from("leads")
-      .select("id, fullname, phone, preferred_districts, note, max_price, status, lead_score, lead_temperature, created_at")
-      .order("created_at", { ascending: false });
+      .select("id, fullname, phone, preferred_districts, note, max_price, status, created_at")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    let data: any[] | null = leadSelect.data;
+    let error = leadSelect.error;
+
+    if (
+      error &&
+      String(error.message || "").includes("lead_score")
+    ) {
+      console.error("lead scoring columns missing; loading leads without score", error);
+      const fallbackSelect = await supabase
+        .from("leads")
+        .select("id, fullname, phone, preferred_districts, note, max_price, status, created_at")
+        .order("created_at", { ascending: false })
+        .limit(200);
+
+      data = fallbackSelect.data;
+      error = fallbackSelect.error;
+    }
 
     if (error) {
       return NextResponse.json(
