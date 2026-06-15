@@ -30,13 +30,14 @@ type PublicChatProfile = {
 type PublicChatMessage = {
   role: "assistant" | "user";
   content: string;
+  reply_parts?: string[];
   property_suggestions?: PropertySuggestion[];
 };
 
 type PropertySuggestion = {
   area_label: string;
+  structure_label: string;
   price_label: string;
-  size_label: string;
 };
 
 const emptyPublicChatProfile = (): PublicChatProfile => ({
@@ -246,6 +247,11 @@ export default function Home() {
         {
           role: "assistant",
           content: json.reply,
+          reply_parts: Array.isArray(json.reply_parts)
+            ? json.reply_parts.filter(
+                (part: unknown): part is string => typeof part === "string" && Boolean(part.trim())
+              )
+            : undefined,
           property_suggestions: Array.isArray(json.property_suggestions)
             ? json.property_suggestions.slice(0, 3)
             : [],
@@ -734,6 +740,10 @@ export default function Home() {
             {aiChatMessages.map((message, index) => {
               const isUser = message.role === "user";
               const suggestions = message.property_suggestions || [];
+              const bubbleParts =
+                !isUser && message.reply_parts?.length
+                  ? message.reply_parts
+                  : [message.content];
 
               return (
                 <div
@@ -745,18 +755,21 @@ export default function Home() {
                     gap: 8,
                   }}
                 >
-                  <div
-                    style={{
-                      background: isUser ? "#2563eb" : "#f3f4f6",
-                      color: isUser ? "#fff" : "#111827",
-                      borderRadius: 10,
-                      padding: "9px 11px",
-                      lineHeight: 1.45,
-                      whiteSpace: "pre-wrap",
-                    }}
-                  >
-                    {message.content}
-                  </div>
+                  {bubbleParts.map((part, partIndex) => (
+                    <div
+                      key={`${message.role}-${index}-${partIndex}`}
+                      style={{
+                        background: isUser ? "#2563eb" : "#f3f4f6",
+                        color: isUser ? "#fff" : "#111827",
+                        borderRadius: 10,
+                        padding: "9px 11px",
+                        lineHeight: 1.45,
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {part}
+                    </div>
+                  ))}
                   {!isUser && suggestions.length > 0 && (
                     <div style={{ display: "grid", gap: 8 }}>
                       {suggestions.slice(0, 3).map((suggestion, suggestionIndex) => (
@@ -772,9 +785,9 @@ export default function Home() {
                             boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
                           }}
                         >
-                          <div>📍 {suggestion.area_label}</div>
-                          <div>💰 {suggestion.price_label}</div>
-                          <div>📐 {suggestion.size_label}</div>
+                          <div style={{ fontWeight: 700 }}>{suggestion.area_label}</div>
+                          <div>Diện tích: {suggestion.structure_label}</div>
+                          <div>Giá: {suggestion.price_label}</div>
                         </div>
                       ))}
                     </div>

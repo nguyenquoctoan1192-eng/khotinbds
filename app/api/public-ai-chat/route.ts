@@ -21,12 +21,13 @@ type PublicChatProfile = {
 
 type PropertySuggestion = {
   area_label: string;
+  structure_label: string;
   price_label: string;
-  size_label: string;
 };
 
 type ChatResult = {
   reply: string;
+  reply_parts: string[];
   profile: PublicChatProfile;
   conversation_stage: "discovery" | "qualification" | "lead_created" | "nurturing";
   next_best_question: string;
@@ -663,47 +664,162 @@ const formatListingPrice = (price: unknown) => {
       : amount.toFixed(1).replace(/\.0$/, "");
 
   if (!Number.isFinite(value) || value <= 0) return "Liên hệ";
-  if (value >= 1000000000) return `${formatAmount(value / 1000000000)} tỷ/tháng`;
-  if (value >= 1000000) return `${formatAmount(value / 1000000)} triệu/tháng`;
+  if (value >= 1000000000) return `${formatAmount(value / 1000000000)} tỷ`;
+  if (value >= 1000000) return `${formatAmount(value / 1000000)}tr`;
 
-  return `${value.toLocaleString("vi-VN")} VNĐ/tháng`;
+  return value.toLocaleString("vi-VN");
 };
 
-const stripExactAddressParts = (value: string) => {
+const removePublicAddressPrefixes = (value: string) =>
+  value
+    .replace(/\b(?:góc\s*mt|goc\s*mt|2\s*mt|hxh|hxt|h3g|mb|mt)\b/gi, " ")
+    .replace(/\b(?:hẻm|hem)\s*(?=\d+[a-z]?\s*\/)/gi, " ");
+
+const removePublicExactNumbers = (value: string) => {
   let cleaned = value
     .replace(/\b\d+[a-z]?(?:\s*[/-]\s*\d+[a-z]?)+\b/gi, " ")
-    .replace(/\b(?:p|phuong|phường)\.?\s*\d+[a-z]?\b/gi, " ")
-    .replace(/\b(?:q|quan|quận)\.?\s*\d+[a-z]?\b/gi, " ")
-    .replace(/\b(?:hẻm|hem|ngõ|ngo|hxh|hẻm xe hơi)\s*\d+[a-z]?(?:\s*[/-]\s*\d+[a-z]?)*\b/gi, " ");
+    .replace(/^\s*\d+[a-z]?\s*\/+\s*/i, "")
+    .replace(/^\s*(?:hẻm|hem)\s+\d+[a-z]?(?:\s*[/-]\s*\d+[a-z]?)*\s*/i, "");
 
   if (!/^\s*\d+\s+(?:tháng|thang)\b/i.test(cleaned)) {
     cleaned = cleaned.replace(/^\s*(?:số|so)?\s*\d+[a-z]?\s+/i, "");
   }
 
-  return normalizeSpaces(cleaned.replace(/[|]+/g, " "));
+  return normalizeSpaces(cleaned);
 };
 
-const sanitizeSuggestionArea = (rawAddress: unknown, rawDistrict: unknown) => {
-  const district = compactString(rawDistrict) || "";
+const detectPublicAddressPrefix = (address: string) => {
+  const normalized = normalizeText(address);
+
+  if (/\bgoc\s*mt\b/.test(normalized)) return "Góc MT";
+  if (/\b2\s*mt\b/.test(normalized)) return "2MT";
+  if (/\bhxh\b/.test(normalized)) return "HXH";
+  if (/\bhxt\b/.test(normalized)) return "HXT";
+  if (/\bh3g\b/.test(normalized)) return "H3G";
+  if (/\bmt\b/.test(normalized)) return "MT";
+
+  return null;
+};
+
+const formatPublicSuggestionArea = (
+  rawAddress: unknown,
+  rawDistrict: unknown,
+  rawTitle: unknown,
+  rawDescription: unknown
+) => {
   const address = compactString(rawAddress) || "";
+  const district = compactString(rawDistrict) || "";
+  const title = compactString(rawTitle) || "";
+  const description = compactString(rawDescription) || "";
+  const combined = normalizeText(`${title} ${address} ${description}`);
+  const hasMb = /\bmb\b/.test(combined);
+  const hasSlash = address.includes("/");
+  const explicitPrefix = detectPublicAddressPrefix(`${address} ${title} ${description}`);
+  const prefix = hasMb
+    ? `MB ${hasSlash ? "Hẻm" : "Mặt tiền"}`
+    : explicitPrefix || (hasSlash ? "Hẻm" : "Mặt tiền");
   const street = address
     .split(",")
-    .map(stripExactAddressParts)
-    .find((part) => part && /[A-Za-zÀ-ỹ]/.test(part) && normalizeText(part) !== normalizeText(district));
+    .map(removePublicAddressPrefixes)
+    .map(removePublicExactNumbers)
+    .find((part) => part && /[A-Za-zÀ-ỹ]/.test(part));
 
-  if (street && district && !normalizeText(street).includes(normalizeText(district))) {
-    return `${street}, ${district}`;
-  }
+  if (!street && district) return `${prefix} ${district}`;
+  if (!street) return "Khu vực phù hợp";
 
-  return street || district || "Khu vực phù hợp";
+  const normalizedStreet = normalizeText(street);
+  const normalizedDistrict = normalizeText(district)
+    .replace(/\b(?:quan|q)\.?\s*/g, "")
+    .trim();
+  const shouldAppendDistrict =
+    district && normalizedDistrict && !normalizedStreet.includes(normalizedDistrict);
+
+  return `${prefix} ${street}${shouldAppendDistrict ? `, ${district}` : ""}`;
 };
 
-const formatListingSize = (area: unknown) => {
-  const value = Number(area || 0);
+const pushUnique = (items: string[], value: string | null) => {
+  if (value && !items.some((item) => normalizeText(item) === normalizeText(value))) {
+    items.push(value);
+  }
+};
 
-  if (!Number.isFinite(value) || value <= 0) return "Liên hệ";
+const formatPublicStructure = (
+  rawTitle: unknown,
+  rawAddress: unknown,
+  rawDescription: unknown,
+  rawArea: unknown
+) => {
+  const source = [rawTitle, rawAddress, rawDescription]
+    .map((value) => compactString(value))
+    .filter(Boolean)
+    .join(" ");
+  const normalized = normalizeText(source);
+  const parts: string[] = [];
+  const dimension =
+    source.match(/\b\d+(?:[.,]\d+)?\s*x\s*\d+(?:[.,]\d+)?\b/i)?.[0] ||
+    normalized
+      .match(/(?:ngang|rong|mat tien)\s*(\d+(?:[.,]\d+)?)\s*m?\s*(?:dai|sau)\s*(\d+(?:[.,]\d+)?)/)
+      ?.slice(1, 3)
+      .join("x")
+      .replace(/,/g, ".");
 
-  return `${Number.isInteger(value) ? value : value.toFixed(1).replace(/\.0$/, "")}m²`;
+  pushUnique(parts, dimension || null);
+
+  if (/\b(?:tret|trệt)\b/i.test(source)) pushUnique(parts, "trệt");
+
+  const floorMatch =
+    source.match(/\b\d+\s*(?:lầu|lau)\b/i)?.[0] ||
+    source.match(/\b\d+\s*(?:tầng|tang)\b/i)?.[0];
+  pushUnique(parts, floorMatch || null);
+
+  if (/\b(?:st|sân thượng|san thuong)\b/i.test(source)) pushUnique(parts, "ST");
+
+  const bedroomMatch = source.match(/\b\d+\s*PN\b/i)?.[0] || source.match(/\b\d+\s*(?:phòng ngủ|phong ngu)\b/i)?.[0];
+  pushUnique(parts, bedroomMatch ? bedroomMatch.replace(/\s+/g, "") : null);
+
+  const bathroomMatch = source.match(/\b\d+\s*WC\b/i)?.[0];
+  pushUnique(parts, bathroomMatch ? bathroomMatch.replace(/\s+/g, "") : null);
+
+  if (/\bCHDV\b/i.test(source)) pushUnique(parts, "CHDV");
+  if (/\bTM\b/i.test(source)) pushUnique(parts, "TM");
+  if (/\b(?:full\s*nt|full nội thất|full noi that)\b/i.test(source)) pushUnique(parts, "Full NT");
+
+  if (parts.length > 0) return parts.join(" ");
+
+  const area = Number(rawArea || 0);
+  if (Number.isFinite(area) && area > 0) {
+    return `${Number.isInteger(area) ? area : area.toFixed(1).replace(/\.0$/, "")}m²`;
+  }
+
+  return "Đang cập nhật";
+};
+
+const buildReplyParts = (reply: string, suggestions: PropertySuggestion[]) => {
+  const parts = reply
+    .split(/\n{2,}/)
+    .map((part) => part.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  const safeParts = parts.length > 0 ? parts : [reply.trim()].filter(Boolean);
+  const mentionsSuggestions = /gửi|gui|căn|can|lựa chọn|lua chon/i.test(
+    normalizeText(safeParts.join(" "))
+  );
+
+  if (suggestions.length > 0 && !mentionsSuggestions) {
+    const questionIndex = safeParts.findIndex((part) => part.includes("?"));
+    const suggestionLine = "Em gửi anh xem thử vài căn khá sát nhu cầu nha.";
+
+    if (questionIndex >= 0) {
+      return [
+        ...safeParts.slice(0, questionIndex),
+        suggestionLine,
+        ...safeParts.slice(questionIndex),
+      ];
+    }
+
+    return [...safeParts, suggestionLine];
+  }
+
+  return safeParts;
 };
 
 const buildListingSuggestions = async (
@@ -737,9 +853,19 @@ const buildListingSuggestions = async (
   return matches.map((item: any) => {
     const listing = item.listing || item;
     return {
-      area_label: sanitizeSuggestionArea(listing.address, listing.district),
+      area_label: formatPublicSuggestionArea(
+        listing.address,
+        listing.district,
+        listing.title,
+        listing.description
+      ),
+      structure_label: formatPublicStructure(
+        listing.title,
+        listing.address,
+        listing.description,
+        listing.area
+      ),
       price_label: formatListingPrice(listing.price),
-      size_label: formatListingSize(listing.area),
     };
   });
 };
@@ -1166,6 +1292,7 @@ export async function POST(req: Request) {
     let leadCreated = false;
     let lead: unknown;
     const propertySuggestions = await buildListingSuggestions(req, profile);
+    const replyParts = buildReplyParts(reply, propertySuggestions);
 
     if (readyToSave && !body.lead_created) {
       lead = await createLead(
@@ -1178,6 +1305,7 @@ export async function POST(req: Request) {
 
     const result: ChatResult = {
       reply,
+      reply_parts: replyParts,
       profile,
       conversation_stage: getConversationStage(profile, leadCreated, Boolean(body.lead_created)),
       next_best_question: nextQuestionForV2(profile),
