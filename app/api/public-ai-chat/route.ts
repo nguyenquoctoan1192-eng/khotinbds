@@ -1,4 +1,11 @@
 import { NextResponse } from "next/server";
+import {
+  detectConversationStage,
+  selectPlaybook,
+  type ConversationStage,
+  type PlaybookId,
+  type PlaybookSelection,
+} from "@/lib/playbooks";
 
 type ChatMessage = {
   role: "assistant" | "user";
@@ -17,6 +24,7 @@ type PublicChatProfile = {
   structure: string | null;
   frontage: string | null;
   move_in_time: string | null;
+  stage: ConversationStage | null;
 };
 
 type PropertySuggestion = {
@@ -31,7 +39,9 @@ type ChatResult = {
   reply_parts: string[];
   suggestion_followup_parts: string[];
   profile: PublicChatProfile;
-  conversation_stage: "discovery" | "qualification" | "lead_created" | "nurturing";
+  conversation_stage: ConversationStage;
+  detected_intent: PlaybookId | null;
+  playbook_id: PlaybookId | null;
   next_best_question: string;
   suggested_reply: string;
   property_suggestions: PropertySuggestion[];
@@ -40,7 +50,9 @@ type ChatResult = {
   lead?: unknown;
 };
 
-const profileKeys: Array<keyof PublicChatProfile> = [
+type PublicChatRequirementKey = Exclude<keyof PublicChatProfile, "stage">;
+
+const profileKeys: PublicChatRequirementKey[] = [
   "purpose",
   "business_type",
   "business",
@@ -66,6 +78,7 @@ const profileLabels: Record<keyof PublicChatProfile, string> = {
   structure: "structure",
   frontage: "frontage",
   move_in_time: "move-in/rental time",
+  stage: "conversation stage",
 };
 
 const emptyProfile = (): PublicChatProfile => ({
@@ -80,6 +93,7 @@ const emptyProfile = (): PublicChatProfile => ({
   structure: null,
   frontage: null,
   move_in_time: null,
+  stage: null,
 });
 
 const compactString = (value: unknown) =>
@@ -308,6 +322,10 @@ const mergeProfiles = (...profiles: Partial<PublicChatProfile>[]): PublicChatPro
       if (profile[key]) {
         merged[key] = profile[key] || null;
       }
+    }
+
+    if (profile.stage) {
+      merged.stage = profile.stage;
     }
 
     return merged;
@@ -606,13 +624,10 @@ const fallbackReplyV2 = (message: string, profile: PublicChatProfile) => {
 
 const getConversationStage = (
   profile: PublicChatProfile,
-  leadCreated: boolean,
-  alreadyCreated: boolean
-): ChatResult["conversation_stage"] => {
-  if (leadCreated) return "lead_created";
-  if (alreadyCreated) return "nurturing";
-  if (isReadyToSave(profile)) return "qualification";
-  return "discovery";
+  intent: PlaybookId | null,
+  hasPropertySuggestions: boolean
+): ConversationStage => {
+  return detectConversationStage(profile, intent, hasPropertySuggestions);
 };
 
 const buildSummary = (history: ChatMessage[], profile: PublicChatProfile) => {
@@ -959,7 +974,8 @@ const buildPromptV2 = (
   history: ChatMessage[],
   currentMessage: string,
   profile: PublicChatProfile,
-  nextQuestion: string
+  nextQuestion: string,
+  playbookSelection: PlaybookSelection
 ) => `
 # SYSTEM PROMPT - AI SALES BẤT ĐỘNG SẢN
 
@@ -1163,6 +1179,22 @@ Khong hoi lai bat ky truong nao da co gia tri trong profile noi bo.
 Câu hỏi tiếp theo nên tập trung vào đúng ý này nếu vẫn còn thiếu:
 ${nextQuestion}
 
+## Playbook Engine
+
+Intent phat hien:
+${playbookSelection.intent || "none"}
+
+Conversation stage:
+${playbookSelection.stage}
+
+Playbook dang dung:
+${playbookSelection.playbook?.id || "none"}
+
+Skeleton bat buoc giu y chinh:
+${playbookSelection.skeleton}
+
+Hay viet lai skeleton cho tu nhien nhu moi gioi that. Khong doi muc tieu cua skeleton. Khong them cau hoi thu hai. Neu skeleton xin Zalo/so dien thoai thi giu dung muc tieu xin lien he.
+
 Lịch sử chat:
 ${JSON.stringify(history, null, 2)}
 
@@ -1250,14 +1282,27 @@ export async function POST(req: Request) {
     const textForExtraction = [...history, { role: "user", content: currentMessage }]
       .map((message) => message.content)
       .join("\n");
-    const baseProfile = extractProfile(
+    const extractedProfile = extractProfile(
       currentMessage,
       extractProfile(textForExtraction, body.profile || {})
     );
+    let nextBestQuestion = nextQuestionForV2(extractedProfile);
+    const propertySuggestions = await buildListingSuggestions(req, extractedProfile);
+    const playbookSelection = selectPlaybook({
+      message: currentMessage,
+      profile: extractedProfile,
+      hasPropertySuggestions: propertySuggestions.length > 0,
+      nextQuestion: nextBestQuestion,
+    });
+    const baseProfile: PublicChatProfile = {
+      ...extractedProfile,
+      stage: playbookSelection.stage,
+    };
     const apiKey = process.env.OPENAI_API_KEY;
-    let reply = fallbackReplyV2(currentMessage, baseProfile);
+    let reply = playbookSelection.playbook
+      ? playbookSelection.skeleton
+      : fallbackReplyV2(currentMessage, baseProfile);
     let profile = baseProfile;
-    let nextBestQuestion = nextQuestionForV2(baseProfile);
 
     if (apiKey) {
       const res = await fetch("https://api.openai.com/v1/responses", {
@@ -1268,7 +1313,13 @@ export async function POST(req: Request) {
         },
         body: JSON.stringify({
           model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
-          input: buildPromptV2(history, currentMessage, baseProfile, nextBestQuestion),
+          input: buildPromptV2(
+            history,
+            currentMessage,
+            baseProfile,
+            nextBestQuestion,
+            playbookSelection
+          ),
           text: {
             format: {
               type: "json_schema",
@@ -1317,13 +1368,20 @@ export async function POST(req: Request) {
           )
         );
         nextBestQuestion = nextQuestionForV2(profile);
+        profile.stage = detectConversationStage(
+          profile,
+          playbookSelection.intent,
+          propertySuggestions.length > 0
+        );
         if (
           asksForKnownField(reply, profile) ||
           violatesPublicTone(reply) ||
           violatesQuestionRule(reply) ||
           repeatsProfileTooMuch(reply, profile)
         ) {
-          reply = fallbackReplyV2(currentMessage, profile);
+          reply = playbookSelection.playbook
+            ? playbookSelection.skeleton
+            : fallbackReplyV2(currentMessage, profile);
         }
       }
     }
@@ -1331,7 +1389,6 @@ export async function POST(req: Request) {
     const readyToSave = isReadyToSave(profile);
     let leadCreated = false;
     let lead: unknown;
-    const propertySuggestions = await buildListingSuggestions(req, profile);
     const replyParts = buildReplyParts(reply, propertySuggestions);
     const suggestionFollowupParts = buildSuggestionFollowupParts(propertySuggestions, profile);
 
@@ -1349,7 +1406,13 @@ export async function POST(req: Request) {
       reply_parts: replyParts,
       suggestion_followup_parts: suggestionFollowupParts,
       profile,
-      conversation_stage: getConversationStage(profile, leadCreated, Boolean(body.lead_created)),
+      conversation_stage: getConversationStage(
+        profile,
+        playbookSelection.intent,
+        propertySuggestions.length > 0
+      ),
+      detected_intent: playbookSelection.intent,
+      playbook_id: playbookSelection.playbook?.id || null,
       next_best_question: nextQuestionForV2(profile),
       suggested_reply: reply,
       property_suggestions: propertySuggestions,
