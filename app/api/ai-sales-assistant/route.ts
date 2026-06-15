@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { calculateLeadScoring } from "@/lib/leadScoring";
 
 type RequirementProfile = {
   business: string | null;
@@ -292,10 +293,19 @@ const saveProfile = async (lead: any, profile: RequirementProfile) => {
 
   const supabase = createClient(supabaseUrl, serviceRoleKey);
   const updatedNote = mergeProfileIntoNote(lead?.note || null, profile);
+  const leadScoring = calculateLeadScoring({
+    phone: lead?.phone,
+    max_price: lead?.max_price,
+    preferred_districts: lead?.preferred_districts,
+    note: updatedNote,
+  });
 
   await supabase
     .from("leads")
-    .update({ note: updatedNote })
+    .update({
+      note: updatedNote,
+      ...leadScoring,
+    })
     .eq("id", leadId);
 
   const { data: activity } = await supabase
@@ -310,7 +320,7 @@ const saveProfile = async (lead: any, profile: RequirementProfile) => {
     .select("id, lead_id, type, content, created_at")
     .single();
 
-  return { activity, updated_note: updatedNote };
+  return { activity, updated_note: updatedNote, lead_scoring: leadScoring };
 };
 
 export async function POST(req: Request) {
@@ -430,6 +440,7 @@ export async function POST(req: Request) {
       assistant,
       activity: saved.activity,
       updated_note: saved.updated_note,
+      lead_scoring: saved.lead_scoring,
       source,
     });
   } catch (error) {

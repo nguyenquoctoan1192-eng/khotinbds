@@ -8,6 +8,7 @@ import {
   normalizeLeadRequirement,
   scoreListingForLead,
 } from "@/lib/matching";
+import { calculateLeadScoring } from "@/lib/leadScoring";
 
 type MatchWithLead = MatchResult & { lead_id: string };
 
@@ -86,6 +87,7 @@ export async function POST(req: Request) {
       bedrooms,
       note,
       keywordSearch,
+      detected_intent,
       mode, // 👈 THÊM MODE
       query, // 👈 SEARCH MODE
     } = body;
@@ -157,6 +159,14 @@ export async function POST(req: Request) {
     // 🟢 MODE 1: LEAD + MATCHING (giữ logic cũ)
     // =================================================
     if (!mode || mode === "lead") {
+      const leadScoring = calculateLeadScoring({
+        phone,
+        max_price,
+        min_price,
+        preferred_districts,
+        note,
+        detected_intent,
+      });
       const { data: lead, error: leadError } = await supabase
         .from("leads")
         .insert([
@@ -169,6 +179,7 @@ export async function POST(req: Request) {
             min_area,
             bedrooms,
             note,
+            ...leadScoring,
           },
         ])
         .select()

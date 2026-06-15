@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { calculateLeadScoring } from "@/lib/leadScoring";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -35,6 +36,21 @@ export async function POST(req: Request) {
     if (error) {
       throw error;
     }
+
+    const { data: lead } = await supabase
+      .from("leads")
+      .select("phone, max_price, preferred_districts, note")
+      .eq("id", leadId)
+      .single();
+    const leadScoring = calculateLeadScoring({
+      ...(lead || {}),
+      activities: [data],
+    });
+
+    await supabase
+      .from("leads")
+      .update(leadScoring)
+      .eq("id", leadId);
 
     return NextResponse.json({ success: true, activity: data });
   } catch (error) {

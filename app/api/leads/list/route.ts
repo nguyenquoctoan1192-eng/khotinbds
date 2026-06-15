@@ -20,7 +20,7 @@ export async function GET() {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
     const { data, error } = await supabase
       .from("leads")
-      .select("id, fullname, phone, preferred_districts, note, max_price, status, created_at")
+      .select("id, fullname, phone, preferred_districts, note, max_price, status, lead_score, lead_temperature, created_at")
       .order("created_at", { ascending: false });
 
     if (error) {

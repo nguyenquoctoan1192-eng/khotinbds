@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import {
+  calculateLeadScoring,
+  getLeadTemperatureLabel,
+  getLeadTemperatureRank,
+} from "@/lib/leadScoring";
 
 type Lead = {
   id: string;
@@ -12,6 +17,8 @@ type Lead = {
   note: string | null;
   max_price: number | string | null;
   status: string | null;
+  lead_score: number | null;
+  lead_temperature: string | null;
   created_at: string | null;
 };
 
@@ -135,6 +142,45 @@ const formatPrice = (price: Lead["max_price"]) => {
   }
 
   return `${value.toLocaleString("vi-VN")} VNĐ`;
+};
+
+const getLeadScore = (lead: Lead) => {
+  const storedScore = Number(lead.lead_score);
+
+  if (Number.isFinite(storedScore) && storedScore >= 0) {
+    return storedScore;
+  }
+
+  return calculateLeadScoring({
+    phone: lead.phone,
+    max_price: lead.max_price,
+    preferred_districts: lead.preferred_districts,
+    note: lead.note,
+  }).lead_score;
+};
+
+const getLeadTemperature = (lead: Lead) =>
+  lead.lead_temperature ||
+  calculateLeadScoring({
+    phone: lead.phone,
+    max_price: lead.max_price,
+    preferred_districts: lead.preferred_districts,
+    note: lead.note,
+  }).lead_temperature;
+
+const compareLeadTemperature = (a: LeadWithFollowUp, b: LeadWithFollowUp) => {
+  const temperatureDiff =
+    getLeadTemperatureRank(getLeadTemperature(a.lead)) -
+    getLeadTemperatureRank(getLeadTemperature(b.lead));
+
+  if (temperatureDiff !== 0) {
+    return temperatureDiff;
+  }
+
+  return (
+    new Date(b.lead.created_at || 0).getTime() -
+    new Date(a.lead.created_at || 0).getTime()
+  );
 };
 
 const formatListingPrice = (price: unknown) => {
@@ -444,7 +490,8 @@ function CustomerCard({
   onAssistantProfileSaved: (
     leadId: string,
     updatedNote: string | null,
-    activity?: LeadActivity
+    activity?: LeadActivity,
+    leadScoring?: { lead_score?: number; lead_temperature?: string }
   ) => void;
 }) {
   const lead = item.lead;
@@ -457,6 +504,8 @@ function CustomerCard({
     : "/";
   const statusLabel = getStatusLabel(item.followUpStatus);
   const leadStatus = lead.status || LEAD_STATUSES[0];
+  const temperature = getLeadTemperature(lead);
+  const leadScore = getLeadScore(lead);
   const [customerMessage, setCustomerMessage] = useState("");
   const [assistantLoading, setAssistantLoading] = useState(false);
   const [assistantError, setAssistantError] = useState("");
@@ -498,8 +547,8 @@ function CustomerCard({
 
       setAssistantResult(json.assistant);
 
-      if (json.updated_note || json.activity) {
-        onAssistantProfileSaved(lead.id, json.updated_note || lead.note, json.activity);
+      if (json.updated_note || json.activity || json.lead_scoring) {
+        onAssistantProfileSaved(lead.id, json.updated_note || lead.note, json.activity, json.lead_scoring);
       }
     } catch (err) {
       setAssistantError(err instanceof Error ? err.message : "Không tạo được gợi ý trả lời.");
@@ -520,6 +569,21 @@ function CustomerCard({
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 12 }}>
         <strong style={{ fontSize: 18 }}>{lead.fullname || "Chưa có tên"}</strong>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <span
+            title={`Lead score: ${leadScore}`}
+            style={{
+              background: temperature === "Hot" ? "#fee2e2" : temperature === "Warm" ? "#fef3c7" : "#f3f4f6",
+              color: temperature === "Hot" ? "#991b1b" : temperature === "Warm" ? "#92400e" : "#374151",
+              borderRadius: 999,
+              padding: "5px 9px",
+              fontSize: 12,
+              fontWeight: 700,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {getLeadTemperatureLabel(temperature)}
+          </span>
         {statusLabel && (
           <span
             style={{
@@ -534,6 +598,7 @@ function CustomerCard({
             {statusLabel}
           </span>
         )}
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
@@ -753,7 +818,8 @@ function ReminderSection({
   onAssistantProfileSaved: (
     leadId: string,
     updatedNote: string | null,
-    activity?: LeadActivity
+    activity?: LeadActivity,
+    leadScoring?: { lead_score?: number; lead_temperature?: string }
   ) => void;
 }) {
   return (
@@ -875,11 +941,13 @@ export default function CustomersPage() {
 
   const todayItems = leadsWithFollowUp
     .filter((item) => item.followUpStatus === "today" || item.followUpStatus === "overdue")
-    .sort((a, b) => (a.followUpDate?.getTime() || 0) - (b.followUpDate?.getTime() || 0));
+    .sort((a, b) => compareLeadTemperature(a, b) || (a.followUpDate?.getTime() || 0) - (b.followUpDate?.getTime() || 0));
   const upcomingItems = leadsWithFollowUp
     .filter((item) => item.followUpStatus === "upcoming")
-    .sort((a, b) => (a.followUpDate?.getTime() || 0) - (b.followUpDate?.getTime() || 0));
-  const unscheduledItems = leadsWithFollowUp.filter((item) => item.followUpStatus === "none");
+    .sort((a, b) => compareLeadTemperature(a, b) || (a.followUpDate?.getTime() || 0) - (b.followUpDate?.getTime() || 0));
+  const unscheduledItems = leadsWithFollowUp
+    .filter((item) => item.followUpStatus === "none")
+    .sort(compareLeadTemperature);
 
   const addActivity = async (leadId: string, type: string, content: string) => {
     const res = await fetch("/api/lead-activities", {
@@ -933,7 +1001,12 @@ export default function CustomersPage() {
       setLeads((current) =>
         current.map((currentLead) =>
           currentLead.id === lead.id
-            ? { ...currentLead, status }
+            ? {
+                ...currentLead,
+                status,
+                lead_score: json.lead?.lead_score ?? currentLead.lead_score,
+                lead_temperature: json.lead?.lead_temperature ?? currentLead.lead_temperature,
+              }
             : currentLead
         )
       );
@@ -1004,11 +1077,19 @@ export default function CustomersPage() {
   const updateAssistantProfileState = (
     leadId: string,
     updatedNote: string | null,
-    activity?: LeadActivity
+    activity?: LeadActivity,
+    leadScoring?: { lead_score?: number; lead_temperature?: string }
   ) => {
     setLeads((current) =>
       current.map((lead) =>
-        lead.id === leadId ? { ...lead, note: updatedNote } : lead
+        lead.id === leadId
+          ? {
+              ...lead,
+              note: updatedNote,
+              lead_score: leadScoring?.lead_score ?? lead.lead_score,
+              lead_temperature: leadScoring?.lead_temperature ?? lead.lead_temperature,
+            }
+          : lead
       )
     );
 

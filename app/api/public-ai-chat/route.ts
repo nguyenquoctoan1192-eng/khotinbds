@@ -1233,7 +1233,12 @@ const parseAiJson = (value: unknown, fallbackProfile: PublicChatProfile) => {
   };
 };
 
-const createLead = async (req: Request, history: ChatMessage[], profile: PublicChatProfile) => {
+const createLead = async (
+  req: Request,
+  history: ChatMessage[],
+  profile: PublicChatProfile,
+  detectedIntent: PlaybookId | null
+) => {
   const origin = new URL(req.url).origin;
   const res = await fetch(`${origin}/api/leads`, {
     method: "POST",
@@ -1248,6 +1253,7 @@ const createLead = async (req: Request, history: ChatMessage[], profile: PublicC
       max_price: parseBudgetValue(profile.budget),
       min_area: parseAreaValue(profile.area),
       note: buildSummary(history, profile),
+      detected_intent: detectedIntent,
     }),
   });
   const json = await res.json();
@@ -1396,7 +1402,8 @@ export async function POST(req: Request) {
       lead = await createLead(
         req,
         [...history, { role: "user", content: currentMessage }, { role: "assistant", content: reply }],
-        profile
+        profile,
+        playbookSelection.intent
       );
       leadCreated = true;
     }

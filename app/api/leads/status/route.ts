@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { calculateLeadScoring } from "@/lib/leadScoring";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,7 +22,7 @@ export async function PATCH(req: Request) {
 
     const { data: lead, error: leadError } = await supabase
       .from("leads")
-      .select("status")
+      .select("status, phone, max_price, preferred_districts, note")
       .eq("id", leadId)
       .single();
 
@@ -31,11 +32,16 @@ export async function PATCH(req: Request) {
 
     const oldStatus = String(lead?.status || "Khách mới");
 
+    const leadScoring = calculateLeadScoring(lead || {});
+
     const { data: updatedLead, error: updateError } = await supabase
       .from("leads")
-      .update({ status: newStatus })
+      .update({
+        status: newStatus,
+        ...leadScoring,
+      })
       .eq("id", leadId)
-      .select("id, status")
+      .select("id, status, lead_score, lead_temperature")
       .single();
 
     if (updateError) {

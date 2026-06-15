@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
+import { calculateLeadScoring } from "@/lib/leadScoring";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,8 @@ type Lead = {
   note: string | null;
   max_price: number | string | null;
   status: string | null;
+  lead_score: number | null;
+  lead_temperature: string | null;
   created_at: string | null;
 };
 
@@ -69,6 +72,15 @@ const parseNeed = (note: string | null) => {
 
   return parts[0] || note;
 };
+
+const getLeadTemperature = (lead: Lead) =>
+  lead.lead_temperature ||
+  calculateLeadScoring({
+    phone: lead.phone,
+    max_price: lead.max_price,
+    preferred_districts: lead.preferred_districts,
+    note: lead.note,
+  }).lead_temperature;
 
 const createLocalDate = (value: string) => {
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -134,7 +146,7 @@ const getLeads = async () => {
   const supabase = createClient(supabaseUrl, serviceRoleKey);
   const { data, error } = await supabase
     .from("leads")
-    .select("id, fullname, phone, preferred_districts, note, max_price, status, created_at")
+    .select("id, fullname, phone, preferred_districts, note, max_price, status, lead_score, lead_temperature, created_at")
     .order("created_at", { ascending: false });
 
   return {
@@ -158,6 +170,9 @@ export default async function DashboardPage() {
   );
   const kpis = [
     { label: "Tổng khách", value: leads.length },
+    { label: "Hot leads", value: leads.filter((lead) => getLeadTemperature(lead) === "Hot").length },
+    { label: "Warm leads", value: leads.filter((lead) => getLeadTemperature(lead) === "Warm").length },
+    { label: "Cold leads", value: leads.filter((lead) => getLeadTemperature(lead) === "Cold").length },
     ...STATUSES.map((status) => ({
       label: status,
       value: leads.filter((lead) => (lead.status || STATUSES[0]) === status).length,
