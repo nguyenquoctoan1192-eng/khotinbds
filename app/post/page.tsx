@@ -1,67 +1,47 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type DragEvent } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 
-
-import {
-  DndContext,
-  closestCenter,
-} from "@dnd-kit/core";
-
-import {
-  SortableContext,
-  arrayMove,
-  rectSortingStrategy,
-  useSortable,
-} from "@dnd-kit/sortable";
-
-import { CSS } from "@dnd-kit/utilities";
-
-function SortableImage({
+function DraggableImage({
   img,
   index,
   removeImage,
-  moveImage,
-  imageCount,
+  onDragStart,
+  onDragEnter,
+  onDragEnd,
+  isDragging,
 }: any) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-  } = useSortable({
-    id: img,
-  });
-
-  const style = {
-    transform:
-      CSS.Transform.toString(
-        transform
-      ),
-    transition,
-  };
-
   return (
     <div
-      ref={setNodeRef}
+      draggable
+      onDragStart={(event) => onDragStart(event, index)}
+      onDragEnter={(event) => onDragEnter(event, index)}
+      onDragOver={(event) => event.preventDefault()}
+      onDragEnd={onDragEnd}
       style={{
         position: "relative",
-        ...style,
+        width: "100%",
+        aspectRatio: "1 / 1",
+        overflow: "hidden",
+        background: "#f3f4f6",
+        opacity: isDragging ? 0.55 : 1,
+        border: isDragging ? "2px solid #2563eb" : "2px solid transparent",
+        borderRadius: 10,
+        cursor: isDragging ? "grabbing" : "grab",
+        boxSizing: "border-box",
       }}
     >
       <img
         src={img}
         style={{
           width: "100%",
-          aspectRatio: "4/3",
+          height: "100%",
           objectFit: "cover",
-          borderRadius: 10,
+          display: "block",
         }}
-        {...attributes}
-        {...listeners}
+        draggable={false}
       />
 
       {index === 0 && (
@@ -102,51 +82,6 @@ function SortableImage({
       >
         ✕
       </button>
-
-      <div
-        style={{
-          position: "absolute",
-          left: 6,
-          bottom: 6,
-          display: "flex",
-          gap: 6,
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => moveImage(index, index - 1)}
-          disabled={index === 0}
-          style={{
-            background: index === 0 ? "#9ca3af" : "#111827",
-            color: "white",
-            border: "none",
-            borderRadius: 6,
-            width: 30,
-            height: 26,
-            cursor: index === 0 ? "default" : "pointer",
-          }}
-          title="Đưa ảnh lên trước"
-        >
-          ←
-        </button>
-        <button
-          type="button"
-          onClick={() => moveImage(index, index + 1)}
-          disabled={index === imageCount - 1}
-          style={{
-            background: index === imageCount - 1 ? "#9ca3af" : "#111827",
-            color: "white",
-            border: "none",
-            borderRadius: 6,
-            width: 30,
-            height: 26,
-            cursor: index === imageCount - 1 ? "default" : "pointer",
-          }}
-          title="Đưa ảnh xuống sau"
-        >
-          →
-        </button>
-      </div>
     </div>
   );
 }
@@ -208,35 +143,8 @@ const [amenities, setAmenities] =
 
   const [images, setImages] =
     useState<string[]>([]);
-
-  const handleDragEnd = (
-  event: any
-) => {
-  const { active, over } =
-    event;
-
-  if (
-    !over ||
-    active.id === over.id
-  )
-    return;
-
-  setImages((items) => {
-    const oldIndex =
-      items.indexOf(
-        active.id
-      );
-
-    const newIndex =
-      items.indexOf(over.id);
-
-    return arrayMove(
-      items,
-      oldIndex,
-      newIndex
-    );
-  });
-};  
+  const [draggedImageIndex, setDraggedImageIndex] =
+    useState<number | null>(null);
 
   const [uploading, setUploading] =
     useState(false);
@@ -309,6 +217,34 @@ const [amenities, setAmenities] =
 
       return nextImages;
     });
+  };
+
+  const handleImageDragStart = (
+    event: DragEvent<HTMLDivElement>,
+    index: number
+  ) => {
+    event.dataTransfer.effectAllowed = "move";
+    setDraggedImageIndex(index);
+  };
+
+  const handleImageDragEnter = (
+    event: DragEvent<HTMLDivElement>,
+    targetIndex: number
+  ) => {
+    event.preventDefault();
+
+    setDraggedImageIndex((currentIndex) => {
+      if (currentIndex === null || currentIndex === targetIndex) {
+        return currentIndex;
+      }
+
+      moveImage(currentIndex, targetIndex);
+      return targetIndex;
+    });
+  };
+
+  const handleImageDragEnd = () => {
+    setDraggedImageIndex(null);
   };
 
 
@@ -726,13 +662,15 @@ console.log("ERROR =", error);
           {/* IMAGE GRID */}
           <div className="gallery" style={styles.gallery}>
             {images.map((img, index) => (
-              <SortableImage
+              <DraggableImage
                 key={img}
                 img={img}
                 index={index}
                 removeImage={removeImage}
-                moveImage={moveImage}
-                imageCount={images.length}
+                onDragStart={handleImageDragStart}
+                onDragEnter={handleImageDragEnter}
+                onDragEnd={handleImageDragEnd}
+                isDragging={draggedImageIndex === index}
               />
             ))}
           </div>
@@ -826,19 +764,24 @@ const styles: any = {
 
   gallery: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-    gap: 10,
+    gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
+    gap: 12,
   },
 
   imageBox: {
     position: "relative",
+    width: "100%",
+    aspectRatio: "1 / 1",
+    borderRadius: 10,
+    overflow: "hidden",
+    background: "#f3f4f6",
   },
 
   image: {
     width: "100%",
-    aspectRatio: "4/3",
+    height: "100%",
     objectFit: "cover",
-    borderRadius: 10,
+    display: "block",
   },
 
   removeBtn: {

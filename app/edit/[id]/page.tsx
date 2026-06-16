@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type DragEvent,
   useEffect,
   useState,
 } from "react";
@@ -82,6 +83,8 @@ const [amenities, setAmenities] =
 
   const [images, setImages] =
     useState<string[]>([]);
+  const [draggedImageIndex, setDraggedImageIndex] =
+    useState<number | null>(null);
 
   // LOAD DATA
  useEffect(() => {
@@ -183,6 +186,34 @@ const [amenities, setAmenities] =
 
       return nextImages;
     });
+  };
+
+  const handleImageDragStart = (
+    event: DragEvent<HTMLDivElement>,
+    index: number
+  ) => {
+    event.dataTransfer.effectAllowed = "move";
+    setDraggedImageIndex(index);
+  };
+
+  const handleImageDragEnter = (
+    event: DragEvent<HTMLDivElement>,
+    targetIndex: number
+  ) => {
+    event.preventDefault();
+
+    setDraggedImageIndex((currentIndex) => {
+      if (currentIndex === null || currentIndex === targetIndex) {
+        return currentIndex;
+      }
+
+      moveImage(currentIndex, targetIndex);
+      return targetIndex;
+    });
+  };
+
+  const handleImageDragEnd = () => {
+    setDraggedImageIndex(null);
   };
 
   // UPDATE
@@ -436,11 +467,20 @@ window.location.href = "/";
             {images.map((img, index) => (
               <div
                 key={index}
-                style={styles.imageBox}
+                draggable
+                onDragStart={(event) => handleImageDragStart(event, index)}
+                onDragEnter={(event) => handleImageDragEnter(event, index)}
+                onDragOver={(event) => event.preventDefault()}
+                onDragEnd={handleImageDragEnd}
+                style={{
+                  ...styles.imageBox,
+                  ...(draggedImageIndex === index ? styles.imageBoxDragging : {}),
+                }}
               >
                 <img
                   src={img}
                   style={styles.image}
+                  draggable={false}
                 />
 
                 {index === 0 && (
@@ -456,33 +496,6 @@ window.location.href = "/";
                 >
                   ✕
                 </button>
-
-                <div style={styles.orderControls}>
-                  <button
-                    type="button"
-                    onClick={() => moveImage(index, index - 1)}
-                    disabled={index === 0}
-                    style={{
-                      ...styles.orderBtn,
-                      ...(index === 0 ? styles.orderBtnDisabled : {}),
-                    }}
-                    title="Đưa ảnh lên trước"
-                  >
-                    ←
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => moveImage(index, index + 1)}
-                    disabled={index === images.length - 1}
-                    style={{
-                      ...styles.orderBtn,
-                      ...(index === images.length - 1 ? styles.orderBtnDisabled : {}),
-                    }}
-                    title="Đưa ảnh xuống sau"
-                  >
-                    →
-                  </button>
-                </div>
               </div>
             ))}
           </div>
@@ -568,20 +581,34 @@ const styles: any = {
   },
 
   gallery: {
-    display: "flex",
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
     gap: 12,
-    flexWrap: "wrap",
   },
 
   imageBox: {
     position: "relative",
+    width: "100%",
+    aspectRatio: "1 / 1",
+    overflow: "hidden",
+    background: "#f3f4f6",
+    border: "2px solid transparent",
+    borderRadius: 10,
+    cursor: "grab",
+    boxSizing: "border-box",
+  },
+
+  imageBoxDragging: {
+    opacity: 0.55,
+    border: "2px solid #2563eb",
+    cursor: "grabbing",
   },
 
   image: {
-    width: 140,
-    height: 100,
+    width: "100%",
+    height: "100%",
     objectFit: "cover",
-    borderRadius: 10,
+    display: "block",
   },
 
   removeBtn: {
@@ -607,29 +634,6 @@ const styles: any = {
     padding: "3px 6px",
     fontSize: 12,
     fontWeight: 700,
-  },
-
-  orderControls: {
-    position: "absolute",
-    left: 6,
-    bottom: 6,
-    display: "flex",
-    gap: 6,
-  },
-
-  orderBtn: {
-    background: "#111827",
-    color: "white",
-    border: "none",
-    borderRadius: 6,
-    width: 30,
-    height: 26,
-    cursor: "pointer",
-  },
-
-  orderBtnDisabled: {
-    background: "#9ca3af",
-    cursor: "default",
   },
 
   button: {
