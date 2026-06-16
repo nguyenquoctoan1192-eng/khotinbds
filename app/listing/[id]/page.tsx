@@ -24,6 +24,8 @@ export default function ListingDetail() {
   const [showPhone, setShowPhone] = useState(false);
   const [listing, setListing] = useState<any>(null);
   const [mainImage, setMainImage] = useState("");
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [showImageModal, setShowImageModal] = useState(false);
   const [shareMessage, setShareMessage] = useState("");
 
   useEffect(() => {
@@ -39,6 +41,7 @@ export default function ListingDetail() {
       if (data) {
         setListing(data);
         setMainImage(data.images?.[0] || "");
+        setSelectedImageIndex(0);
       }
     };
 
@@ -138,6 +141,27 @@ export default function ListingDetail() {
     setShareMessage("Nếu Zalo không mở được, hãy copy link để gửi thủ công.");
   };
 
+  const images = Array.isArray(listing?.images) ? listing.images : [];
+  const imageCount = images.length;
+  const currentImage = images[selectedImageIndex] || mainImage || "";
+
+  const selectImage = (index: number) => {
+    if (imageCount === 0) return;
+    const nextIndex = Math.max(0, Math.min(index, imageCount - 1));
+    setSelectedImageIndex(nextIndex);
+    setMainImage(images[nextIndex] || "");
+  };
+
+  const showPreviousImage = () => {
+    if (imageCount === 0) return;
+    selectImage((selectedImageIndex - 1 + imageCount) % imageCount);
+  };
+
+  const showNextImage = () => {
+    if (imageCount === 0) return;
+    selectImage((selectedImageIndex + 1) % imageCount);
+  };
+
   const loadImageForCanvas = (src: string) =>
     new Promise<HTMLImageElement>((resolve, reject) => {
       const image = new Image();
@@ -215,7 +239,7 @@ export default function ListingDetail() {
     ctx.fillRect(imageX, imageY, imageW, imageH);
 
     try {
-      const coverImage = await loadImageForCanvas(mainImage || listing.images?.[0] || "");
+      const coverImage = await loadImageForCanvas(currentImage || listing.images?.[0] || "");
       const ratio = Math.min(imageW / coverImage.width, imageH / coverImage.height);
       const drawW = coverImage.width * ratio;
       const drawH = coverImage.height * ratio;
@@ -292,16 +316,52 @@ export default function ListingDetail() {
         <div style={styles.left}>
           <div style={styles.card}>
             <div style={styles.mainImageFrame}>
-              <img src={mainImage} style={styles.mainImage} />
+              {imageCount > 1 && (
+                <button
+                  type="button"
+                  onClick={showPreviousImage}
+                  style={{ ...styles.galleryArrow, ...styles.galleryArrowLeft }}
+                  aria-label="Ảnh trước"
+                >
+                  ‹
+                </button>
+              )}
+              {currentImage ? (
+                <img
+                  src={currentImage}
+                  style={styles.mainImage}
+                  onClick={() => setShowImageModal(true)}
+                />
+              ) : (
+                <div style={styles.imagePlaceholder}>BDS</div>
+              )}
+              {imageCount > 1 && (
+                <button
+                  type="button"
+                  onClick={showNextImage}
+                  style={{ ...styles.galleryArrow, ...styles.galleryArrowRight }}
+                  aria-label="Ảnh sau"
+                >
+                  ›
+                </button>
+              )}
+              {imageCount > 0 && (
+                <div style={styles.imageCounter}>
+                  {selectedImageIndex + 1} / {imageCount}
+                </div>
+              )}
             </div>
 
             <div style={styles.thumbRow}>
-              {listing.images?.map((img: string, i: number) => (
+              {images.map((img: string, i: number) => (
                 <img
                   key={i}
                   src={img}
-                  onClick={() => setMainImage(img)}
-                  style={styles.thumb}
+                  onClick={() => selectImage(i)}
+                  style={{
+                    ...styles.thumb,
+                    ...(i === selectedImageIndex ? styles.thumbActive : {}),
+                  }}
                 />
               ))}
             </div>
@@ -403,6 +463,59 @@ export default function ListingDetail() {
         </div>
 
       </div>
+      {showImageModal && currentImage && (
+        <div style={styles.imageModal} onClick={() => setShowImageModal(false)}>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              setShowImageModal(false);
+            }}
+            style={styles.modalClose}
+            aria-label="Đóng ảnh"
+          >
+            ×
+          </button>
+
+          {imageCount > 1 && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                showPreviousImage();
+              }}
+              style={{ ...styles.modalArrow, ...styles.modalArrowLeft }}
+              aria-label="Ảnh trước"
+            >
+              ‹
+            </button>
+          )}
+
+          <img
+            src={currentImage}
+            style={styles.modalImage}
+            onClick={(event) => event.stopPropagation()}
+          />
+
+          {imageCount > 1 && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                showNextImage();
+              }}
+              style={{ ...styles.modalArrow, ...styles.modalArrowRight }}
+              aria-label="Ảnh sau"
+            >
+              ›
+            </button>
+          )}
+
+          <div style={styles.modalCounter}>
+            {selectedImageIndex + 1} / {imageCount}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -490,12 +603,56 @@ const styles: any = {
     justifyContent: "center",
     borderRadius: 10,
     overflow: "hidden",
+    position: "relative",
   },
 
   mainImage: {
     width: "100%",
     height: "100%",
     objectFit: "contain",
+    cursor: "zoom-in",
+  },
+
+  imagePlaceholder: {
+    color: "#9ca3af",
+    fontWeight: "bold",
+    fontSize: 28,
+  },
+
+  imageCounter: {
+    position: "absolute",
+    right: 12,
+    bottom: 12,
+    background: "rgba(17,24,39,0.78)",
+    color: "white",
+    padding: "5px 9px",
+    borderRadius: 999,
+    fontSize: 13,
+    fontWeight: 700,
+  },
+
+  galleryArrow: {
+    position: "absolute",
+    top: "50%",
+    transform: "translateY(-50%)",
+    width: 38,
+    height: 48,
+    border: "none",
+    borderRadius: 8,
+    background: "rgba(17,24,39,0.68)",
+    color: "white",
+    fontSize: 34,
+    lineHeight: 1,
+    cursor: "pointer",
+    zIndex: 2,
+  },
+
+  galleryArrowLeft: {
+    left: 10,
+  },
+
+  galleryArrowRight: {
+    right: 10,
   },
 
   thumbRow: {
@@ -511,6 +668,80 @@ const styles: any = {
     objectFit: "cover",
     borderRadius: 8,
     cursor: "pointer",
+    border: "2px solid transparent",
+    flex: "0 0 auto",
+  },
+
+  thumbActive: {
+    border: "2px solid #2563eb",
+  },
+
+  imageModal: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.92)",
+    zIndex: 20000,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+  },
+
+  modalImage: {
+    maxWidth: "100%",
+    maxHeight: "88vh",
+    objectFit: "contain",
+  },
+
+  modalClose: {
+    position: "absolute",
+    top: 16,
+    right: 16,
+    width: 42,
+    height: 42,
+    borderRadius: "50%",
+    border: "none",
+    background: "rgba(255,255,255,0.18)",
+    color: "white",
+    fontSize: 30,
+    cursor: "pointer",
+    zIndex: 3,
+  },
+
+  modalArrow: {
+    position: "absolute",
+    top: "50%",
+    transform: "translateY(-50%)",
+    width: 48,
+    height: 62,
+    border: "none",
+    borderRadius: 10,
+    background: "rgba(255,255,255,0.16)",
+    color: "white",
+    fontSize: 42,
+    cursor: "pointer",
+    zIndex: 3,
+  },
+
+  modalArrowLeft: {
+    left: 16,
+  },
+
+  modalArrowRight: {
+    right: 16,
+  },
+
+  modalCounter: {
+    position: "absolute",
+    bottom: 18,
+    left: "50%",
+    transform: "translateX(-50%)",
+    background: "rgba(255,255,255,0.18)",
+    color: "white",
+    padding: "7px 12px",
+    borderRadius: 999,
+    fontSize: 14,
+    fontWeight: 700,
   },
 
   title: {
