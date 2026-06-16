@@ -20,6 +20,8 @@ type PublicChatProfile = {
   business_type: string | null;
   business: string | null;
   location: string | null;
+  primary_location: string | null;
+  alternative_locations: string[];
   budget: string | null;
   area: string | null;
   structure: string | null;
@@ -51,7 +53,10 @@ type ChatResult = {
   lead?: unknown;
 };
 
-type PublicChatRequirementKey = Exclude<keyof PublicChatProfile, "stage">;
+type PublicChatRequirementKey = Exclude<
+  keyof PublicChatProfile,
+  "stage" | "primary_location" | "alternative_locations"
+>;
 
 const profileKeys: PublicChatRequirementKey[] = [
   "purpose",
@@ -74,6 +79,8 @@ const profileLabels: Record<keyof PublicChatProfile, string> = {
   business_type: "business type",
   business: "business/use case",
   location: "location/district",
+  primary_location: "primary location",
+  alternative_locations: "alternative locations",
   budget: "budget",
   area: "area",
   structure: "structure",
@@ -89,6 +96,8 @@ const emptyProfile = (): PublicChatProfile => ({
   business_type: null,
   business: null,
   location: null,
+  primary_location: null,
+  alternative_locations: [],
   budget: null,
   area: null,
   structure: null,
@@ -166,6 +175,9 @@ const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\
 
 const normalizeSpaces = (value: string) => value.replace(/\s+/g, " ").trim();
 
+const normalizeDistrictLabel = (label: string) =>
+  label.replace(/^Quận\s+(Phú Nhuận|Bình Thạnh|Gò Vấp|Tân Bình|Tân Phú|Bình Tân)$/i, "$1");
+
 const extractDistrict = (text: string) => {
   const normalized = normalizeSpaces(normalizeText(text).replace(/\./g, ". "));
 
@@ -180,7 +192,7 @@ const extractDistrict = (text: string) => {
         new RegExp(`\\b${escapeRegExp(normalizeSpaces(alias))}\\b`).test(normalized)
       )
     ) {
-      return district.label;
+      return normalizeDistrictLabel(district.label);
     }
   }
 
@@ -285,6 +297,49 @@ const extractBusinessType = (text: string) => {
   return null;
 };
 
+const uniqueValues = <T,>(values: T[]) => Array.from(new Set(values));
+
+const uniqueLocations = (values: string[]) => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const value of values) {
+    const normalized = normalizeText(value || "");
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(value);
+  }
+
+  return result;
+};
+
+const extractDistricts = (text: string) => {
+  const normalized = normalizeSpaces(normalizeText(text).replace(/\./g, ". "));
+  const found: string[] = [];
+
+  for (let district = 1; district <= 12; district += 1) {
+    const pattern = new RegExp(`\\b(?:quan\\s*${district}|q\\.?\\s*${district})\\b`);
+    if (pattern.test(normalized)) found.push(`Quận ${district}`);
+  }
+
+  for (const district of canonicalDistricts.slice(12)) {
+    if (
+      district.aliases.some((alias) =>
+        new RegExp(`\\b${escapeRegExp(normalizeSpaces(alias))}\\b`).test(normalized)
+      )
+    ) {
+      found.push(normalizeDistrictLabel(district.label));
+    }
+  }
+
+  return uniqueValues(found);
+};
+
+const hasAlternativeLocationIntent = (text: string) =>
+  /neu khong co|hoac|cung duoc|mo rong|them quan|tim them|chuyen qua/.test(
+    normalizeText(text)
+  ) && extractDistricts(text).length > 0;
+
 const extractMoveInTime = (text: string) => {
   const normalized = normalizeSpaces(normalizeText(text));
   const patterns = [
@@ -388,11 +443,30 @@ const mergeProfiles = (...profiles: Partial<PublicChatProfile>[]): PublicChatPro
       merged.stage = profile.stage;
     }
 
+    if (profile.primary_location) {
+      merged.primary_location = profile.primary_location;
+    }
+
+    if (Array.isArray(profile.alternative_locations)) {
+      merged.alternative_locations = uniqueLocations([
+        ...merged.alternative_locations,
+        ...profile.alternative_locations,
+      ]).filter(
+        (location) =>
+          location &&
+          normalizeText(location) !== normalizeText(merged.location || "")
+      );
+    }
+
     return merged;
   }, emptyProfile());
 
 const extractProfile = (text: string, existing: Partial<PublicChatProfile>) => {
   const profile = mergeProfiles(existing);
+  if (profile.location && !profile.primary_location) {
+    profile.primary_location = profile.location;
+  }
+  const previousPrimaryLocation = profile.primary_location || profile.location;
   const normalized = normalizeText(text);
   const phoneOnlyMessage = isPhoneCaptureOnlyMessage(text);
   const phoneMatch = extractVietnamesePhone(text);
@@ -403,13 +477,17 @@ const extractProfile = (text: string, existing: Partial<PublicChatProfile>) => {
   const moveInMatch = text.match(/(?:tháng này|tháng sau|tuần này|tuần sau|vào ở ngay|nhận nhà ngay|đầu tháng|cuối tháng|\d{1,2}\/\d{1,2})/i);
   const extractedMoveInTime = phoneOnlyMessage ? null : extractMoveInTime(text);
   const locationMatch = text.match(/(?:bình thạnh|phú nhuận|gò vấp|tân bình|thủ đức|quận\s*\d+|q\.\s*\d+|quận\s*[^\s,.;]+)/i);
-  const nameMatch = text.match(/(?:tôi tên|mình tên|em tên|anh tên|chị tên|tên là)\s+([A-Za-zÀ-ỹ\s]{2,30})/i);
+  const nameMatches = Array.from(
+    text.matchAll(/(?:tôi tên|mình tên|em tên|anh tên|chị tên|tên là)\s+([A-Za-zÀ-ỹ ]{2,30})/gi)
+  );
+  const nameMatch = nameMatches.at(-1);
 
   const extractedBudget = phoneOnlyMessage ? null : extractBudget(text);
   const extractedBusiness = extractBusiness(text);
   const extractedPurpose = extractPurpose(text);
   const extractedBusinessType = extractBusinessType(text);
   const extractedDistrict = extractDistrict(text);
+  const extractedDistricts = phoneOnlyMessage ? [] : extractDistricts(text);
   const dimensions = extractDimensions(text);
   const businessDetailMatch = text.match(/(?:đậu xe|dau xe|parking|bãi xe|bai xe|thang máy|thang may|cách âm|cach am|riêng tư|rieng tu|thoát mùi|thoat mui|bếp|bep|đông người|dong nguoi|khách đi bộ|khach di bo|foot traffic)/i);
   const occupancyMatch = text.match(/\d+\s*(?:người|nguoi|khách|khach|chỗ|cho|seat|seats|team|nhân viên|nhan vien)/i);
@@ -436,13 +514,48 @@ const extractProfile = (text: string, existing: Partial<PublicChatProfile>) => {
   if (!phoneOnlyMessage && extractedMoveInTime) profile.move_in_time = extractedMoveInTime;
   if (!phoneOnlyMessage && !profile.move_in_time && moveInMatch) profile.move_in_time = moveInMatch[0];
   if (!phoneOnlyMessage && extractedDistrict) profile.location = extractedDistrict;
+  if (!phoneOnlyMessage && profile.location && !profile.primary_location) {
+    profile.primary_location = profile.location;
+  }
+  if (!phoneOnlyMessage && hasAlternativeLocationIntent(text) && extractedDistricts.length > 0) {
+    const primary =
+      (previousPrimaryLocation && extractedDistricts.length === 1
+        ? previousPrimaryLocation
+        : null) ||
+      extractedDistricts.find(
+        (district) => normalizeText(district) === normalizeText(previousPrimaryLocation || "")
+      ) ||
+      extractedDistricts[0] ||
+      previousPrimaryLocation ||
+      profile.location ||
+      "";
+    profile.location = primary;
+    profile.primary_location = primary;
+    profile.alternative_locations = uniqueLocations(
+      extractedDistricts.filter(
+        (district) => normalizeText(district) !== normalizeText(primary)
+      )
+    );
+  }
   if (!phoneOnlyMessage && !profile.location && locationMatch) profile.location = locationMatch[0];
-  if (!phoneOnlyMessage && !profile.name && nameMatch?.[1]) profile.name = nameMatch[1].trim();
+  if (!phoneOnlyMessage && profile.location && !profile.primary_location) {
+    profile.primary_location = profile.location;
+  }
+  if (!phoneOnlyMessage && !profile.name && nameMatch?.[1]) {
+    profile.name = nameMatch[1]
+      .replace(/\b(anh|chị|chi|em|ạ|a|nha|nhé|nhe)\b/gi, "")
+      .trim();
+  }
 
   if (!phoneOnlyMessage && dimensions) {
     profile.area = String(dimensions.area);
+    const floorDetail = text.match(/\d+\s*(?:lầu|lau|tầng|tang)/i)?.[0];
     if (!profile.structure || /ngang|dai|dài|x/i.test(profile.structure)) {
-      profile.structure = dimensions.label;
+      profile.structure = uniqueValues(
+        [dimensions.label, floorDetail].filter(Boolean) as string[]
+      ).join(", ");
+    } else if (!normalizeText(profile.structure).includes(normalizeText(dimensions.label))) {
+      profile.structure = uniqueValues([dimensions.label, profile.structure]).join(", ");
     }
   }
 
@@ -475,6 +588,7 @@ const extractProfile = (text: string, existing: Partial<PublicChatProfile>) => {
   const latestLocationMatch = text.match(/(?:chuyển sang|chuyen sang|qua|sang)\s+([^,.;\n]+)/i);
   if (latestLocationMatch?.[1]) {
     profile.location = extractDistrict(latestLocationMatch[1]) || latestLocationMatch[1].trim();
+    profile.primary_location = profile.location;
   }
 
   return profile;
@@ -497,6 +611,76 @@ const hasEnoughToAskPhone = (profile: PublicChatProfile) =>
       profile.purpose &&
       profile.budget
   );
+
+const hasHandoffDetails = (profile: PublicChatProfile) =>
+  Boolean(profile.area || profile.structure || profile.frontage || profile.move_in_time);
+
+const isReadyToHandoff = (profile: PublicChatProfile) =>
+  Boolean(
+    profile.phone &&
+      profile.location &&
+      profile.budget &&
+      profile.purpose &&
+      hasHandoffDetails(profile)
+  );
+
+const isNoMoreInfoReply = (message: string) =>
+  /^(khong|khong em|chua|chua em|vay thoi|du roi|du roi em|khong can them|het roi|het roi em|ok vay|ok em)\b/.test(
+    normalizeSpaces(normalizeText(message))
+  );
+
+const formatLocationWithAlternatives = (profile: PublicChatProfile) => {
+  const primary = profile.primary_location || profile.location;
+  const alternatives = (profile.alternative_locations || []).filter(
+    (location) => location && location !== primary
+  );
+
+  if (!primary) return "";
+  if (alternatives.length === 0) return primary;
+
+  return `${primary}, có thể mở rộng ${alternatives.join("/")}`;
+};
+
+const buildAlternativeLocationReply = (profile: PublicChatProfile) => {
+  const primary = profile.primary_location || profile.location;
+  const alternatives = (profile.alternative_locations || []).filter(
+    (location) => location && location !== primary
+  );
+
+  if (!primary || alternatives.length === 0) {
+    return "Dạ được anh, em sẽ mở rộng thêm khu vực phù hợp để lọc sát hơn cho mình nha.";
+  }
+
+  return `Dạ vậy em ưu tiên ${primary} trước, nếu chưa có căn đẹp thì em mở rộng thêm ${alternatives.join(" và ")} cho anh nha.`;
+};
+
+const buildHandoffSummary = (profile: PublicChatProfile) => {
+  const name = profile.name ? ` ${profile.name}` : "";
+  const lines = [
+    profile.purpose ? `- ${profile.purpose}` : "",
+    formatLocationWithAlternatives(profile)
+      ? `- Ưu tiên ${formatLocationWithAlternatives(profile)}`
+      : "",
+    profile.budget ? `- Dưới ${formatBudgetForReply(profile.budget) || profile.budget}` : "",
+    [profile.structure, profile.area ? `tầm ${profile.area}m2` : ""]
+      .filter(Boolean)
+      .join(", ")
+      ? `- ${[profile.structure, profile.area ? `tầm ${profile.area}m2` : ""]
+          .filter(Boolean)
+          .join(", ")}`
+      : "",
+    profile.frontage ? `- ${profile.frontage}` : "",
+    profile.move_in_time ? `- Dọn ${profile.move_in_time}` : "",
+  ].filter(Boolean);
+
+  return [
+    `Dạ ok anh${name}. Em nắm nhu cầu của anh rồi:`,
+    lines.join("\n"),
+    "Em sẽ lọc lại và gửi các căn sát hơn qua Zalo cho anh.",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+};
 
 const summarizeKnownV2 = (profile: PublicChatProfile) => {
   const parts = [
@@ -546,7 +730,7 @@ const reactionFor = (message: string, profile: PublicChatProfile) => {
     return "Dạ kích thước vậy lọc mặt bằng sẽ sát hơn anh.";
   }
   if (/tr|trieu|ty|ti|ngan sach|gia/.test(normalized)) {
-    return "Dạ với ngân sách này vẫn có lựa chọn đó anh.";
+    return "Dạ, em sẽ giữ ngân sách này làm mốc để lọc cho sát anh.";
   }
   if (/quan|q\.?\s*\d+|phu nhuan|binh thanh|go vap|tan binh|tan phu|thu duc/.test(normalized)) {
     return "Dạ khu vực đó em thấy ổn để bắt đầu lọc anh.";
@@ -555,7 +739,7 @@ const reactionFor = (message: string, profile: PublicChatProfile) => {
     return "Dạ không sao anh, mình cứ trao đổi thêm để em lọc đúng hơn.";
   }
 
-  return "Em nghe tiêu chí này rồi anh.";
+  return "Dạ được anh.";
 };
 
 const usefulStepFor = (message: string, profile: PublicChatProfile) => {
@@ -696,7 +880,7 @@ const nextQuestionForV2 = (profile: PublicChatProfile) => {
     return "Em tiện xưng hô với mình thế nào ạ?";
   }
 
-  return "Anh/chị còn tiêu chí nào muốn em lưu ý thêm không ạ?";
+  return "Em sẽ lọc theo tiêu chí này trước cho anh nha.";
 };
 
 const fallbackReplyV2 = (message: string, profile: PublicChatProfile) => {
@@ -733,6 +917,8 @@ const removeRepetitiveBridgePhrases = (reply: string) =>
       return ![
         "tam nay em co the loc truoc vai can phu hop cho minh",
         "da em hieu roi",
+        "em nghe tieu chi nay roi anh",
+        "da voi ngan sach nay van co lua chon do anh",
       ].includes(normalized);
     })
     .join("\n\n");
@@ -1615,6 +1801,71 @@ export async function POST(req: Request) {
         playbook_id: null,
         next_best_question: "",
         suggested_reply: publicReply,
+        property_suggestions: [],
+        ready_to_save: readyToSave,
+        lead_created: leadCreated,
+        lead,
+      });
+    }
+
+    if (hasAlternativeLocationIntent(currentMessage) && extractedProfile.alternative_locations.length > 0) {
+      const profile: PublicChatProfile = {
+        ...extractedProfile,
+        stage: "recommend",
+      };
+      const reply = buildAlternativeLocationReply(profile);
+
+      return NextResponse.json({
+        success: true,
+        reply,
+        reply_parts: [reply],
+        suggestion_followup_parts: [],
+        profile,
+        conversation_stage: "recommend",
+        detected_intent: null,
+        playbook_id: null,
+        next_best_question: "",
+        suggested_reply: reply,
+        property_suggestions: [],
+        ready_to_save: isReadyToSave(profile),
+        lead_created: false,
+        lead: null,
+      });
+    }
+
+    if (isNoMoreInfoReply(currentMessage)) {
+      const profile: PublicChatProfile = {
+        ...extractedProfile,
+        stage: isReadyToHandoff(extractedProfile) ? "ready_to_handoff" : extractedProfile.stage,
+      };
+      const readyToSave = isReadyToSave(profile);
+      let leadCreated = false;
+      let lead: unknown = null;
+      const reply = isReadyToHandoff(profile)
+        ? buildHandoffSummary(profile)
+        : `Dạ không sao anh.\n\n${nextQuestionForV2(profile)}`;
+
+      if (readyToSave && !body.lead_created) {
+        lead = await createLeadSafely(
+          req,
+          [...history, { role: "user", content: currentMessage }, { role: "assistant", content: reply }],
+          profile,
+          null
+        );
+        leadCreated = Boolean(lead);
+      }
+
+      return NextResponse.json({
+        success: true,
+        reply,
+        reply_parts: reply.split(/\n{2,}/).filter(Boolean),
+        suggestion_followup_parts: [],
+        profile,
+        conversation_stage: profile.stage || "handoff",
+        detected_intent: null,
+        playbook_id: null,
+        next_best_question: isReadyToHandoff(profile) ? "" : nextQuestionForV2(profile),
+        suggested_reply: reply,
         property_suggestions: [],
         ready_to_save: readyToSave,
         lead_created: leadCreated,

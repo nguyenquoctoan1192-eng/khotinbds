@@ -1,4 +1,4 @@
-export type ConversationStage = "discover" | "qualify" | "recommend" | "handoff" | "followup";
+export type ConversationStage = "discover" | "qualify" | "recommend" | "handoff" | "followup" | "ready_to_handoff";
 
 export type PlaybookId =
   | "ask_photo"
@@ -22,6 +22,8 @@ export type PlaybookProfile = {
   business_type?: string | null;
   business?: string | null;
   location?: string | null;
+  primary_location?: string | null;
+  alternative_locations?: string[];
   budget?: string | null;
   area?: string | null;
   structure?: string | null;

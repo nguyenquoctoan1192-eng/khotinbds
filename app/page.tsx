@@ -20,6 +20,8 @@ type PublicChatProfile = {
   business_type: string | null;
   business: string | null;
   location: string | null;
+  primary_location: string | null;
+  alternative_locations: string[];
   budget: string | null;
   area: string | null;
   structure: string | null;
@@ -49,6 +51,8 @@ const emptyPublicChatProfile = (): PublicChatProfile => ({
   business_type: null,
   business: null,
   location: null,
+  primary_location: null,
+  alternative_locations: [],
   budget: null,
   area: null,
   structure: null,
