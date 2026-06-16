@@ -23,6 +23,8 @@ function SortableImage({
   img,
   index,
   removeImage,
+  moveImage,
+  imageCount,
 }: any) {
   const {
     attributes,
@@ -46,41 +48,105 @@ function SortableImage({
     <div
       ref={setNodeRef}
       style={{
-      position: "relative",
-      ...style,
-}}
+        position: "relative",
+        ...style,
+      }}
     >
       <img
-      src={img}
-      style={{
-      width: "100%",
-      aspectRatio: "4/3",
-      objectFit: "cover",
-      borderRadius: 10,
-  }}
-  {...attributes}
-  {...listeners}
-/>
+        src={img}
+        style={{
+          width: "100%",
+          aspectRatio: "4/3",
+          objectFit: "cover",
+          borderRadius: 10,
+        }}
+        {...attributes}
+        {...listeners}
+      />
+
+      {index === 0 && (
+        <div
+          style={{
+            position: "absolute",
+            left: 6,
+            top: 6,
+            background: "#16a34a",
+            color: "white",
+            borderRadius: 6,
+            padding: "3px 6px",
+            fontSize: 12,
+            fontWeight: 700,
+          }}
+        >
+          Ảnh bìa
+        </div>
+      )}
 
       <button
+        type="button"
         onClick={() =>
           removeImage(index)
         }
         style={{
-        position: "absolute",
-        top: 6,
-        right: 6,
-        background: "red",
-        color: "white",
-        border: "none",
-        borderRadius: "50%",
-        width: 24,
-        height: 24,
-        cursor: "pointer",
-}}
+          position: "absolute",
+          top: 6,
+          right: 6,
+          background: "red",
+          color: "white",
+          border: "none",
+          borderRadius: "50%",
+          width: 24,
+          height: 24,
+          cursor: "pointer",
+        }}
       >
         ✕
       </button>
+
+      <div
+        style={{
+          position: "absolute",
+          left: 6,
+          bottom: 6,
+          display: "flex",
+          gap: 6,
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => moveImage(index, index - 1)}
+          disabled={index === 0}
+          style={{
+            background: index === 0 ? "#9ca3af" : "#111827",
+            color: "white",
+            border: "none",
+            borderRadius: 6,
+            width: 30,
+            height: 26,
+            cursor: index === 0 ? "default" : "pointer",
+          }}
+          title="Đưa ảnh lên trước"
+        >
+          ←
+        </button>
+        <button
+          type="button"
+          onClick={() => moveImage(index, index + 1)}
+          disabled={index === imageCount - 1}
+          style={{
+            background: index === imageCount - 1 ? "#9ca3af" : "#111827",
+            color: "white",
+            border: "none",
+            borderRadius: 6,
+            width: 30,
+            height: 26,
+            cursor: index === imageCount - 1 ? "default" : "pointer",
+          }}
+          title="Đưa ảnh xuống sau"
+        >
+          →
+        </button>
+      </div>
     </div>
   );
 }
@@ -229,6 +295,20 @@ const [amenities, setAmenities] =
     newImages.splice(index, 1);
 
     setImages(newImages);
+  };
+
+  const moveImage = (fromIndex: number, toIndex: number) => {
+    setImages((current) => {
+      if (toIndex < 0 || toIndex >= current.length) {
+        return current;
+      }
+
+      const nextImages = [...current];
+      const [movedImage] = nextImages.splice(fromIndex, 1);
+      nextImages.splice(toIndex, 0, movedImage);
+
+      return nextImages;
+    });
   };
 
 
@@ -651,6 +731,8 @@ console.log("ERROR =", error);
                 img={img}
                 index={index}
                 removeImage={removeImage}
+                moveImage={moveImage}
+                imageCount={images.length}
               />
             ))}
           </div>

@@ -24,6 +24,7 @@ export default function ListingDetail() {
   const [showPhone, setShowPhone] = useState(false);
   const [listing, setListing] = useState<any>(null);
   const [mainImage, setMainImage] = useState("");
+  const [shareMessage, setShareMessage] = useState("");
 
   useEffect(() => {
     if (!id) return;
@@ -55,6 +56,78 @@ export default function ListingDetail() {
       .eq("id", listing.id);
 
     location.reload();
+  };
+
+  const formatSharePrice = () =>
+    `${Number(listing.price || 0).toLocaleString("vi-VN")} VNĐ`;
+
+  const getListingUrl = () => {
+    if (typeof window === "undefined") return "";
+    return window.location.href;
+  };
+
+  const buildShareText = () => {
+    const parts = [
+      listing.title,
+      `Giá: ${formatSharePrice()}`,
+      listing.district ? `Khu vực: ${listing.district}` : "",
+      listing.area ? `Diện tích: ${listing.area}m²` : "",
+      getListingUrl(),
+    ].filter(Boolean);
+
+    return parts.join("\n");
+  };
+
+  const copyListingUrl = async (message = "Đã copy link") => {
+    await navigator.clipboard.writeText(getListingUrl());
+    setShareMessage(message);
+  };
+
+  const shareListing = async () => {
+    const url = getListingUrl();
+    const text = buildShareText();
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: listing.title || "Bất động sản",
+          text,
+          url,
+        });
+        setShareMessage("Đã mở chia sẻ");
+        return;
+      }
+
+      await copyListingUrl();
+    } catch (error) {
+      if ((error as Error)?.name === "AbortError") return;
+      await copyListingUrl();
+    }
+  };
+
+  const shareFacebook = () => {
+    const url = encodeURIComponent(getListingUrl());
+    window.open(
+      `https://www.facebook.com/sharer/sharer.php?u=${url}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  };
+
+  const shareZalo = async () => {
+    const url = encodeURIComponent(getListingUrl());
+    const popup = window.open(
+      `https://zalo.me/share?u=${url}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+
+    if (!popup) {
+      await copyListingUrl("Đã copy link, bạn có thể dán vào Zalo.");
+      return;
+    }
+
+    setShareMessage("Nếu Zalo không mở được, hãy copy link để gửi thủ công.");
   };
 
   if (!listing) {
@@ -146,6 +219,25 @@ export default function ListingDetail() {
           >
             ✏️ Sửa tin
           </button>
+
+          <button style={styles.btnShare} onClick={shareListing}>
+            Chia sẻ
+          </button>
+
+          <div style={styles.shareRow}>
+            <button style={styles.btnZalo} onClick={shareZalo}>
+              Zalo
+            </button>
+            <button style={styles.btnFacebook} onClick={shareFacebook}>
+              Facebook
+            </button>
+          </div>
+
+          {shareMessage && (
+            <div style={styles.shareMessage}>
+              {shareMessage}
+            </div>
+          )}
 
           <button
             style={styles.btnRed}
@@ -326,6 +418,52 @@ const styles: any = {
     color: "white",
     border: "none",
     borderRadius: 10,
+  },
+
+  btnShare: {
+    padding: 14,
+    background: "#111827",
+    color: "white",
+    border: "none",
+    borderRadius: 10,
+    cursor: "pointer",
+    fontWeight: "bold",
+  },
+
+  shareRow: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 8,
+  },
+
+  btnZalo: {
+    padding: 12,
+    background: "#0068ff",
+    color: "white",
+    border: "none",
+    borderRadius: 10,
+    cursor: "pointer",
+    fontWeight: "bold",
+  },
+
+  btnFacebook: {
+    padding: 12,
+    background: "#1877f2",
+    color: "white",
+    border: "none",
+    borderRadius: 10,
+    cursor: "pointer",
+    fontWeight: "bold",
+  },
+
+  shareMessage: {
+    background: "#ecfdf5",
+    color: "#166534",
+    border: "1px solid #bbf7d0",
+    borderRadius: 10,
+    padding: 10,
+    fontSize: 13,
+    lineHeight: 1.4,
   },
 
   btnRed: {

@@ -171,6 +171,20 @@ const [amenities, setAmenities] =
     setImages(newImages);
   };
 
+  const moveImage = (fromIndex: number, toIndex: number) => {
+    setImages((current) => {
+      if (toIndex < 0 || toIndex >= current.length) {
+        return current;
+      }
+
+      const nextImages = [...current];
+      const [movedImage] = nextImages.splice(fromIndex, 1);
+      nextImages.splice(toIndex, 0, movedImage);
+
+      return nextImages;
+    });
+  };
+
   // UPDATE
   const updatePost = async () => {
   setLoading(true);
@@ -419,36 +433,58 @@ window.location.href = "/";
 
           {/* GALLERY */}
           <div style={styles.gallery}>
-            {images.map(
-              (img, index) => (
-                <div
-                  key={index}
-                  style={
-                    styles.imageBox
-                  }
-                >
-                  <img
-                    src={img}
-                    style={
-                      styles.image
-                    }
-                  />
+            {images.map((img, index) => (
+              <div
+                key={index}
+                style={styles.imageBox}
+              >
+                <img
+                  src={img}
+                  style={styles.image}
+                />
 
+                {index === 0 && (
+                  <div style={styles.coverBadge}>
+                    Ảnh bìa
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => removeImage(index)}
+                  style={styles.removeBtn}
+                >
+                  ✕
+                </button>
+
+                <div style={styles.orderControls}>
                   <button
-                    onClick={() =>
-                      removeImage(
-                        index
-                      )
-                    }
-                    style={
-                      styles.removeBtn
-                    }
+                    type="button"
+                    onClick={() => moveImage(index, index - 1)}
+                    disabled={index === 0}
+                    style={{
+                      ...styles.orderBtn,
+                      ...(index === 0 ? styles.orderBtnDisabled : {}),
+                    }}
+                    title="Đưa ảnh lên trước"
                   >
-                    ✕
+                    ←
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveImage(index, index + 1)}
+                    disabled={index === images.length - 1}
+                    style={{
+                      ...styles.orderBtn,
+                      ...(index === images.length - 1 ? styles.orderBtnDisabled : {}),
+                    }}
+                    title="Đưa ảnh xuống sau"
+                  >
+                    →
                   </button>
                 </div>
-              )
-            )}
+              </div>
+            ))}
           </div>
 
           {/* BUTTON */}
@@ -559,6 +595,41 @@ const styles: any = {
     width: 24,
     height: 24,
     cursor: "pointer",
+  },
+
+  coverBadge: {
+    position: "absolute",
+    left: 6,
+    top: 6,
+    background: "#16a34a",
+    color: "white",
+    borderRadius: 6,
+    padding: "3px 6px",
+    fontSize: 12,
+    fontWeight: 700,
+  },
+
+  orderControls: {
+    position: "absolute",
+    left: 6,
+    bottom: 6,
+    display: "flex",
+    gap: 6,
+  },
+
+  orderBtn: {
+    background: "#111827",
+    color: "white",
+    border: "none",
+    borderRadius: 6,
+    width: 30,
+    height: 26,
+    cursor: "pointer",
+  },
+
+  orderBtnDisabled: {
+    background: "#9ca3af",
+    cursor: "default",
   },
 
   button: {
