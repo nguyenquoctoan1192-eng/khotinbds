@@ -92,6 +92,59 @@ export default function ListingDetail() {
     );
   };
 
+  const buildImageFileName = (index: number) => {
+    const safeTitle =
+      (listing.title || "listing")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/đ/g, "d")
+        .replace(/Đ/g, "D")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "listing";
+
+    return `${safeTitle}-${index + 1}.jpg`;
+  };
+
+  const downloadImageUrl = async (url: string, fileName: string) => {
+    try {
+      const response = await fetch(url, { mode: "cors" });
+      if (!response.ok) throw new Error("Cannot download image");
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch {
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.click();
+    }
+  };
+
+  const downloadListingImages = async () => {
+    const listingImages = Array.isArray(listing.images) ? listing.images : [];
+
+    if (listingImages.length === 0) {
+      setShareMessage("Tin này chưa có ảnh để tải.");
+      return;
+    }
+
+    for (const [index, imageUrl] of listingImages.entries()) {
+      await downloadImageUrl(imageUrl, buildImageFileName(index));
+    }
+
+    setShareMessage("Đã tải ảnh. Bạn có thể gửi kèm qua Zalo/Facebook.");
+  };
+
   const images = Array.isArray(listing?.images) ? listing.images : [];
   const imageCount = images.length;
   const currentImage = images[selectedImageIndex] || mainImage || "";
@@ -243,6 +296,10 @@ export default function ListingDetail() {
 
           <button style={styles.btnShare} onClick={shareListing}>
             Chia sẻ
+          </button>
+
+          <button style={styles.btnDownloadImages} onClick={downloadListingImages}>
+            Tải ảnh
           </button>
 
           {shareMessage && (
@@ -616,6 +673,16 @@ const styles: any = {
   btnShare: {
     padding: 14,
     background: "#111827",
+    color: "white",
+    border: "none",
+    borderRadius: 10,
+    cursor: "pointer",
+    fontWeight: "bold",
+  },
+
+  btnDownloadImages: {
+    padding: 14,
+    background: "#0f766e",
     color: "white",
     border: "none",
     borderRadius: 10,
