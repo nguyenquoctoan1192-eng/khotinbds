@@ -59,7 +59,6 @@ const emptyPublicChatProfile = (): PublicChatProfile => ({
 export default function Home() {
   const router = useRouter();
   const aiChatContainerRef = useRef<HTMLDivElement | null>(null);
-  const aiChatEndRef = useRef<HTMLDivElement | null>(null);
   const [listings, setListings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -97,24 +96,30 @@ export default function Home() {
   const [aiChatLoading, setAiChatLoading] = useState(false);
   const [aiChatError, setAiChatError] = useState("");
   const [aiChatLeadCreated, setAiChatLeadCreated] = useState(false);
+  const aiPropertySuggestionsKey = aiChatMessages
+    .map((message) => `${message.property_suggestions?.length || 0}:${message.suggestion_followup_parts?.length || 0}`)
+    .join("|");
+
+  const scrollChatToBottom = () => {
+    const el = aiChatContainerRef.current;
+
+    if (!el) {
+      return;
+    }
+
+    el.scrollTop = el.scrollHeight;
+  };
 
   useEffect(() => {
-    const scrollToLatestMessage = () => {
-      aiChatEndRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "end",
-      });
-    };
-
     if (!showAiChat || !aiChatContainerRef.current) {
       return;
     }
 
-    scrollToLatestMessage();
-    const timer = window.setTimeout(scrollToLatestMessage, 50);
+    scrollChatToBottom();
+    const timer = window.setTimeout(scrollChatToBottom, 80);
 
     return () => window.clearTimeout(timer);
-  }, [aiChatMessages, aiChatLoading, showAiChat]);
+  }, [aiChatMessages, aiChatLoading, aiPropertySuggestionsKey, showAiChat]);
 
   const getListingFromResult = (item: any) => item.listing || item;
 
@@ -860,7 +865,6 @@ export default function Home() {
                 Đang tư vấn...
               </div>
             )}
-            <div ref={aiChatEndRef} />
           </div>
 
           <div style={{ borderTop: "1px solid #e5e7eb", padding: 12 }}>

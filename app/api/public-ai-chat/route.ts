@@ -10,6 +10,7 @@ import {
 type ChatMessage = {
   role: "assistant" | "user";
   content: string;
+  showed_property_suggestions?: boolean;
 };
 
 type PublicChatProfile = {
@@ -554,7 +555,30 @@ const reactionFor = (message: string, profile: PublicChatProfile) => {
     return "Dạ không sao anh, mình cứ trao đổi thêm để em lọc đúng hơn.";
   }
 
-  return "Dạ anh.";
+  return "Em nghe tiêu chí này rồi anh.";
+};
+
+const usefulStepFor = (message: string, profile: PublicChatProfile) => {
+  const normalized = normalizeText(message);
+
+  if (/ngang|dai|m2|\d+\s*x\s*\d+/.test(normalized)) {
+    const area = profile.area ? ` khoảng ${profile.area}m2` : "";
+    return `Em sẽ ưu tiên các căn tầm${area} cho mình.`;
+  }
+
+  if (/hem|xe hoi|hxh|hxt|oto|o to/.test(normalized)) {
+    return "Loại này đi lại tiện hơn và dễ để xe hơn anh.";
+  }
+
+  if (/dau thang|cuoi thang|thang\s+\d+|tuan sau|trong thang|nhan nha|don vao|vao o/.test(normalized)) {
+    return "Em sẽ ưu tiên các căn còn trống hoặc giao nhà kịp thời điểm đó.";
+  }
+
+  if (/studio/.test(normalized)) {
+    return "Em sẽ lọc căn có không gian thoáng, dễ set ánh sáng và giữ riêng tư hơn.";
+  }
+
+  return "";
 };
 
 const businessKind = (profile: PublicChatProfile) => {
@@ -677,21 +701,16 @@ const nextQuestionForV2 = (profile: PublicChatProfile) => {
 
 const fallbackReplyV2 = (message: string, profile: PublicChatProfile) => {
   const reaction = reactionFor(message, profile);
+  const usefulStep = usefulStepFor(message, profile);
   const shouldAskPhone = !profile.phone && hasEnoughToAskPhone(profile);
   const question = nextQuestionForV2(profile);
+  const parts = [reaction, usefulStep, question].filter(Boolean);
 
   if (shouldAskPhone) {
-    return `${reaction}\n\n${question}`;
+    return parts.join("\n\n");
   }
 
-  return `${reaction}\n\n${question}`;
-
-  const helpfulComment =
-    profile.location && profile.budget
-      ? "Tầm này em có thể lọc trước vài căn phù hợp cho mình."
-      : "Mình cứ nói nhu cầu tự nhiên, em sẽ lọc dần cho sát anh.";
-
-  return `${reaction}\n\n${helpfulComment}\n\n${question}`;
+  return parts.join("\n\n");
 };
 
 const openingSentence = (text: string) =>
@@ -718,6 +737,42 @@ const removeRepetitiveBridgePhrases = (reply: string) =>
     })
     .join("\n\n");
 
+const removeRepeatedContactAsk = (reply: string, history: ChatMessage[], message: string) => {
+  const normalizedMessage = normalizeText(message);
+
+  if (/co hinh|gui hinh|hinh|video|clip|xem nha|di xem|hen xem/.test(normalizedMessage)) {
+    return reply;
+  }
+
+  const hasContactAsk = (text: string) =>
+    /zalo|so dien thoai|dien thoai|sdt|phone|lien he/.test(normalizeText(text));
+
+  const recentlyAskedContact = history
+    .filter((item) => item.role === "assistant")
+    .slice(-3)
+    .some((item) => hasContactAsk(item.content));
+
+  if (!recentlyAskedContact || !hasContactAsk(reply)) {
+    return reply;
+  }
+
+  const cleaned = reply
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => {
+      const normalized = normalizeText(line);
+
+      return (
+        !hasContactAsk(line) &&
+        !/^vay la minh dang tim/.test(normalized) &&
+        !/^da em nam nhu cau/.test(normalized)
+      );
+    })
+    .join("\n\n");
+
+  return cleaned || reply;
+};
+
 const hasRepeatedOpening = (reply: string, history: ChatMessage[]) => {
   const opening = normalizeText(openingSentence(reply));
 
@@ -740,6 +795,13 @@ const enforceFreshOpening = (
   profile: PublicChatProfile
 ) => {
   reply = removeRepetitiveBridgePhrases(reply);
+  reply = removeRepeatedContactAsk(reply, history, message);
+
+  if (!reply.trim()) {
+    reply = [reactionFor(message, profile), usefulStepFor(message, profile)]
+      .filter(Boolean)
+      .join("\n\n");
+  }
 
   if (!hasRepeatedOpening(reply, history)) return reply;
 
@@ -961,7 +1023,11 @@ const buildSuggestionComment = (
   return "ngân sách tốt";
 };
 
-const buildReplyParts = (reply: string, suggestions: PropertySuggestion[]) => {
+const buildReplyParts = (
+  reply: string,
+  suggestions: PropertySuggestion[],
+  message = ""
+) => {
   const parts = reply
     .split(/\n{2,}/)
     .map((part) => part.replace(/\s+/g, " ").trim())
@@ -969,6 +1035,16 @@ const buildReplyParts = (reply: string, suggestions: PropertySuggestion[]) => {
   const safeParts = parts.length > 0 ? parts : [reply.trim()].filter(Boolean);
 
   if (suggestions.length > 0) {
+    const normalizedMessage = normalizeText(message);
+    const isPhotoOrVideoRequest = /co hinh|gui hinh|video|clip/.test(normalizedMessage);
+
+    if (isPhotoOrVideoRequest) {
+      return [
+        "Dạ có anh, em gửi lại vài căn để mình xem trước.",
+        "Hình thực tế em gửi qua Zalo sẽ rõ hơn phần hiện trạng và ánh sáng.",
+      ];
+    }
+
     const intro = safeParts.find((part) => {
       const normalized = normalizeText(part);
       return (
@@ -978,8 +1054,8 @@ const buildReplyParts = (reply: string, suggestions: PropertySuggestion[]) => {
     });
 
     return [
-      intro || "Dạ em lọc được vài lựa chọn khá sát nhu cầu anh.",
-      "Em gửi anh xem từng căn, mỗi căn có một điểm mạnh riêng nha.",
+      intro || "Có vài lựa chọn đáng xem anh.",
+      "Em để từng căn riêng bên dưới cho mình dễ cân nhắc.",
     ];
   }
 
@@ -994,8 +1070,8 @@ const buildSuggestionFollowupParts = (
 
   const compare =
     suggestions.length === 1
-      ? "Căn này em thấy gọn nhu cầu, mình có thể xem thêm hình trước rồi quyết định đi thực tế."
-      : "So nhanh thì mỗi căn có một lợi thế: có căn mạnh về vị trí, có căn lợi hơn về diện tích hoặc ngân sách.";
+      ? "Căn này khá gọn nhu cầu, mình xem thêm hình thực tế là dễ quyết hơn."
+      : "Nhìn chung, có căn mạnh về vị trí, có căn lợi hơn về diện tích hoặc ngân sách.";
   const phoneAsk = profile.phone
     ? "Anh dùng Zalo số này luôn để em gửi thêm hình thực tế và lịch xem cho mình nhé?"
     : "Anh cho em xin Zalo hoặc số điện thoại nhé, em gửi thêm hình thực tế và lọc tiếp căn sát hơn cho mình.";
@@ -1054,6 +1130,30 @@ const buildListingSuggestions = async (
       comment_label: buildSuggestionComment(suggestion, listing.area, profile),
     };
   });
+};
+
+const shouldShowPropertySuggestions = (
+  message: string,
+  history: ChatMessage[],
+  suggestions: PropertySuggestion[]
+) => {
+  if (suggestions.length === 0) return false;
+
+  const normalizedMessage = normalizeText(message);
+  const explicitListingRequest =
+    /xem them|can khac|lua chon khac|goi y|co can|co hinh|gui hinh|gui them nha|video|clip/.test(
+      normalizedMessage
+    );
+  const recentlyShowedSuggestions = history
+    .filter((item) => item.role === "assistant")
+    .some((item) =>
+      Boolean(item.showed_property_suggestions) ||
+      /co vai lua chon dang xem|em de tung can rieng ben duoi|can nay kha gon nhu cau|nhin chung/.test(
+        normalizeText(item.content)
+      )
+    );
+
+  return explicitListingRequest || !recentlyShowedSuggestions;
 };
 
 
@@ -1128,8 +1228,6 @@ Không dùng các kiểu câu robot, câu yêu cầu kiểu biểu mẫu, hoặc
 
 Ưu tiên:
 
-* Dạ anh.
-* Dạ chị.
 * Em thấy...
 * Vậy là...
 * Nghe hợp lý anh.
@@ -1460,6 +1558,10 @@ export async function POST(req: Request) {
           .map((item: ChatMessage) => ({
             role: item.role === "assistant" ? "assistant" : "user",
             content: String(item.content),
+            showed_property_suggestions:
+              item.role === "assistant" &&
+              Array.isArray((item as any).property_suggestions) &&
+              (item as any).property_suggestions.length > 0,
           }))
       : [];
     const currentMessage = compactString(body.message) || history.at(-1)?.content || "";
@@ -1486,7 +1588,7 @@ export async function POST(req: Request) {
         stage: "handoff",
       };
       const reply =
-        "Dạ em nhận được số của anh rồi.\nEm sẽ gửi thêm hình thực tế và các căn phù hợp qua Zalo cho mình nhé.";
+        "Dạ em nhận được số của anh rồi.\nEm gửi thêm hình thực tế và mấy căn sát nhu cầu qua Zalo cho mình nhé.";
       const readyToSave = isReadyToSave(profile);
       let leadCreated = false;
       let lead: unknown = null;
@@ -1500,18 +1602,19 @@ export async function POST(req: Request) {
         );
         leadCreated = Boolean(lead);
       }
+      const publicReply = reply.replace(/\s*\n\s*/g, " ");
 
       return NextResponse.json({
         success: true,
-        reply,
-        reply_parts: reply.split("\n").filter(Boolean),
+        reply: publicReply,
+        reply_parts: [publicReply],
         suggestion_followup_parts: [],
         profile,
         conversation_stage: "handoff",
         detected_intent: null,
         playbook_id: null,
-        next_best_question: nextQuestionForV2(profile),
-        suggested_reply: reply,
+        next_best_question: "",
+        suggested_reply: publicReply,
         property_suggestions: [],
         ready_to_save: readyToSave,
         lead_created: leadCreated,
@@ -1525,14 +1628,21 @@ export async function POST(req: Request) {
     const isRequirementAnswer = Boolean(
       extractMoveInTime(currentMessage) ||
         extractDimensions(currentMessage) ||
-        /mat tien|hem|xe hoi|hxh|hxt|oto|o to|ngang|dai|m2|\d+\s*x\s*\d+/.test(normalizedCurrentMessage)
+        /studio|spa|cafe|ca phe|mat tien|hem|xe hoi|hxh|hxt|oto|o to|ngang|dai|m2|\d+\s*x\s*\d+/.test(normalizedCurrentMessage)
     );
-    const playbookSelection = selectPlaybook({
-      message: currentMessage,
-      profile: extractedProfile,
-      hasPropertySuggestions: !isRequirementAnswer && propertySuggestions.length > 0,
-      nextQuestion: nextBestQuestion,
-    });
+    const playbookSelection: PlaybookSelection = isRequirementAnswer
+      ? {
+          intent: null,
+          stage: detectConversationStage(extractedProfile, null, propertySuggestions.length > 0),
+          playbook: null,
+          skeleton: nextBestQuestion,
+        }
+      : selectPlaybook({
+          message: currentMessage,
+          profile: extractedProfile,
+          hasPropertySuggestions: propertySuggestions.length > 0,
+          nextQuestion: nextBestQuestion,
+        });
     const baseProfile: PublicChatProfile = {
       ...extractedProfile,
       stage: playbookSelection.stage,
@@ -1628,11 +1738,18 @@ export async function POST(req: Request) {
       }
     }
 
+    const visiblePropertySuggestions = shouldShowPropertySuggestions(
+      currentMessage,
+      history,
+      propertySuggestions
+    )
+      ? propertySuggestions
+      : [];
     const readyToSave = isReadyToSave(profile);
     let leadCreated = false;
     let lead: unknown;
-    const replyParts = buildReplyParts(reply, propertySuggestions);
-    const suggestionFollowupParts = buildSuggestionFollowupParts(propertySuggestions, profile);
+    const replyParts = buildReplyParts(reply, visiblePropertySuggestions, currentMessage);
+    const suggestionFollowupParts = buildSuggestionFollowupParts(visiblePropertySuggestions, profile);
 
     if (readyToSave && !body.lead_created) {
       lead = await createLeadSafely(
@@ -1652,13 +1769,13 @@ export async function POST(req: Request) {
       conversation_stage: getConversationStage(
         profile,
         playbookSelection.intent,
-        propertySuggestions.length > 0
+        visiblePropertySuggestions.length > 0
       ),
       detected_intent: playbookSelection.intent,
       playbook_id: playbookSelection.playbook?.id || null,
       next_best_question: nextQuestionForV2(profile),
       suggested_reply: reply,
-      property_suggestions: propertySuggestions,
+      property_suggestions: visiblePropertySuggestions,
       ready_to_save: readyToSave,
       lead_created: leadCreated,
       lead,

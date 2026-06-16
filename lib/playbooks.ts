@@ -65,6 +65,11 @@ const hasCoreNeed = (profile: PlaybookProfile) =>
 const hasQualifiedNeed = (profile: PlaybookProfile) =>
   Boolean(hasCoreNeed(profile) && (profile.area || profile.structure || profile.frontage || profile.move_in_time));
 
+const needsBusinessType = (profile: PlaybookProfile) =>
+  profile.purpose === "kinh doanh" &&
+  !profile.business_type &&
+  /mat bang|kinh doanh|mặt bằng/i.test(String(profile.business || ""));
+
 const formatNeed = (profile: PlaybookProfile) =>
   [
     profile.business_type || profile.business || profile.purpose,
@@ -222,8 +227,9 @@ export const selectPlaybook = (context: PlaybookContext): PlaybookSelection => {
   const detectedIntent = detectIntent(context.message);
   const autoIntent: PlaybookId | null =
     detectedIntent ||
-    (context.hasPropertySuggestions ? "compare_properties" : null) ||
-    (hasCoreNeed(context.profile) && !context.profile.phone ? "ask_contact" : null);
+    (hasCoreNeed(context.profile) && !context.profile.phone && !needsBusinessType(context.profile)
+      ? "ask_contact"
+      : null);
   const playbook = autoIntent ? playbooks.find((item) => item.id === autoIntent) || null : null;
   const stage = detectConversationStage(context.profile, autoIntent, context.hasPropertySuggestions);
 
@@ -234,6 +240,6 @@ export const selectPlaybook = (context: PlaybookContext): PlaybookSelection => {
     skeleton:
       playbook?.responseSkeleton(context) ||
       context.nextQuestion ||
-      "Dạ anh, mình nói thêm nhu cầu để em lọc sát hơn nhé.",
+      "Mình nói thêm nhu cầu một chút, em lọc sát hơn cho anh nhé.",
   };
 };
