@@ -7,6 +7,15 @@ import {
   getNextActionPriorityRank,
   type NextBestActionResult,
 } from "@/lib/nextBestAction";
+import {
+  calculateFollowUp,
+  getFollowUpPriorityRank,
+  type FollowUpEngineResult,
+} from "@/lib/followUpEngine";
+import {
+  buildLeadAssignments,
+  type LeadAssignmentResult,
+} from "@/lib/leadAssignment";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +44,8 @@ type LeadWithNextAction = {
   lead: Lead;
   latestActivity: LeadActivity | null;
   nextBestAction: NextBestActionResult;
+  followUpPlan: FollowUpEngineResult;
+  assignment: LeadAssignmentResult;
 };
 
 const STATUSES = [
@@ -187,6 +198,22 @@ const sortByNextAction = (a: LeadWithNextAction, b: LeadWithNextAction) =>
   getDaysSince(b.latestActivity?.created_at || b.lead.created_at) -
     getDaysSince(a.latestActivity?.created_at || a.lead.created_at);
 
+const isFollowUpDue = (item: LeadWithNextAction, today: number) => {
+  if (!item.followUpPlan.next_follow_up_date) {
+    return false;
+  }
+
+  const date = createLocalDate(item.followUpPlan.next_follow_up_date);
+
+  return Boolean(date && startOfLocalDay(date).getTime() <= today);
+};
+
+const sortByFollowUp = (a: LeadWithNextAction, b: LeadWithNextAction) =>
+  getFollowUpPriorityRank(a.followUpPlan.priority) -
+    getFollowUpPriorityRank(b.followUpPlan.priority) ||
+  getDaysSince(b.latestActivity?.created_at || b.lead.created_at) -
+    getDaysSince(a.latestActivity?.created_at || a.lead.created_at);
+
 const getLeads = async () => {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -294,6 +321,18 @@ function NextActionList({
               <div style={{ color: "#6b7280", fontSize: 13, lineHeight: 1.4 }}>
                 {item.nextBestAction.reason}
               </div>
+              <div style={{ color: "#4b5563", fontSize: 13, lineHeight: 1.4 }}>
+                Follow-up: {item.followUpPlan.next_follow_up_date || "chưa cần"} · {item.followUpPlan.priority}
+              </div>
+              <div style={{ color: "#6b7280", fontSize: 12, lineHeight: 1.4 }}>
+                {item.followUpPlan.follow_up_reason}
+              </div>
+              <div style={{ color: "#7c2d12", fontSize: 13, lineHeight: 1.4, fontWeight: 700 }}>
+                Phụ trách: {item.assignment.assigned_to}
+              </div>
+              <div style={{ color: "#9a3412", fontSize: 12, lineHeight: 1.4 }}>
+                {item.assignment.assignment_reason}
+              </div>
             </Link>
           ))}
         </div>
@@ -307,6 +346,14 @@ function NextActionList({
 export default async function DashboardPage() {
   const { leads, activities, error } = await getLeads();
   const today = startOfLocalDay(new Date()).getTime();
+  const assignmentMap = buildLeadAssignments(
+    leads.map((lead) => ({
+      id: lead.id,
+      preferred_districts: lead.preferred_districts,
+      lead_temperature: getLeadTemperature(lead),
+      lead_score: getLeadScore(lead),
+    }))
+  );
   const leadsWithNextAction = leads.map((lead) => {
     const leadActivities = activities
       .filter((activity) => activity.lead_id === lead.id)
@@ -324,17 +371,30 @@ export default async function DashboardPage() {
       status: lead.status,
       phone: lead.phone,
     });
+    const followUpPlan = calculateFollowUp({
+      latest_activity: latestActivity,
+      days_since_last_activity: getDaysSince(latestActivity?.created_at || lead.created_at),
+      status: lead.status,
+    });
 
     return {
       lead,
       latestActivity,
       nextBestAction,
+      followUpPlan,
+      assignment: assignmentMap[lead.id] || {
+        assigned_to: "Chưa phân công",
+        assignment_reason: "Chưa đủ dữ liệu để phân công.",
+      },
     };
   });
   const leadsWithFollowUp = leads.map((lead) => ({
     lead,
     followUpDate: extractFollowUp(lead.note),
   }));
+  const aiFollowUpDueItems = leadsWithNextAction
+    .filter((item) => isFollowUpDue(item, today))
+    .sort(sortByFollowUp);
   const dueToday = leadsWithFollowUp.filter(
     (item) => item.followUpDate && startOfLocalDay(item.followUpDate).getTime() === today
   );
@@ -342,6 +402,7 @@ export default async function DashboardPage() {
     (item) => item.followUpDate && startOfLocalDay(item.followUpDate).getTime() < today
   );
   const kpis = [
+    { label: "Leads cần chăm sóc hôm nay", value: aiFollowUpDueItems.length },
     { label: "Tổng khách", value: leads.length },
     { label: "Hot leads", value: leads.filter((lead) => getLeadTemperature(lead) === "Hot").length },
     { label: "Warm leads", value: leads.filter((lead) => getLeadTemperature(lead) === "Warm").length },
@@ -364,6 +425,39 @@ export default async function DashboardPage() {
   const waitingItems = leadsWithNextAction
     .filter((item) => item.nextBestAction.next_action === "wait")
     .sort(sortByNextAction);
+  const assignmentStats = Object.values(
+    leadsWithNextAction.reduce(
+      (acc, item) => {
+        const key = item.assignment.assigned_to;
+
+        if (!acc[key]) {
+          acc[key] = {
+            assigned_to: key,
+            count: 0,
+            hot: 0,
+            sample_reason: item.assignment.assignment_reason,
+          };
+        }
+
+        acc[key].count += 1;
+
+        if (getLeadTemperature(item.lead) === "Hot") {
+          acc[key].hot += 1;
+        }
+
+        return acc;
+      },
+      {} as Record<
+        string,
+        {
+          assigned_to: string;
+          count: number;
+          hot: number;
+          sample_reason: string;
+        }
+      >
+    )
+  ).sort((a, b) => b.hot - a.hot || b.count - a.count);
 
   return (
     <div style={{ fontFamily: "Arial", minHeight: "100vh", background: "#f3f4f6" }}>
@@ -429,7 +523,29 @@ export default async function DashboardPage() {
           </div>
         </section>
 
+        <section style={{ background: "#fff", borderRadius: 8, padding: 16, marginBottom: 22 }}>
+          <h2 style={{ marginTop: 0, fontSize: 20 }}>Phân công lead</h2>
+          {assignmentStats.length > 0 ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+              {assignmentStats.map((item) => (
+                <div key={item.assigned_to} style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 8, padding: 12 }}>
+                  <strong>{item.assigned_to}</strong>
+                  <div style={{ color: "#7c2d12", marginTop: 6 }}>
+                    {item.count} lead · {item.hot} Hot
+                  </div>
+                  <div style={{ color: "#9a3412", fontSize: 13, marginTop: 6, lineHeight: 1.4 }}>
+                    {item.sample_reason}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ color: "#6b7280" }}>Chưa có lead để phân công.</div>
+          )}
+        </section>
+
         <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16, marginBottom: 22 }}>
+          <NextActionList title="Leads cần chăm sóc hôm nay" items={aiFollowUpDueItems} />
           <NextActionList title="Việc cần làm hôm nay" items={todaysActions} />
           <NextActionList title="Cần gọi ngay" items={callNowItems} />
           <NextActionList title="Cần follow-up" items={followUpItems} />

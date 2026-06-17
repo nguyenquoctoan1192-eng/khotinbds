@@ -12,6 +12,14 @@ import {
   calculateNextBestAction,
   getNextActionLabel,
 } from "@/lib/nextBestAction";
+import {
+  calculateFollowUp,
+  type FollowUpEngineResult,
+} from "@/lib/followUpEngine";
+import {
+  buildLeadAssignments,
+  type LeadAssignmentResult,
+} from "@/lib/leadAssignment";
 
 type Lead = {
   id: string;
@@ -42,6 +50,8 @@ type LeadWithFollowUp = {
   followUpDate: Date | null;
   followUpText: string;
   followUpStatus: FollowUpStatus;
+  followUpPlan: FollowUpEngineResult;
+  assignment: LeadAssignmentResult;
   activities: LeadActivity[];
 };
 
@@ -535,6 +545,7 @@ function CustomerCard({
     status: lead.status,
     phone: lead.phone,
   });
+  const followUpPlan = item.followUpPlan;
   const [customerMessage, setCustomerMessage] = useState("");
   const [assistantLoading, setAssistantLoading] = useState(false);
   const [assistantError, setAssistantError] = useState("");
@@ -669,6 +680,46 @@ function CustomerCard({
         <strong>{getNextActionLabel(nextBestAction.next_action)}</strong>
         <div style={{ color: "#4b5563", marginTop: 4, lineHeight: 1.4 }}>
           {nextBestAction.reason}
+        </div>
+      </div>
+
+      <div
+        style={{
+          background: "#f8fafc",
+          border: "1px solid #e2e8f0",
+          borderRadius: 8,
+          padding: 10,
+          marginBottom: 12,
+        }}
+      >
+        <div style={{ color: "#6b7280", fontSize: 13, marginBottom: 4 }}>
+          AI follow-up - {followUpPlan.priority}
+        </div>
+        <strong>
+          {followUpPlan.next_follow_up_date
+            ? `Chăm sóc: ${followUpPlan.next_follow_up_date}`
+            : "Chưa cần chăm sóc"}
+        </strong>
+        <div style={{ color: "#4b5563", marginTop: 4, lineHeight: 1.4 }}>
+          {followUpPlan.follow_up_reason}
+        </div>
+      </div>
+
+      <div
+        style={{
+          background: "#fff7ed",
+          border: "1px solid #fed7aa",
+          borderRadius: 8,
+          padding: 10,
+          marginBottom: 12,
+        }}
+      >
+        <div style={{ color: "#9a3412", fontSize: 13, marginBottom: 4 }}>
+          Phân công phụ trách
+        </div>
+        <strong>{item.assignment.assigned_to}</strong>
+        <div style={{ color: "#7c2d12", marginTop: 4, lineHeight: 1.4 }}>
+          {item.assignment.assignment_reason}
         </div>
       </div>
 
@@ -983,6 +1034,14 @@ export default function CustomersPage() {
   }, []);
 
   const today = new Date();
+  const assignmentMap = buildLeadAssignments(
+    leads.map((lead) => ({
+      id: lead.id,
+      preferred_districts: lead.preferred_districts,
+      lead_temperature: getLeadTemperature(lead),
+      lead_score: getLeadScore(lead),
+    }))
+  );
   const leadsWithFollowUp = leads.map((lead) => {
     const crmFields = parseCrmFields(lead.note);
     const followUpDate = extractFollowUp(lead.note, crmFields);
@@ -994,6 +1053,12 @@ export default function CustomersPage() {
           new Date(b.created_at || 0).getTime() -
           new Date(a.created_at || 0).getTime()
       );
+    const latestActivity = leadActivities[0] || null;
+    const followUpPlan = calculateFollowUp({
+      latest_activity: latestActivity,
+      days_since_last_activity: getDaysSince(latestActivity?.created_at || lead.created_at),
+      status: lead.status,
+    });
 
     return {
       lead,
@@ -1001,6 +1066,11 @@ export default function CustomersPage() {
       followUpDate,
       followUpText: formatFollowUpDate(followUpDate),
       followUpStatus,
+      followUpPlan,
+      assignment: assignmentMap[lead.id] || {
+        assigned_to: "Chưa phân công",
+        assignment_reason: "Chưa đủ dữ liệu để phân công.",
+      },
       activities: leadActivities,
     };
   });
@@ -1019,6 +1089,13 @@ export default function CustomersPage() {
   const unscheduledItems = leadsWithFollowUp
     .filter((item) => item.followUpStatus === "none")
     .sort(compareLeadTemperature);
+  const followUpDueTodayCount = leadsWithFollowUp.filter(
+    (item) =>
+      item.followUpPlan.next_follow_up_date &&
+      createLocalDate(item.followUpPlan.next_follow_up_date) &&
+      startOfLocalDay(createLocalDate(item.followUpPlan.next_follow_up_date)!).getTime() <=
+        startOfLocalDay(today).getTime()
+  ).length;
 
   const addActivity = async (leadId: string, type: string, content: string) => {
     const res = await fetch("/api/lead-activities", {
@@ -1271,6 +1348,12 @@ export default function CustomersPage() {
 
         {!loading && !error && leads.length > 0 && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10, marginBottom: 20 }}>
+            <div style={{ background: "#fff", borderRadius: 8, padding: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
+              <div style={{ color: "#6b7280", fontSize: 13, marginBottom: 6 }}>
+                Leads cần chăm sóc hôm nay
+              </div>
+              <strong style={{ fontSize: 24 }}>{followUpDueTodayCount}</strong>
+            </div>
             {statusCounts.map((item) => (
               <div key={item.status} style={{ background: "#fff", borderRadius: 8, padding: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
                 <div style={{ color: "#6b7280", fontSize: 13, marginBottom: 6 }}>{item.status}</div>

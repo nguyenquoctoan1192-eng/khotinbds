@@ -152,6 +152,12 @@ const [amenities, setAmenities] =
   const [loading, setLoading] =
     useState(false);
 
+  const [aiContentLoading, setAiContentLoading] =
+    useState(false);
+
+  const [aiContentMessage, setAiContentMessage] =
+    useState("");
+
   // UPLOAD IMAGES
   const uploadImages = async (
     files: FileList | null
@@ -476,6 +482,47 @@ console.log("SET PRICE:", String(priceValue));
   alert("Đã tự điền xong");
 };
 
+  const generateAiContent = async () => {
+    setAiContentMessage("");
+    setAiContentLoading(true);
+
+    try {
+      const res = await fetch("/api/listing-content", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: title || address,
+          price,
+          district,
+          area,
+          description,
+        }),
+      });
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Không tạo được nội dung AI");
+      }
+
+      if (json.content?.listing_title) {
+        setTitle(json.content.listing_title);
+      }
+
+      if (json.content?.short_description) {
+        setDescription(json.content.short_description);
+      }
+
+      setAiContentMessage("Đã tạo nội dung AI cho tiêu đề và mô tả.");
+    } catch (error) {
+      console.error(error);
+      setAiContentMessage("Chưa tạo được nội dung AI, bạn thử lại sau nhé.");
+    } finally {
+      setAiContentLoading(false);
+    }
+  };
+
   // CREATE POST
   const createPost = async () => {
     if (
@@ -645,6 +692,39 @@ console.log("ERROR =", error);
             onChange={(e) => setDescription(e.target.value)}
             style={styles.textarea}
           />
+
+          <button
+            type="button"
+            onClick={generateAiContent}
+            disabled={aiContentLoading}
+            style={{
+              width: "100%",
+              padding: 12,
+              background: aiContentLoading ? "#94a3b8" : "#7c3aed",
+              color: "white",
+              border: "none",
+              borderRadius: 8,
+              cursor: aiContentLoading ? "not-allowed" : "pointer",
+              fontWeight: "bold",
+            }}
+          >
+            {aiContentLoading ? "Đang tạo nội dung..." : "Tạo nội dung AI"}
+          </button>
+
+          {aiContentMessage && (
+            <div
+              style={{
+                background: "#f5f3ff",
+                color: "#5b21b6",
+                border: "1px solid #ddd6fe",
+                borderRadius: 8,
+                padding: 10,
+                fontSize: 14,
+              }}
+            >
+              {aiContentMessage}
+            </div>
+          )}
 
           {/* UPLOAD */}
           <div>
