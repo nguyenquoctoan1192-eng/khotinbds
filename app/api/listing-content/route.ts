@@ -38,12 +38,14 @@ export async function POST(req: Request) {
               type: "object",
               additionalProperties: false,
               properties: {
+                primary_content: { type: "string" },
                 cho_tot_title: { type: "string" },
                 facebook_title: { type: "string" },
                 short_description: { type: "string" },
                 seo_description: { type: "string" },
               },
               required: [
+                "primary_content",
                 "cho_tot_title",
                 "facebook_title",
                 "short_description",

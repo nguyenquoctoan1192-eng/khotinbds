@@ -92,6 +92,7 @@ const supabase = createClient(
 );
 
 type AiListingContent = {
+  primary_content: string;
   cho_tot_title: string;
   facebook_title: string;
   short_description: string;
@@ -506,6 +507,13 @@ console.log("SET PRICE:", String(priceValue));
     setAiContentMessage("");
     setAiContent(null);
     setAiContentLoading(true);
+    const dimensions =
+      width && length
+        ? `${width}x${length}`
+        : area
+          ? `${area}m²`
+          : "";
+    const structure = floors ? `${floors} tầng` : "";
 
     try {
       const res = await fetch("/api/listing-content", {
@@ -518,6 +526,11 @@ console.log("SET PRICE:", String(priceValue));
           address,
           price,
           district,
+          dimensions,
+          structure,
+          bedrooms,
+          wc: bathrooms,
+          contact_phone: contactPhone,
           description,
         }),
       });
@@ -618,6 +631,10 @@ console.log("ERROR =", error);
 
   const aiContentSections = aiContent
     ? [
+        {
+          label: "Nội dung chia sẻ",
+          value: aiContent.primary_content,
+        },
         {
           label: "Tiêu đề Chợ Tốt",
           value: aiContent.cho_tot_title,

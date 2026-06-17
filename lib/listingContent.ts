@@ -4,9 +4,15 @@ export type ListingContentInput = {
   district?: string | null;
   price?: string | number | null;
   description?: string | null;
+  dimensions?: string | null;
+  structure?: string | null;
+  bedrooms?: string | number | null;
+  wc?: string | number | null;
+  contact_phone?: string | null;
 };
 
 export type ListingContentResult = {
+  primary_content: string;
   cho_tot_title: string;
   facebook_title: string;
   short_description: string;
@@ -16,8 +22,14 @@ export type ListingContentResult = {
 const compactText = (value: unknown) =>
   typeof value === "string" && value.trim() ? value.trim() : "";
 
+const compactNumberText = (value: unknown) => {
+  if (value === null || value === undefined || value === "") return "";
+  const text = String(value).trim();
+  return text && text !== "0" ? text : "";
+};
+
 const trimToLength = (value: string, maxLength: number) =>
-  value.length > maxLength ? `${value.slice(0, maxLength - 1).trim()}…` : value;
+  value.length > maxLength ? value.slice(0, maxLength - 1).trim() : value;
 
 export const formatListingPriceLabel = (price: ListingContentInput["price"]) => {
   if (price === null || price === undefined || price === "") return "";
@@ -36,84 +48,107 @@ export const formatListingPriceLabel = (price: ListingContentInput["price"]) => 
   return raw;
 };
 
-const getBaseTitle = (input: ListingContentInput) =>
+const getShortLocation = (input: ListingContentInput) =>
   compactText(input.title) ||
-  compactText(input.address) ||
-  "Nhà cho thuê";
-
-const buildLocationLabel = (input: ListingContentInput) =>
   [compactText(input.address), compactText(input.district)]
     .filter(Boolean)
-    .join(", ");
+    .join(", ") ||
+  "Nhà cho thuê";
+
+const buildRoomLine = (input: ListingContentInput) => {
+  const bedrooms = compactNumberText(input.bedrooms);
+  const wc = compactNumberText(input.wc);
+
+  if (bedrooms && wc) return `${bedrooms}PN - ${wc}WC`;
+  if (bedrooms) return `${bedrooms}PN`;
+  if (wc) return `${wc}WC`;
+
+  return "";
+};
+
+export const buildPrimaryListingContent = (input: ListingContentInput) => {
+  const shortLocation = getShortLocation(input);
+  const price = formatListingPriceLabel(input.price);
+  const dimensions = compactText(input.dimensions);
+  const structure = compactText(input.structure);
+  const roomLine = buildRoomLine(input);
+  const contactPhone = compactText(input.contact_phone);
+  const lines = [
+    `🏠 ${[shortLocation, price].filter(Boolean).join(" - ")}`,
+    dimensions ? `📐 ${dimensions}` : "",
+    structure ? `🏢 ${structure}` : "",
+    roomLine ? `🛏️ ${roomLine}` : "",
+    contactPhone ? `☎️ ${contactPhone}` : "",
+  ].filter(Boolean);
+
+  return lines.slice(0, 5).join("\n");
+};
 
 export const generateListingContentFallback = (
   input: ListingContentInput
 ): ListingContentResult => {
-  const title = getBaseTitle(input);
-  const address = compactText(input.address);
+  const title = getShortLocation(input);
   const district = compactText(input.district);
   const price = formatListingPriceLabel(input.price);
-  const description = compactText(input.description);
-  const location = buildLocationLabel(input) || "vị trí thuận tiện";
-
+  const primaryContent = buildPrimaryListingContent(input);
   const choTotTitle = trimToLength(
     [title, district, price].filter(Boolean).join(" - "),
     70
   );
   const facebookTitle = trimToLength(
-    [`Cho thuê ${title}`, district, price].filter(Boolean).join(" | "),
+    [title, price].filter(Boolean).join(" - "),
     90
   );
-  const shortDescription = [
-    `${title} tại ${location}.`,
-    description ? `Điểm nổi bật: ${description}.` : "",
-    price ? `Giá ${price}, phù hợp khách cần xem nhanh và chốt sớm.` : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
   const seoDescription = trimToLength(
-    [
-      `Cho thuê ${title}`,
-      address ? `địa chỉ ${address}` : "",
-      district ? `khu vực ${district}` : "",
-      price ? `giá ${price}` : "",
-      description,
-    ]
+    [title, district, price, compactText(input.dimensions), compactText(input.structure)]
       .filter(Boolean)
       .join(", "),
     155
   );
 
   return {
+    primary_content: primaryContent,
     cho_tot_title: choTotTitle,
     facebook_title: facebookTitle,
-    short_description: shortDescription,
+    short_description: primaryContent,
     seo_description: seoDescription,
   };
 };
 
 export const buildListingContentPrompt = (input: ListingContentInput) => `
-Bạn là chuyên viên viết nội dung tin đăng bất động sản cho môi giới Việt Nam.
+Bạn là trợ lý định dạng nội dung tin bất động sản cho môi giới Việt Nam.
 
-Hãy tạo 4 nội dung ngắn, rõ, có tính bán hàng nhưng không phóng đại.
-Không bịa thông tin ngoài dữ liệu đầu vào.
-Giữ tiếng Việt tự nhiên, dễ đăng trên Chợ Tốt, Facebook và website.
+Nội dung chính phải dùng đúng format này, tối đa 5 dòng:
+🏠 {short_location} - {price}
+📐 {dimensions}
+🏢 {structure}
+🛏️ {bedrooms}PN - {wc}WC
+☎️ {contact_phone}
 
-Yêu cầu từng trường:
-- cho_tot_title: tiêu đề đăng Chợ Tốt, tối đa 70 ký tự.
-- facebook_title: tiêu đề đăng Facebook, tự nhiên, dễ thu hút, tối đa 90 ký tự.
-- short_description: mô tả ngắn 2-3 câu.
-- seo_description: mô tả SEO tối đa 155 ký tự.
+Rules:
+- Keep under 6 lines.
+- No marketing language.
+- No emojis except: 🏠 📐 🏢 🛏️ ☎️
+- Remove long descriptions by default.
+- Optimize for Facebook groups, Zalo and broker sharing.
+- Do not invent missing facts.
 
 Dữ liệu:
 - Title: ${compactText(input.title) || "chưa có"}
 - Address: ${compactText(input.address) || "chưa có"}
 - District: ${compactText(input.district) || "chưa có"}
 - Price: ${formatListingPriceLabel(input.price) || "chưa có"}
-- Description: ${compactText(input.description) || "chưa có"}
+- Dimensions: ${compactText(input.dimensions) || "chưa có"}
+- Structure: ${compactText(input.structure) || "chưa có"}
+- Bedrooms: ${compactNumberText(input.bedrooms) || "chưa có"}
+- WC: ${compactNumberText(input.wc) || "chưa có"}
+- Contact phone: ${compactText(input.contact_phone) || "chưa có"}
+- Description reference only: ${compactText(input.description) || "chưa có"}
 
 Trả về JSON thuần với:
-cho_tot_title, facebook_title, short_description, seo_description.
+primary_content, cho_tot_title, facebook_title, short_description, seo_description.
+
+short_description should use the same compact sharing format as primary_content.
 `;
 
 export const sanitizeListingContent = (
@@ -121,13 +156,14 @@ export const sanitizeListingContent = (
   input: ListingContentInput
 ): ListingContentResult => {
   const fallback = generateListingContentFallback(input);
+  const primaryContent = fallback.primary_content;
 
   return {
+    primary_content: primaryContent,
     cho_tot_title: compactText(value.cho_tot_title) || fallback.cho_tot_title,
     facebook_title:
       compactText(value.facebook_title) || fallback.facebook_title,
-    short_description:
-      compactText(value.short_description) || fallback.short_description,
+    short_description: primaryContent,
     seo_description:
       compactText(value.seo_description) || fallback.seo_description,
   };
