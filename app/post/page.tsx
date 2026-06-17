@@ -91,6 +91,13 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 );
 
+type AiListingContent = {
+  cho_tot_title: string;
+  facebook_title: string;
+  short_description: string;
+  seo_description: string;
+};
+
 export default function PostPage() {
   const router = useRouter();
 
@@ -157,6 +164,9 @@ const [amenities, setAmenities] =
 
   const [aiContentMessage, setAiContentMessage] =
     useState("");
+
+  const [aiContent, setAiContent] =
+    useState<AiListingContent | null>(null);
 
   // UPLOAD IMAGES
   const uploadImages = async (
@@ -278,6 +288,16 @@ const [amenities, setAmenities] =
 
 const parseZaloPost = () => {
   alert("TEST");
+};
+
+const copyAiContent = async (value: string) => {
+  try {
+    await navigator.clipboard.writeText(value);
+    setAiContentMessage("Đã copy nội dung.");
+  } catch (error) {
+    console.error(error);
+    setAiContentMessage("Chưa copy được nội dung, bạn copy thủ công nhé.");
+  }
 };
 
 const autoFillFromZalo = () => {
@@ -484,6 +504,7 @@ console.log("SET PRICE:", String(priceValue));
 
   const generateAiContent = async () => {
     setAiContentMessage("");
+    setAiContent(null);
     setAiContentLoading(true);
 
     try {
@@ -493,10 +514,10 @@ console.log("SET PRICE:", String(priceValue));
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          title: title || address,
+          title,
+          address,
           price,
           district,
-          area,
           description,
         }),
       });
@@ -506,15 +527,8 @@ console.log("SET PRICE:", String(priceValue));
         throw new Error(json.error || "Không tạo được nội dung AI");
       }
 
-      if (json.content?.listing_title) {
-        setTitle(json.content.listing_title);
-      }
-
-      if (json.content?.short_description) {
-        setDescription(json.content.short_description);
-      }
-
-      setAiContentMessage("Đã tạo nội dung AI cho tiêu đề và mô tả.");
+      setAiContent(json.content);
+      setAiContentMessage("Đã tạo nội dung AI.");
     } catch (error) {
       console.error(error);
       setAiContentMessage("Chưa tạo được nội dung AI, bạn thử lại sau nhé.");
@@ -601,6 +615,27 @@ console.log("ERROR =", error);
 
     router.push("/");
   };
+
+  const aiContentSections = aiContent
+    ? [
+        {
+          label: "Tiêu đề Chợ Tốt",
+          value: aiContent.cho_tot_title,
+        },
+        {
+          label: "Tiêu đề Facebook",
+          value: aiContent.facebook_title,
+        },
+        {
+          label: "Mô tả ngắn",
+          value: aiContent.short_description,
+        },
+        {
+          label: "Mô tả SEO",
+          value: aiContent.seo_description,
+        },
+      ]
+    : [];
 
   return (
   <div style={{ width: "100%", overflowX: "hidden" }}>
@@ -726,6 +761,26 @@ console.log("ERROR =", error);
             </div>
           )}
 
+          {aiContent && (
+            <div style={styles.aiPanel}>
+              {aiContentSections.map((item) => (
+                <div key={item.label} style={styles.aiSection}>
+                  <div style={styles.aiSectionHeader}>
+                    <strong>{item.label}</strong>
+                    <button
+                      type="button"
+                      onClick={() => copyAiContent(item.value)}
+                      style={styles.copyButton}
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <div style={styles.aiOutput}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* UPLOAD */}
           <div>
             <p>📸 Upload hình ảnh</p>
@@ -840,6 +895,48 @@ const styles: any = {
     minHeight: 120,
     fontSize: 16,
     boxSizing: "border-box",
+  },
+
+  aiPanel: {
+    border: "1px solid #ddd6fe",
+    borderRadius: 8,
+    padding: 12,
+    background: "#faf5ff",
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  },
+
+  aiSection: {
+    background: "white",
+    border: "1px solid #e9d5ff",
+    borderRadius: 8,
+    padding: 12,
+  },
+
+  aiSectionHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 8,
+  },
+
+  copyButton: {
+    background: "#111827",
+    color: "white",
+    border: "none",
+    borderRadius: 8,
+    padding: "8px 10px",
+    cursor: "pointer",
+    fontWeight: "bold",
+  },
+
+  aiOutput: {
+    color: "#111827",
+    whiteSpace: "pre-wrap",
+    lineHeight: 1.5,
+    wordBreak: "break-word",
   },
 
   gallery: {
