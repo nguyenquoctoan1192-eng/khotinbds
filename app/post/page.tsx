@@ -8,6 +8,7 @@ function DraggableImage({
   img,
   index,
   removeImage,
+  onEnhance,
   onDragStart,
   onDragEnter,
   onDragEnd,
@@ -82,6 +83,31 @@ function DraggableImage({
       >
         ✕
       </button>
+
+      <button
+        type="button"
+        onMouseDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          onEnhance(index);
+        }}
+        style={{
+          position: "absolute",
+          left: 6,
+          right: 6,
+          bottom: 6,
+          background: "rgba(17, 24, 39, 0.9)",
+          color: "white",
+          border: "none",
+          borderRadius: 8,
+          padding: "8px 6px",
+          cursor: "pointer",
+          fontSize: 12,
+          fontWeight: 700,
+        }}
+      >
+        ✏️ AI sửa ảnh
+      </button>
     </div>
   );
 }
@@ -98,6 +124,31 @@ type AiListingContent = {
   short_description: string;
   seo_description: string;
 };
+
+type ImageEnhanceOptions = {
+  removeLogo: boolean;
+  removePhone: boolean;
+  removeAddress: boolean;
+  enhanceQuality: boolean;
+  removeObjects: boolean;
+};
+
+type ImageEnhanceState = {
+  index: number;
+  imageUrl: string;
+  options: ImageEnhanceOptions;
+  loading: boolean;
+  message: string;
+  enhancedImageUrl: string;
+};
+
+const defaultEnhanceOptions = (): ImageEnhanceOptions => ({
+  removeLogo: false,
+  removePhone: false,
+  removeAddress: false,
+  enhanceQuality: true,
+  removeObjects: false,
+});
 
 export default function PostPage() {
   const router = useRouter();
@@ -168,6 +219,9 @@ const [amenities, setAmenities] =
 
   const [aiContent, setAiContent] =
     useState<AiListingContent | null>(null);
+
+  const [imageEnhance, setImageEnhance] =
+    useState<ImageEnhanceState | null>(null);
 
   // UPLOAD IMAGES
   const uploadImages = async (
@@ -262,6 +316,98 @@ const [amenities, setAmenities] =
 
   const handleImageDragEnd = () => {
     setDraggedImageIndex(null);
+  };
+
+  const openImageEnhance = (index: number) => {
+    setImageEnhance({
+      index,
+      imageUrl: images[index],
+      options: defaultEnhanceOptions(),
+      loading: false,
+      message: "",
+      enhancedImageUrl: "",
+    });
+  };
+
+  const toggleImageEnhanceOption = (key: keyof ImageEnhanceOptions) => {
+    setImageEnhance((current) =>
+      current
+        ? {
+            ...current,
+            options: {
+              ...current.options,
+              [key]: !current.options[key],
+            },
+          }
+        : current
+    );
+  };
+
+  const runImageEnhance = async () => {
+    if (!imageEnhance) return;
+
+    setImageEnhance({
+      ...imageEnhance,
+      loading: true,
+      message: "",
+      enhancedImageUrl: "",
+    });
+
+    try {
+      const res = await fetch("/api/image-enhance", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          imageUrl: imageEnhance.imageUrl,
+          options: imageEnhance.options,
+        }),
+      });
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        throw new Error(
+          json.message ||
+            "Chưa cấu hình AI xử lý ảnh. Vui lòng thêm OPENAI_API_KEY hoặc provider xử lý ảnh."
+        );
+      }
+
+      setImageEnhance((current) =>
+        current
+          ? {
+              ...current,
+              loading: false,
+              message: "",
+              enhancedImageUrl: json.enhancedImageUrl || "",
+            }
+          : current
+      );
+    } catch (error) {
+      setImageEnhance((current) =>
+        current
+          ? {
+              ...current,
+              loading: false,
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Chưa cấu hình AI xử lý ảnh. Vui lòng thêm OPENAI_API_KEY hoặc provider xử lý ảnh.",
+            }
+          : current
+      );
+    }
+  };
+
+  const useEnhancedImage = () => {
+    if (!imageEnhance?.enhancedImageUrl) return;
+
+    setImages((current) =>
+      current.map((img, index) =>
+        index === imageEnhance.index ? imageEnhance.enhancedImageUrl : img
+      )
+    );
+    setImageEnhance(null);
   };
 
 
@@ -819,6 +965,7 @@ console.log("ERROR =", error);
                 img={img}
                 index={index}
                 removeImage={removeImage}
+                onEnhance={openImageEnhance}
                 onDragStart={handleImageDragStart}
                 onDragEnter={handleImageDragEnter}
                 onDragEnd={handleImageDragEnd}
@@ -826,6 +973,120 @@ console.log("ERROR =", error);
               />
             ))}
           </div>
+
+          {imageEnhance && (
+            <div style={styles.enhanceOverlay}>
+              <div style={styles.enhancePanel}>
+                <div style={styles.enhanceHeader}>
+                  <strong>AI sửa ảnh</strong>
+                  <button
+                    type="button"
+                    onClick={() => setImageEnhance(null)}
+                    style={styles.enhanceCloseButton}
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div style={styles.enhanceOptions}>
+                  <label style={styles.enhanceOption}>
+                    <input
+                      type="checkbox"
+                      checked={imageEnhance.options.removeLogo}
+                      onChange={() => toggleImageEnhanceOption("removeLogo")}
+                    />
+                    Xóa logo/watermark
+                  </label>
+                  <label style={styles.enhanceOption}>
+                    <input
+                      type="checkbox"
+                      checked={imageEnhance.options.removePhone}
+                      onChange={() => toggleImageEnhanceOption("removePhone")}
+                    />
+                    Xóa số điện thoại
+                  </label>
+                  <label style={styles.enhanceOption}>
+                    <input
+                      type="checkbox"
+                      checked={imageEnhance.options.removeAddress}
+                      onChange={() => toggleImageEnhanceOption("removeAddress")}
+                    />
+                    Xóa địa chỉ trên ảnh
+                  </label>
+                  <label style={styles.enhanceOption}>
+                    <input
+                      type="checkbox"
+                      checked={imageEnhance.options.enhanceQuality}
+                      onChange={() => toggleImageEnhanceOption("enhanceQuality")}
+                    />
+                    Làm sáng / nét hơn
+                  </label>
+                  <label style={styles.enhanceOption}>
+                    <input
+                      type="checkbox"
+                      checked={imageEnhance.options.removeObjects}
+                      onChange={() => toggleImageEnhanceOption("removeObjects")}
+                    />
+                    Xóa vật thể thừa
+                  </label>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={runImageEnhance}
+                  disabled={imageEnhance.loading}
+                  style={{
+                    ...styles.enhanceRunButton,
+                    ...(imageEnhance.loading ? styles.enhanceRunButtonDisabled : {}),
+                  }}
+                >
+                  Chạy AI
+                </button>
+
+                {imageEnhance.loading && (
+                  <p style={styles.enhanceMessage}>Đang xử lý ảnh...</p>
+                )}
+
+                {imageEnhance.message && (
+                  <p style={styles.enhanceError}>{imageEnhance.message}</p>
+                )}
+
+                {imageEnhance.enhancedImageUrl && (
+                  <>
+                    <div style={styles.beforeAfterGrid}>
+                      <div>
+                        <p style={styles.previewLabel}>Ảnh cũ</p>
+                        <img src={imageEnhance.imageUrl} style={styles.previewImage} />
+                      </div>
+                      <div>
+                        <p style={styles.previewLabel}>Ảnh mới</p>
+                        <img
+                          src={imageEnhance.enhancedImageUrl}
+                          style={styles.previewImage}
+                        />
+                      </div>
+                    </div>
+                    <div style={styles.enhanceActions}>
+                      <button
+                        type="button"
+                        onClick={useEnhancedImage}
+                        style={styles.useNewButton}
+                      >
+                        Dùng ảnh mới
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setImageEnhance(null)}
+                        style={styles.keepOldButton}
+                      >
+                        Giữ ảnh cũ
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* BUTTON */}
           <button
@@ -954,6 +1215,142 @@ const styles: any = {
     whiteSpace: "pre-wrap",
     lineHeight: 1.5,
     wordBreak: "break-word",
+  },
+
+  enhanceOverlay: {
+    position: "fixed",
+    inset: 0,
+    zIndex: 50,
+    background: "rgba(17, 24, 39, 0.45)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+  },
+
+  enhancePanel: {
+    width: "100%",
+    maxWidth: 520,
+    maxHeight: "90vh",
+    overflowY: "auto",
+    background: "white",
+    borderRadius: 8,
+    padding: 16,
+    boxSizing: "border-box",
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  },
+
+  enhanceHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  enhanceCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    border: "1px solid #ddd",
+    background: "white",
+    cursor: "pointer",
+    fontSize: 20,
+    lineHeight: 1,
+  },
+
+  enhanceOptions: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+  },
+
+  enhanceOption: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 14,
+  },
+
+  enhanceRunButton: {
+    width: "100%",
+    padding: 12,
+    borderRadius: 8,
+    border: "none",
+    background: "#2563eb",
+    color: "white",
+    cursor: "pointer",
+    fontWeight: "bold",
+  },
+
+  enhanceRunButtonDisabled: {
+    background: "#94a3b8",
+    cursor: "not-allowed",
+  },
+
+  enhanceMessage: {
+    margin: 0,
+    color: "#1d4ed8",
+    fontSize: 14,
+  },
+
+  enhanceError: {
+    margin: 0,
+    color: "#b91c1c",
+    background: "#fee2e2",
+    border: "1px solid #fecaca",
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 14,
+  },
+
+  beforeAfterGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: 12,
+  },
+
+  previewLabel: {
+    margin: "0 0 6px",
+    fontSize: 13,
+    fontWeight: 700,
+    color: "#374151",
+  },
+
+  previewImage: {
+    width: "100%",
+    aspectRatio: "1 / 1",
+    objectFit: "cover",
+    borderRadius: 8,
+    background: "#f3f4f6",
+    display: "block",
+  },
+
+  enhanceActions: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 10,
+  },
+
+  useNewButton: {
+    padding: 12,
+    borderRadius: 8,
+    border: "none",
+    background: "#16a34a",
+    color: "white",
+    cursor: "pointer",
+    fontWeight: "bold",
+  },
+
+  keepOldButton: {
+    padding: 12,
+    borderRadius: 8,
+    border: "1px solid #d1d5db",
+    background: "white",
+    color: "#111827",
+    cursor: "pointer",
+    fontWeight: "bold",
   },
 
   gallery: {
