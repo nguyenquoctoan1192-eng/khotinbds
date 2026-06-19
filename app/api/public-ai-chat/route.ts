@@ -24,8 +24,13 @@ type PublicChatProfile = {
   alternative_locations: string[];
   budget: string | null;
   area: string | null;
+  priority_streets: string[];
+  width: string | null;
+  length: string | null;
+  size_label: string | null;
   structure: string | null;
   frontage: string | null;
+  alley_car: string | null;
   move_in_time: string | null;
   stage: ConversationStage | null;
 };
@@ -65,8 +70,13 @@ const profileKeys: PublicChatRequirementKey[] = [
   "location",
   "budget",
   "area",
+  "priority_streets",
+  "width",
+  "length",
+  "size_label",
   "structure",
   "frontage",
+  "alley_car",
   "move_in_time",
   "phone",
   "name",
@@ -83,8 +93,13 @@ const profileLabels: Record<keyof PublicChatProfile, string> = {
   alternative_locations: "alternative locations",
   budget: "budget",
   area: "area",
+  priority_streets: "priority streets",
+  width: "width",
+  length: "length",
+  size_label: "size label",
   structure: "structure",
   frontage: "frontage",
+  alley_car: "car-access alley",
   move_in_time: "move-in/rental time",
   stage: "conversation stage",
 };
@@ -100,8 +115,13 @@ const emptyProfile = (): PublicChatProfile => ({
   alternative_locations: [],
   budget: null,
   area: null,
+  priority_streets: [],
+  width: null,
+  length: null,
+  size_label: null,
   structure: null,
   frontage: null,
+  alley_car: null,
   move_in_time: null,
   stage: null,
 });
@@ -171,12 +191,37 @@ const canonicalDistricts = [
   { label: "Huyện Cần Giờ", aliases: ["huyen can gio", "can gio"] },
 ];
 
+const priorityStreetAliases = [
+  { label: "Nguyễn Cư Trinh", aliases: ["nguyen cu trinh"] },
+  { label: "Cống Quỳnh", aliases: ["cong quynh"] },
+  { label: "Cô Giang", aliases: ["co giang"] },
+  { label: "Tôn Thất Tùng", aliases: ["ton that tung"] },
+  { label: "Lê Lai", aliases: ["le lai"] },
+  { label: "Trần Hưng Đạo", aliases: ["tran hung dao"] },
+  { label: "Nguyễn Trãi", aliases: ["nguyen trai"] },
+  { label: "Điện Biên Phủ", aliases: ["dien bien phu"] },
+  { label: "Cách Mạng Tháng 8", aliases: ["cach mang thang 8", "cmt8"] },
+];
+
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const normalizeSpaces = (value: string) => value.replace(/\s+/g, " ").trim();
 
 const normalizeDistrictLabel = (label: string) =>
   label.replace(/^Quận\s+(Phú Nhuận|Bình Thạnh|Gò Vấp|Tân Bình|Tân Phú|Bình Tân)$/i, "$1");
+
+const extractPriorityStreets = (text: string) => {
+  const normalized = normalizeSpaces(normalizeText(text));
+  const streets = priorityStreetAliases
+    .filter((street) =>
+      street.aliases.some((alias) =>
+        new RegExp(`\\b${escapeRegExp(alias)}\\b`).test(normalized)
+      )
+    )
+    .map((street) => street.label);
+
+  return uniqueValues(streets);
+};
 
 const extractDistrict = (text: string) => {
   const normalized = normalizeSpaces(normalizeText(text).replace(/\./g, ". "));
@@ -216,10 +261,15 @@ const extractDimensions = (text: string) => {
     const length = toNumber(match[2]);
 
     if (Number.isFinite(width) && Number.isFinite(length) && width > 0 && length > 0) {
+      const widthLabel = match[1].replace(",", ".");
+      const lengthLabel = match[2].replace(",", ".");
+
       return {
         width,
         length,
         area: width * length,
+        widthLabel,
+        lengthLabel,
         label: `ngang ${match[1].replace(",", ".")} dài ${match[2].replace(",", ".")}`,
       };
     }
@@ -253,6 +303,10 @@ const extractBusiness = (text: string) => {
 
   if (/\bmb\b|mat bang|mat bang kinh doanh|thue mat bang|tim mat bang/.test(normalized)) {
     return "mặt bằng kinh doanh";
+  }
+
+  if (/shop hoa|hoa tuoi/.test(normalized)) {
+    return "shop hoa";
   }
 
   if (/studio|kinh doanh|mo tiem|ban hang|shop|showroom|spa|cafe|ca phe|quan an|nha hang|restaurant/.test(normalized)) {
@@ -292,6 +346,7 @@ const extractBusinessType = (text: string) => {
   if (/studio/.test(normalized)) return "studio";
   if (/office|van phong|cong ty/.test(normalized)) return "office";
   if (/restaurant|nha hang|quan an|an uong/.test(normalized)) return "quán ăn";
+  if (/shop hoa|hoa tuoi/.test(normalized)) return "shop hoa";
   if (/shop|showroom/.test(normalized)) return text.match(/shop|showroom/i)?.[0] || "shop";
 
   return null;
@@ -381,6 +436,12 @@ const isGenericBusiness = (business: string | null) =>
 const needsBusinessType = (profile: PublicChatProfile) =>
   profile.purpose === "kinh doanh" && !profile.business_type;
 
+const hasPriorityStreets = (profile: PublicChatProfile) =>
+  Array.isArray(profile.priority_streets) && profile.priority_streets.length > 0;
+
+const hasAreaFrontageOrPriority = (profile: PublicChatProfile) =>
+  Boolean(profile.area || profile.frontage || profile.alley_car || hasPriorityStreets(profile));
+
 const asksForKnownField = (reply: string, profile: PublicChatProfile) => {
   const normalized = normalizeText(reply);
 
@@ -391,6 +452,8 @@ const asksForKnownField = (reply: string, profile: PublicChatProfile) => {
       (profile.move_in_time && /(nhan nha|bat dau thue|khi nao|thoi gian nao|don vao)/.test(normalized)) ||
       (profile.purpose && /(de o hay kinh doanh|mua de o|kinh doanh hay de o|purpose)/.test(normalized)) ||
       (profile.purpose === "nhà ở" && /(kinh doanh gi|nganh gi|business)/.test(normalized)) ||
+      (hasPriorityStreets(profile) && /(khu vuc nao|quan nao|o dau|vi tri nao|uu tien khu vuc)/.test(normalized)) ||
+      ((profile.frontage || profile.alley_car) && /(mat tien hay hem|mat tien, hem|can mat tien|co can mat tien)/.test(normalized)) ||
       (profile.business_type &&
         /(kinh doanh gi|nganh gi|de o hay kinh doanh|business)/.test(normalized))
   );
@@ -419,8 +482,11 @@ const repeatsProfileTooMuch = (reply: string, profile: PublicChatProfile) => {
     profile.location,
     formatBudgetForReply(profile.budget) || profile.budget,
     profile.area,
+    profile.size_label,
     profile.structure,
     profile.frontage,
+    profile.alley_car,
+    ...(profile.priority_streets || []),
     profile.move_in_time,
   ]
     .filter(Boolean)
@@ -434,6 +500,16 @@ const repeatsProfileTooMuch = (reply: string, profile: PublicChatProfile) => {
 const mergeProfiles = (...profiles: Partial<PublicChatProfile>[]): PublicChatProfile =>
   profiles.reduce<PublicChatProfile>((merged, profile) => {
     for (const key of profileKeys) {
+      if (key === "priority_streets") {
+        if (Array.isArray(profile.priority_streets)) {
+          merged.priority_streets = uniqueValues([
+            ...merged.priority_streets,
+            ...profile.priority_streets,
+          ]);
+        }
+        continue;
+      }
+
       if (profile[key]) {
         merged[key] = profile[key] || null;
       }
@@ -489,6 +565,7 @@ const extractProfile = (text: string, existing: Partial<PublicChatProfile>) => {
   const extractedDistrict = extractDistrict(text);
   const extractedDistricts = phoneOnlyMessage ? [] : extractDistricts(text);
   const dimensions = extractDimensions(text);
+  const priorityStreets = phoneOnlyMessage ? [] : extractPriorityStreets(text);
   const businessDetailMatch = text.match(/(?:đậu xe|dau xe|parking|bãi xe|bai xe|thang máy|thang may|cách âm|cach am|riêng tư|rieng tu|thoát mùi|thoat mui|bếp|bep|đông người|dong nguoi|khách đi bộ|khach di bo|foot traffic)/i);
   const occupancyMatch = text.match(/\d+\s*(?:người|nguoi|khách|khach|chỗ|cho|seat|seats|team|nhân viên|nhan vien)/i);
 
@@ -541,6 +618,12 @@ const extractProfile = (text: string, existing: Partial<PublicChatProfile>) => {
   if (!phoneOnlyMessage && profile.location && !profile.primary_location) {
     profile.primary_location = profile.location;
   }
+  if (!phoneOnlyMessage && priorityStreets.length > 0) {
+    profile.priority_streets = uniqueValues([
+      ...profile.priority_streets,
+      ...priorityStreets,
+    ]);
+  }
   if (!phoneOnlyMessage && !profile.name && nameMatch?.[1]) {
     profile.name = nameMatch[1]
       .replace(/\b(anh|chị|chi|em|ạ|a|nha|nhé|nhe)\b/gi, "")
@@ -549,6 +632,9 @@ const extractProfile = (text: string, existing: Partial<PublicChatProfile>) => {
 
   if (!phoneOnlyMessage && dimensions) {
     profile.area = String(dimensions.area);
+    profile.width = dimensions.widthLabel;
+    profile.length = dimensions.lengthLabel;
+    profile.size_label = `${dimensions.widthLabel}x${dimensions.lengthLabel}`;
     const floorDetail = text.match(/\d+\s*(?:lầu|lau|tầng|tang)/i)?.[0];
     if (!profile.structure || /ngang|dai|dài|x/i.test(profile.structure)) {
       profile.structure = uniqueValues(
@@ -571,6 +657,17 @@ const extractProfile = (text: string, existing: Partial<PublicChatProfile>) => {
   const frontageMatch = text.match(/(?:mặt tiền|mat tien|hẻm|hem|ô tô|o to|oto|xe hơi|xe hoi|đường lớn|duong lon)/i);
   if (frontageMatch) {
     profile.frontage = frontageMatch[0];
+  }
+
+  if (/\bmat\s*tien\b|\bmt\b/.test(normalized)) {
+    profile.frontage = "mặt tiền";
+  }
+
+  if (/\bhem\s*xe\s*hoi\b|\bhxh\b|\boto\b|\bo\s*to\b|\bxe\s*hoi\b/.test(normalized)) {
+    profile.alley_car = "hẻm xe hơi";
+    if (!profile.frontage) {
+      profile.frontage = "hẻm xe hơi";
+    }
   }
 
   if (!profile.frontage && businessDetailMatch) {
@@ -612,8 +709,26 @@ const hasEnoughToAskPhone = (profile: PublicChatProfile) =>
       profile.budget
   );
 
+const hasCoreRequirement = (profile: PublicChatProfile) =>
+  Boolean(
+    profile.location &&
+      profile.purpose &&
+      profile.budget &&
+      (profile.purpose !== "kinh doanh" || profile.business_type)
+  );
+
+const isReadyForListingAction = (profile: PublicChatProfile) =>
+  Boolean(profile.phone && hasCoreRequirement(profile) && hasAreaFrontageOrPriority(profile));
+
 const hasHandoffDetails = (profile: PublicChatProfile) =>
-  Boolean(profile.area || profile.structure || profile.frontage || profile.move_in_time);
+  Boolean(
+    profile.area ||
+      profile.structure ||
+      profile.frontage ||
+      profile.alley_car ||
+      hasPriorityStreets(profile) ||
+      profile.move_in_time
+  );
 
 const isReadyToHandoff = (profile: PublicChatProfile) =>
   Boolean(
@@ -621,6 +736,7 @@ const isReadyToHandoff = (profile: PublicChatProfile) =>
       profile.location &&
       profile.budget &&
       profile.purpose &&
+      (profile.purpose !== "kinh doanh" || profile.business_type) &&
       hasHandoffDetails(profile)
   );
 
@@ -669,7 +785,10 @@ const buildHandoffSummary = (profile: PublicChatProfile) => {
           .filter(Boolean)
           .join(", ")}`
       : "",
+    profile.size_label ? `- ${profile.size_label}` : "",
+    hasPriorityStreets(profile) ? `- Ưu tiên ${profile.priority_streets.join(", ")}` : "",
     profile.frontage ? `- ${profile.frontage}` : "",
+    profile.alley_car ? `- ${profile.alley_car}` : "",
     profile.move_in_time ? `- Dọn ${profile.move_in_time}` : "",
   ].filter(Boolean);
 
@@ -708,6 +827,28 @@ const summarizeForPhoneAsk = (profile: PublicChatProfile) => {
   return parts.length
     ? `Vậy là mình đang tìm ${parts.join(", ")}, em có thể gửi vài lựa chọn sát hơn cho anh.`
     : "Em có thể gửi vài lựa chọn sát hơn cho anh.";
+};
+
+const buildPriorityStreetReply = (profile: PublicChatProfile) => {
+  const streets = profile.priority_streets.join(", ");
+  const summaryParts = [
+    profile.purpose === "kinh doanh" ? "mặt bằng kinh doanh" : profile.purpose || "",
+    profile.location || "",
+    profile.budget ? `ngân sách khoảng ${formatBudgetForReply(profile.budget) || profile.budget}` : "",
+  ].filter(Boolean);
+  const summary = summaryParts.length
+    ? ` Hiện em đang nắm mình tìm ${summaryParts.join(", ")}.`
+    : "";
+
+  if (needsBusinessType(profile)) {
+    return `Dạ em ghi nhận anh ưu tiên ${streets}.${summary} Anh kinh doanh ngành gì để em lọc sát hơn ạ?`;
+  }
+
+  if (isReadyForListingAction(profile)) {
+    return `Dạ em ghi nhận anh ưu tiên ${streets}.${summary} Em sẽ lọc vài căn sát nhu cầu để anh xem trước, anh muốn xem nhà hôm nay hay ngày mai tiện hơn ạ?`;
+  }
+
+  return `Dạ em ghi nhận anh ưu tiên ${streets}.${summary} ${nextQuestionForV2(profile)}`;
 };
 
 const reactionFor = (message: string, profile: PublicChatProfile) => {
@@ -834,6 +975,18 @@ const businessSpecificQuestion = (profile: PublicChatProfile) => {
 };
 
 const nextQuestionForV2 = (profile: PublicChatProfile) => {
+  if (isReadyForListingAction(profile)) {
+    return "Em sẽ lọc vài căn sát nhu cầu để anh xem trước, anh muốn xem nhà hôm nay hay ngày mai tiện hơn ạ?";
+  }
+
+  if (needsBusinessType(profile)) {
+    return "Anh kinh doanh ngành gì để em lọc sát hơn ạ?";
+  }
+
+  if (!profile.location && hasPriorityStreets(profile)) {
+    return `Em sẽ ưu tiên tuyến ${profile.priority_streets.join(", ")} cho anh. Anh muốn em lọc đúng tuyến này hay mở rộng quanh khu lân cận ạ?`;
+  }
+
   if (!profile.purpose) {
     return "Mình đang tìm để ở hay để kinh doanh vậy anh?";
   }
@@ -848,6 +1001,10 @@ const nextQuestionForV2 = (profile: PublicChatProfile) => {
 
   if (!profile.budget) {
     return "Ngân sách mình muốn giữ khoảng bao nhiêu một tháng ạ?";
+  }
+
+  if (hasCoreRequirement(profile) && !hasAreaFrontageOrPriority(profile)) {
+    return "Anh ưu tiên diện tích khoảng bao nhiêu, mặt tiền hay tuyến đường nào để em lọc sát hơn ạ?";
   }
 
   if (!profile.phone && hasEnoughToAskPhone(profile)) {
@@ -884,6 +1041,10 @@ const nextQuestionForV2 = (profile: PublicChatProfile) => {
 };
 
 const fallbackReplyV2 = (message: string, profile: PublicChatProfile) => {
+  if (extractPriorityStreets(message).length > 0 && hasPriorityStreets(profile)) {
+    return buildPriorityStreetReply(profile);
+  }
+
   const reaction = reactionFor(message, profile);
   const usefulStep = usefulStepFor(message, profile);
   const shouldAskPhone = !profile.phone && hasEnoughToAskPhone(profile);
@@ -1381,6 +1542,10 @@ Return JSON only:
     "location": string|null,
     "budget": string|null,
     "area": string|null,
+    "priority_streets": string[],
+    "width": string|null,
+    "length": string|null,
+    "size_label": string|null,
     "structure": string|null,
     "move_in_time": string|null
   }
@@ -1628,8 +1793,13 @@ Trả về JSON duy nhất:
     "location": string|null,
     "budget": string|null,
     "area": string|null,
+    "priority_streets": string[],
+    "width": string|null,
+    "length": string|null,
+    "size_label": string|null,
     "structure": string|null,
     "frontage": string|null,
+    "alley_car": string|null,
     "move_in_time": string|null
   }
 }
@@ -1879,7 +2049,8 @@ export async function POST(req: Request) {
     const isRequirementAnswer = Boolean(
       extractMoveInTime(currentMessage) ||
         extractDimensions(currentMessage) ||
-        /studio|spa|cafe|ca phe|mat tien|hem|xe hoi|hxh|hxt|oto|o to|ngang|dai|m2|\d+\s*x\s*\d+/.test(normalizedCurrentMessage)
+        extractPriorityStreets(currentMessage).length > 0 ||
+        /studio|spa|cafe|ca phe|shop hoa|hoa tuoi|mat tien|hem|xe hoi|hxh|hxt|oto|o to|ngang|dai|m2|\d+\s*x\s*\d+/.test(normalizedCurrentMessage)
     );
     const playbookSelection: PlaybookSelection = isRequirementAnswer
       ? {
@@ -1935,7 +2106,12 @@ export async function POST(req: Request) {
                     type: "object",
                     additionalProperties: false,
                     properties: Object.fromEntries(
-                      profileKeys.map((key) => [key, { type: ["string", "null"] }])
+                      profileKeys.map((key) => [
+                        key,
+                        key === "priority_streets"
+                          ? { type: "array", items: { type: "string" } }
+                          : { type: ["string", "null"] },
+                      ])
                     ),
                     required: profileKeys,
                   },

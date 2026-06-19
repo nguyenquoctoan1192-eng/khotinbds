@@ -1,331 +1,416 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { calculateLeadScoring } from "@/lib/leadScoring";
 
-type RequirementProfile = {
-  business: string | null;
-  location: string | null;
-  budget: string | null;
-  area: string | null;
-  structure: string | null;
-  frontage: string | null;
-  move_in_time: string | null;
+type CustomerPurpose = "ở" | "kinh doanh" | "văn phòng";
+
+type CustomerContext = {
+  purpose?: CustomerPurpose;
+  business?: string;
+  district?: string;
+  budget?: string;
+  size?: string;
+  minArea?: number;
+  frontage?: boolean;
+  alleyCar?: boolean;
+  priorityStreets?: string[];
 };
 
-type AssistantResult = {
-  known_requirements: RequirementProfile;
-  missing_requirements: string[];
-  customer_intent: string;
-  objection: string | null;
-  suggested_replies: string[];
-  next_best_question: string;
+type CustomerFacts = Partial<CustomerContext>;
+
+type ConversationMessage = {
+  role?: string;
+  type?: string;
+  content?: string;
+  message?: string;
 };
 
-const profileKeys: Array<keyof RequirementProfile> = [
-  "business",
-  "location",
-  "budget",
-  "area",
-  "structure",
-  "frontage",
-  "move_in_time",
+type AiSalesAssistantBody = {
+  message?: string;
+  leadId?: string;
+  conversationHistory?: ConversationMessage[];
+  currentContext?: CustomerContext;
+  lead?: Record<string, unknown>;
+  history?: ConversationMessage[];
+};
+
+type NextAction = "ask_more_info" | "suggest_listings" | "schedule_viewing";
+
+const priorityStreetNames = [
+  "Nguyễn Cư Trinh",
+  "Cống Quỳnh",
+  "Cô Giang",
+  "Tôn Thất Tùng",
 ];
 
-const profileLabels: Record<keyof RequirementProfile, string> = {
-  business: "Business",
-  location: "Location",
-  budget: "Budget",
-  area: "Area",
-  structure: "Structure",
-  frontage: "Frontage",
-  move_in_time: "Move-in time",
-};
+const districtPatterns: Array<[string, RegExp]> = [
+  ["Quận 1", /\b(?:quan|q)\.?\s*1\b/],
+  ["Quận 3", /\b(?:quan|q)\.?\s*3\b/],
+  ["Phú Nhuận", /\bphu\s*nhuan\b/],
+  ["Bình Thạnh", /\bbinh\s*thanh\b/],
+  ["Gò Vấp", /\bgo\s*vap\b/],
+  ["Tân Bình", /\btan\s*binh\b/],
+  ["Tân Phú", /\btan\s*phu\b/],
+  ["Quận 10", /\b(?:quan|q)\.?\s*10\b/],
+];
 
-const emptyProfile = (): RequirementProfile => ({
-  business: null,
-  location: null,
-  budget: null,
-  area: null,
-  structure: null,
-  frontage: null,
-  move_in_time: null,
-});
+const businessPatterns: Array<[string, RegExp]> = [
+  ["shop hoa", /\bshop\s*hoa\b|\bhoa\s*tuoi\b/],
+  ["spa", /\bspa\b|\btham\s*my\b|\bnail\b|\bsalon\b/],
+  ["cafe", /\bcafe\b|\bca\s*phe\b|\bcoffee\b/],
+  ["quán ăn", /\bquan\s*an\b|\bnha\s*hang\b|\ban\s*uong\b|\bf&b\b|\bfnb\b/],
+  ["văn phòng", /\bvan\s*phong\b|\boffice\b|\bcong\s*ty\b|\bvp\b/],
+];
 
 const compactString = (value: unknown) =>
-  typeof value === "string" && value.trim() ? value.trim() : null;
+  typeof value === "string" && value.trim() ? value.trim() : "";
 
-const normalizeText = (value: string) =>
-  value
+const normalizeText = (value: unknown) =>
+  String(value || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\u0111/g, "d")
-    .replace(/\u0110/g, "D")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
     .toLowerCase();
 
-const mergeProfiles = (...profiles: RequirementProfile[]) =>
-  profiles.reduce((merged, profile) => {
-    for (const key of profileKeys) {
-      if (!merged[key] && profile[key]) {
-        merged[key] = profile[key];
-      }
-    }
+const uniqueValues = (values: string[]) =>
+  Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
 
-    return merged;
-  }, emptyProfile());
+const normalizeContext = (value: unknown): CustomerContext => {
+  if (!value || typeof value !== "object") return {};
 
-const parseProfileFromStructuredText = (source: string) => {
-  const profile = emptyProfile();
-  const mappings: Array<[keyof RequirementProfile, RegExp]> = [
-    ["business", /(?:business|business_use_case|use_case|nganh|ngành)\s*[=:]\s*([^|;\n]+)/i],
-    ["location", /(?:location|khu_vuc|khu vực|quan|quận)\s*[=:]\s*([^|;\n]+)/i],
-    ["budget", /(?:budget|ngan_sach|ngân sách|max_price)\s*[=:]\s*([^|;\n]+)/i],
-    ["area", /(?:area|dien_tich|diện tích)\s*[=:]\s*([^|;\n]+)/i],
-    ["structure", /(?:structure|ket_cau|kết cấu)\s*[=:]\s*([^|;\n]+)/i],
-    ["frontage", /(?:frontage|mat_tien|mặt tiền|hem|hẻm|car_access)\s*[=:]\s*([^|;\n]+)/i],
-    ["move_in_time", /(?:move_in_time|thoi_gian|thời gian|rental_time)\s*[=:]\s*([^|;\n]+)/i],
-  ];
-
-  for (const [key, pattern] of mappings) {
-    const match = source.match(pattern);
-    if (match?.[1]) {
-      profile[key] = match[1].trim();
-    }
-  }
-
-  return profile;
+  const source = value as CustomerContext;
+  return {
+    purpose: source.purpose,
+    business: source.business,
+    district: source.district,
+    budget: source.budget,
+    size: source.size,
+    minArea:
+      typeof source.minArea === "number" && Number.isFinite(source.minArea)
+        ? source.minArea
+        : undefined,
+    frontage: typeof source.frontage === "boolean" ? source.frontage : undefined,
+    alleyCar: typeof source.alleyCar === "boolean" ? source.alleyCar : undefined,
+    priorityStreets: Array.isArray(source.priorityStreets)
+      ? uniqueValues(source.priorityStreets)
+      : undefined,
+  };
 };
 
-const inferProfileFromText = (source: string, lead: any = {}) => {
-  const profile = parseProfileFromStructuredText(source);
-  const normalized = normalizeText(source);
-  const district = Array.isArray(lead?.preferred_districts)
-    ? lead.preferred_districts.filter(Boolean).map(String).join(", ")
-    : compactString(lead?.preferred_districts);
+const formatBudget = (rawAmount: string, hasLimit: boolean) => {
+  const amount = Number(rawAmount.replace(",", "."));
+  if (!Number.isFinite(amount)) return "";
 
-  if (!profile.location && district) {
-    profile.location = district;
-  }
-
-  if (!profile.budget && lead?.max_price) {
-    profile.budget = String(lead.max_price);
-  }
-
-  const budgetMatch = source.match(/(?:\d+(?:[.,]\d+)?\s*(?:tr|triệu|trieu|tỷ|ty|tỉ|ti)|\d{7,})/i);
-  const areaMatch = source.match(/\d+\s*m(?:2|²)/i);
-  const businessMatch = source.match(/\b(spa|cafe|cà phê|office|văn phòng|restaurant|nhà hàng|shop|showroom|kinh doanh|ở|để ở)\b/i);
-  const structureMatch = source.match(/(?:\d+\s*(?:phòng|pn|wc|tầng|lầu)|trệt|lửng|sân thượng)/i);
-  const frontageMatch = source.match(/(?:mặt tiền|hẻm|ô tô|oto|xe hơi|đường lớn|frontage|alley)/i);
-  const moveInMatch = source.match(/(?:tháng này|tháng sau|tuần này|tuần sau|vào ở ngay|nhận nhà ngay|\d{1,2}\/\d{1,2})/i);
-
-  if (!profile.budget && budgetMatch) profile.budget = budgetMatch[0];
-  if (!profile.area && areaMatch) profile.area = areaMatch[0];
-  if (!profile.business && businessMatch) profile.business = businessMatch[0];
-  if (!profile.structure && structureMatch) profile.structure = structureMatch[0];
-  if (!profile.frontage && frontageMatch) profile.frontage = frontageMatch[0];
-  if (!profile.move_in_time && moveInMatch) profile.move_in_time = moveInMatch[0];
-
-  const locationMatch = source.match(/(?:bình thạnh|phú nhuận|quận\s*\d+|q\.\s*\d+|thủ đức|gò vấp|tân bình|quận\s*[^\s,.;]+)/i);
-  if (!profile.location && locationMatch) {
-    profile.location = locationMatch[0];
-  }
-
-  if (!profile.frontage && /xe hoi|oto|o to|mat tien|hem/.test(normalized)) {
-    profile.frontage = source.match(/[^.?!]*(?:xe hơi|ô tô|oto|mặt tiền|hẻm)[^.?!]*/i)?.[0]?.trim() || null;
-  }
-
-  return profile;
+  const amountLabel = Number.isInteger(amount) ? String(amount) : amount.toFixed(1);
+  return hasLimit ? `dưới ${amountLabel} triệu` : `${amountLabel} triệu`;
 };
 
-const getMissingRequirements = (profile: RequirementProfile) =>
-  profileKeys.filter((key) => !profile[key]).map((key) => profileLabels[key]);
-
-const detectObjection = (message: string) => {
+export const extractCustomerFacts = (message: string): CustomerFacts => {
   const normalized = normalizeText(message);
+  const facts: CustomerFacts = {};
 
-  if (/cao|mac|dat|qua gia|vuot ngan sach/.test(normalized)) return "price too high";
-  if (/xa|khong dung khu|khong hop vi tri|vi tri chua/.test(normalized)) return "not suitable location";
-  if (/suy nghi|xem lai|de toi|de em|chua quyet|can them thoi gian/.test(normalized)) return "needs time to think";
-  if (/them can|them lua chon|option|can khac|gui them/.test(normalized)) return "wants more options";
-  if (/so sanh|ben khac|moi gioi khac|can khac re hon/.test(normalized)) return "comparing with others";
+  if (/\b(de\s*o|o|nha\s*o|can\s*ho\s*o)\b/.test(normalized)) {
+    facts.purpose = "ở";
+  }
 
-  return null;
+  if (/\bkinh\s*doanh\b|\bmat\s*bang\b|\bmb\b|\bshop\b/.test(normalized)) {
+    facts.purpose = "kinh doanh";
+  }
+
+  if (/\bvan\s*phong\b|\boffice\b|\bcong\s*ty\b|\bvp\b/.test(normalized)) {
+    facts.purpose = "văn phòng";
+    facts.business = "văn phòng";
+  }
+
+  for (const [business, pattern] of businessPatterns) {
+    if (pattern.test(normalized)) {
+      facts.business = business;
+      if (business !== "văn phòng") {
+        facts.purpose = "kinh doanh";
+      }
+      break;
+    }
+  }
+
+  for (const [district, pattern] of districtPatterns) {
+    if (pattern.test(normalized)) {
+      facts.district = district;
+      break;
+    }
+  }
+
+  const budgetMatch = normalized.match(
+    /(?:duoi\s*)?(\d+(?:[.,]\d+)?)\s*(?:tr|trieu)(?:\s*do\s*lai)?/
+  );
+  if (budgetMatch?.[1]) {
+    facts.budget = formatBudget(
+      budgetMatch[1],
+      /duoi|do\s*lai/.test(budgetMatch[0])
+    );
+  }
+
+  const sizeMatch = normalized.match(/\b(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)\b/);
+  if (sizeMatch?.[1] && sizeMatch?.[2]) {
+    const width = Number(sizeMatch[1].replace(",", "."));
+    const length = Number(sizeMatch[2].replace(",", "."));
+
+    facts.size = `${sizeMatch[1].replace(",", ".")}x${sizeMatch[2].replace(",", ".")}`;
+    if (Number.isFinite(width) && Number.isFinite(length)) {
+      facts.minArea = Math.round(width * length);
+    }
+  }
+
+  const areaMatch = normalized.match(/(?:tu\s*)?(\d{2,4})\s*m(?:2|²)?/);
+  if (!facts.minArea && areaMatch?.[1]) {
+    facts.minArea = Number(areaMatch[1]);
+  }
+
+  if (/\bmat\s*tien\b|\bmt\b|\bfrontage\b/.test(normalized)) {
+    facts.frontage = true;
+  }
+
+  if (/\bhem\s*xe\s*hoi\b|\bhxh\b|\boto\b|\bo\s*to\b|\bxe\s*hoi\b/.test(normalized)) {
+    facts.alleyCar = true;
+  }
+
+  const foundStreets = priorityStreetNames.filter((street) =>
+    normalized.includes(normalizeText(street))
+  );
+  if (foundStreets.length > 0) {
+    facts.priorityStreets = foundStreets;
+  }
+
+  return facts;
 };
 
-const getNextQuestion = (missing: string[]) => {
-  const firstMissing = missing[0];
+export const mergeCustomerContext = (
+  oldContext: CustomerContext,
+  newFacts: CustomerFacts
+): CustomerContext => {
+  const merged: CustomerContext = {
+    ...normalizeContext(oldContext),
+  };
 
-  if (firstMissing === "Business") return "Mình thuê/mua để kinh doanh ngành gì hay để ở ạ?";
-  if (firstMissing === "Location") return "Mình ưu tiên khu vực nào nhất để em lọc đúng vị trí ạ?";
-  if (firstMissing === "Budget") return "Ngân sách tối đa của mình khoảng bao nhiêu để em lọc sát hơn ạ?";
-  if (firstMissing === "Area") return "Mình cần diện tích khoảng bao nhiêu m2 là đẹp ạ?";
-  if (firstMissing === "Structure") return "Mình cần kết cấu khoảng mấy phòng hoặc mấy tầng ạ?";
-  if (firstMissing === "Frontage") return "Mình có cần mặt tiền, hẻm xe hơi hay ô tô ra vào được không ạ?";
-  if (firstMissing === "Move-in time") return "Mình dự kiến cần nhận nhà khi nào ạ?";
+  for (const key of [
+    "purpose",
+    "business",
+    "district",
+    "budget",
+    "size",
+    "minArea",
+    "frontage",
+    "alleyCar",
+  ] as const) {
+    if (newFacts[key] !== undefined && newFacts[key] !== null && newFacts[key] !== "") {
+      merged[key] = newFacts[key] as never;
+    }
+  }
 
-  return "Em đã nắm các ý chính rồi, mình muốn em ưu tiên tiêu chí nào nhất khi lọc nhà ạ?";
+  merged.priorityStreets = uniqueValues([
+    ...(merged.priorityStreets || []),
+    ...(newFacts.priorityStreets || []),
+  ]);
+
+  if (merged.priorityStreets.length === 0) {
+    delete merged.priorityStreets;
+  }
+
+  return merged;
 };
 
-const fallbackResult = (message: string, profile: RequirementProfile): AssistantResult => {
-  const missing = getMissingRequirements(profile);
-  const objection = detectObjection(message);
-  const knownParts = [
-    profile.business ? `nhu cầu ${profile.business}` : "",
-    profile.location ? `khu vực ${profile.location}` : "",
-    profile.budget ? `ngân sách ${profile.budget}` : "",
+export const shouldAskQuestion = (
+  context: CustomerContext,
+  fieldName: keyof CustomerContext | "sizeOrFrontageOrStreet"
+) => {
+  if (fieldName === "sizeOrFrontageOrStreet") {
+    return !(
+      context.size ||
+      context.frontage ||
+      context.alleyCar ||
+      (context.priorityStreets && context.priorityStreets.length > 0)
+    );
+  }
+
+  if (fieldName === "priorityStreets") {
+    return !(context.priorityStreets && context.priorityStreets.length > 0);
+  }
+
+  return context[fieldName] === undefined || context[fieldName] === null || context[fieldName] === "";
+};
+
+export const buildCustomerContextPrompt = (
+  context: CustomerContext,
+  conversationHistory: ConversationMessage[],
+  message: string
+) => {
+  const historyText = conversationHistory
+    .map((item) => compactString(item.content || item.message))
+    .filter(Boolean)
+    .slice(-6)
+    .join("\n");
+
+  return [
+    "Customer Context Engine",
+    `Context: ${JSON.stringify(context)}`,
+    historyText ? `Recent conversation:\n${historyText}` : "",
+    `Current message: ${message}`,
+    "Rule: Never ask again for a field already present in context.",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+};
+
+const getMissingFields = (context: CustomerContext) => {
+  const missing: string[] = [];
+
+  if (shouldAskQuestion(context, "purpose")) missing.push("purpose");
+  if (shouldAskQuestion(context, "district")) missing.push("district");
+  if (shouldAskQuestion(context, "budget")) missing.push("budget");
+  if (context.purpose === "kinh doanh" && shouldAskQuestion(context, "business")) {
+    missing.push("business");
+  }
+  if (shouldAskQuestion(context, "sizeOrFrontageOrStreet")) {
+    missing.push("size/frontage_or_street_priority");
+  }
+
+  return missing;
+};
+
+const isQualified = (context: CustomerContext) =>
+  Boolean(
+    context.purpose &&
+      context.district &&
+      context.budget &&
+      (context.purpose !== "kinh doanh" || context.business) &&
+      (context.size ||
+        context.frontage ||
+        context.alleyCar ||
+        (context.priorityStreets && context.priorityStreets.length > 0))
+  );
+
+const buildNeedSummary = (context: CustomerContext) => {
+  const parts = [
+    context.purpose === "kinh doanh" ? "mặt bằng kinh doanh" : context.purpose,
+    context.business && context.business !== "văn phòng" ? context.business : "",
+    context.district,
+    context.budget ? `ngân sách khoảng ${context.budget}` : "",
   ].filter(Boolean);
 
-  return {
-    known_requirements: profile,
-    missing_requirements: missing,
-    customer_intent: objection ? "customer has an objection or needs reassurance" : "customer is sharing requirements",
-    objection,
-    suggested_replies: [
-      `Dạ em nắm ${knownParts.join(", ") || "nhu cầu của mình"} rồi ạ. Em sẽ lọc kỹ các căn sát nhất, không gửi lan man để mình dễ xem.`,
-      objection === "price too high"
-        ? "Dạ nếu mức này hơi cao, em lọc lại nhóm giá mềm hơn nhưng vẫn giữ các tiêu chí chính cho mình ạ."
-        : "Dạ được ạ, em sẽ ưu tiên những căn phù hợp nhất với thông tin mình đã chia sẻ trước.",
-      `${getNextQuestion(missing)}`,
-    ],
-    next_best_question: getNextQuestion(missing),
-  };
+  return parts.join(" ");
 };
 
-const buildPrompt = (
-  message: string,
-  history: unknown[],
-  lead: unknown,
-  mergedProfile: RequirementProfile,
-  missing: string[]
-) => `
-You are an AI sales assistant for a Vietnamese real estate broker.
-
-Rules:
-- Build a customer requirement profile over time.
-- Use only explicitly mentioned facts from lead data, CRM notes, activities, history, and the current message.
-- Never invent missing customer information.
-- Never ask again for fields already known in the provided merged profile.
-- The next_best_question must focus only on one missing field from this list: ${missing.join(", ") || "none"}.
-- Ask one thing at a time. Keep it friendly, conversational, and not form-like.
-- Return Vietnamese replies that are natural, short, professional, and warm.
-
-Tracked profile fields:
-business, location, budget, area, structure, frontage, move_in_time.
-
-Already merged known profile:
-${JSON.stringify(mergedProfile, null, 2)}
-
-Current customer message:
-${message}
-
-Existing lead data:
-${JSON.stringify(lead || {}, null, 2)}
-
-CRM activities/history:
-${JSON.stringify(history || [], null, 2)}
-
-Return JSON only with:
-known_requirements, missing_requirements, customer_intent, objection, suggested_replies, next_best_question.
-`;
-
-const parseAssistantResult = (value: unknown, baseProfile: RequirementProfile): AssistantResult | null => {
-  if (!value || typeof value !== "object") return null;
-
-  const result = value as Partial<AssistantResult>;
-  const suggestedReplies = Array.isArray(result.suggested_replies)
-    ? result.suggested_replies.filter((reply): reply is string => typeof reply === "string").slice(0, 3)
-    : [];
-
-  if (suggestedReplies.length !== 3) return null;
-
-  const profile = mergeProfiles(baseProfile, {
-    ...emptyProfile(),
-    ...(result.known_requirements || {}),
-  });
-  const missing = getMissingRequirements(profile);
-
-  return {
-    known_requirements: profile,
-    missing_requirements: missing,
-    customer_intent: typeof result.customer_intent === "string" ? result.customer_intent : "",
-    objection: typeof result.objection === "string" ? result.objection : null,
-    suggested_replies: suggestedReplies,
-    next_best_question:
-      typeof result.next_best_question === "string" && missing.length > 0
-        ? result.next_best_question
-        : getNextQuestion(missing),
-  };
-};
-
-const buildProfileNote = (profile: RequirementProfile) =>
-  profileKeys
-    .filter((key) => profile[key])
-    .map((key) => `${key}=${profile[key]}`)
-    .join(" | ");
-
-const mergeProfileIntoNote = (note: string | null, profile: RequirementProfile) => {
-  const existingParts = (note || "")
-    .split("|")
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .filter((part) => {
-      const key = part.split("=")[0]?.trim();
-      return !profileKeys.includes(key as keyof RequirementProfile);
-    });
-  const profileNote = buildProfileNote(profile);
-
-  return [...existingParts, profileNote].filter(Boolean).join(" | ") || null;
-};
-
-const formatProfileActivity = (profile: RequirementProfile) =>
-  profileKeys
-    .filter((key) => profile[key])
-    .map((key) => `${profileLabels[key]}: ${profile[key]}`)
-    .join(" | ");
-
-const saveProfile = async (lead: any, profile: RequirementProfile) => {
-  const leadId = compactString(lead?.id);
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!leadId || !supabaseUrl || !serviceRoleKey) {
-    return { activity: null, updated_note: lead?.note || null };
+const buildAcknowledgement = (newFacts: CustomerFacts) => {
+  if (newFacts.priorityStreets?.length) {
+    return `Dạ em ghi nhận anh ưu tiên ${newFacts.priorityStreets.join(", ")}.`;
   }
 
-  const supabase = createClient(supabaseUrl, serviceRoleKey);
-  const updatedNote = mergeProfileIntoNote(lead?.note || null, profile);
-  const leadScoring = calculateLeadScoring({
-    phone: lead?.phone,
-    max_price: lead?.max_price,
-    preferred_districts: lead?.preferred_districts,
-    note: updatedNote,
-  });
+  if (newFacts.frontage) {
+    return "Dạ em ghi nhận anh ưu tiên mặt tiền.";
+  }
 
-  await supabase
-    .from("leads")
-    .update({
-      note: updatedNote,
-      ...leadScoring,
-    })
-    .eq("id", leadId);
+  if (newFacts.alleyCar) {
+    return "Dạ em ghi nhận anh cần hẻm xe hơi.";
+  }
 
-  const { data: activity } = await supabase
-    .from("lead_activities")
-    .insert([
-      {
-        lead_id: leadId,
-        type: "AI hồ sơ nhu cầu",
-        content: `Cập nhật hồ sơ nhu cầu: ${formatProfileActivity(profile)}`,
-      },
-    ])
-    .select("id, lead_id, type, content, created_at")
-    .single();
+  if (newFacts.budget) {
+    return `Dạ em ghi nhận ngân sách khoảng ${newFacts.budget}.`;
+  }
 
-  return { activity, updated_note: updatedNote, lead_scoring: leadScoring };
+  if (newFacts.district) {
+    return `Dạ em ghi nhận khu vực ${newFacts.district}.`;
+  }
+
+  if (newFacts.business) {
+    return `Dạ em ghi nhận mình kinh doanh ${newFacts.business}.`;
+  }
+
+  return "Dạ em nắm thông tin của anh rồi.";
 };
+
+const getNextQuestion = (context: CustomerContext) => {
+  if (shouldAskQuestion(context, "purpose")) {
+    return "Anh đang tìm để ở, kinh doanh hay làm văn phòng để em lọc đúng nhu cầu ạ?";
+  }
+
+  if (shouldAskQuestion(context, "district")) {
+    return "Anh ưu tiên khu vực nào để em lọc mặt bằng sát hơn ạ?";
+  }
+
+  if (shouldAskQuestion(context, "budget")) {
+    return "Ngân sách anh muốn giữ khoảng bao nhiêu để em lọc đúng tầm ạ?";
+  }
+
+  if (context.purpose === "kinh doanh" && shouldAskQuestion(context, "business")) {
+    return "Anh cho em hỏi thêm mình kinh doanh ngành gì để em lọc mặt bằng sát hơn ạ?";
+  }
+
+  if (shouldAskQuestion(context, "sizeOrFrontageOrStreet")) {
+    return "Anh ưu tiên diện tích khoảng bao nhiêu, mặt tiền hay tuyến đường nào để em lọc sát hơn ạ?";
+  }
+
+  return "";
+};
+
+const detectNextAction = (context: CustomerContext): NextAction =>
+  isQualified(context) ? "suggest_listings" : "ask_more_info";
+
+const buildReply = (
+  context: CustomerContext,
+  newFacts: CustomerFacts,
+  missingFields: string[]
+) => {
+  const acknowledgement = buildAcknowledgement(newFacts);
+  const needSummary = buildNeedSummary(context);
+
+  if (missingFields.length === 0) {
+    const streetText = context.priorityStreets?.length
+      ? `, ưu tiên tuyến ${context.priorityStreets.join(", ")}`
+      : "";
+    const frontageText = context.frontage
+      ? ", ưu tiên mặt tiền"
+      : context.alleyCar
+        ? ", ưu tiên hẻm xe hơi"
+        : "";
+
+    return `${acknowledgement} Hiện nhu cầu của anh là ${needSummary}${streetText}${frontageText}. Em sẽ lọc vài căn sát nhất để anh so nhanh. Anh muốn xem nhà hôm nay hay ngày mai tiện hơn ạ?`;
+  }
+
+  const question = getNextQuestion(context);
+
+  if (needSummary) {
+    return `${acknowledgement} Hiện nhu cầu của anh là ${needSummary}. ${question}`;
+  }
+
+  return `${acknowledgement} ${question}`;
+};
+
+const buildLegacyAssistant = (
+  context: CustomerContext,
+  missingFields: string[],
+  reply: string
+) => ({
+  known_requirements: {
+    business: context.business || context.purpose || null,
+    location: context.district || null,
+    budget: context.budget || null,
+    area: context.size || (context.minArea ? `${context.minArea}m2` : null),
+    structure: context.priorityStreets?.join(", ") || null,
+    frontage: context.frontage
+      ? "mặt tiền"
+      : context.alleyCar
+        ? "hẻm xe hơi"
+        : null,
+    move_in_time: null,
+  },
+  missing_requirements: missingFields,
+  customer_intent: "customer is sharing requirements",
+  objection: null,
+  suggested_replies: [reply],
+  next_best_question: getNextQuestion(context),
+});
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const body = (await req.json()) as AiSalesAssistantBody;
     const message = compactString(body.message);
 
     if (!message) {
@@ -335,119 +420,38 @@ export async function POST(req: Request) {
       );
     }
 
-    const history = Array.isArray(body.history) ? body.history : [];
-    const historyText = history
-      .map((item: any) => `${item.type || ""}: ${item.content || ""}`)
-      .join("\n");
-    const lead = body.lead || {};
-    const baseProfile = mergeProfiles(
-      inferProfileFromText(String(lead.note || ""), lead),
-      inferProfileFromText(historyText, lead),
-      inferProfileFromText(message, lead)
-    );
-    const baseMissing = getMissingRequirements(baseProfile);
-    const apiKey = process.env.OPENAI_API_KEY;
-    let assistant = fallbackResult(message, baseProfile);
-    let source = "fallback";
+    const conversationHistory = Array.isArray(body.conversationHistory)
+      ? body.conversationHistory
+      : Array.isArray(body.history)
+        ? body.history
+        : [];
+    const oldContext = normalizeContext(body.currentContext || {});
+    const newFacts = extractCustomerFacts(message);
+    const updatedContext = mergeCustomerContext(oldContext, newFacts);
+    const missingFields = getMissingFields(updatedContext);
+    const reply = buildReply(updatedContext, newFacts, missingFields);
+    const nextAction = detectNextAction(updatedContext);
 
-    if (apiKey) {
-      const res = await fetch("https://api.openai.com/v1/responses", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
-          input: buildPrompt(message, history, lead, baseProfile, baseMissing),
-          text: {
-            format: {
-              type: "json_schema",
-              name: "sales_assistant_profile_result",
-              strict: true,
-              schema: {
-                type: "object",
-                additionalProperties: false,
-                properties: {
-                  known_requirements: {
-                    type: "object",
-                    additionalProperties: false,
-                    properties: Object.fromEntries(
-                      profileKeys.map((key) => [key, { type: ["string", "null"] }])
-                    ),
-                    required: profileKeys,
-                  },
-                  missing_requirements: {
-                    type: "array",
-                    items: { type: "string" },
-                  },
-                  customer_intent: { type: "string" },
-                  objection: {
-                    type: ["string", "null"],
-                    enum: [
-                      "price too high",
-                      "not suitable location",
-                      "needs time to think",
-                      "wants more options",
-                      "comparing with others",
-                      null,
-                    ],
-                  },
-                  suggested_replies: {
-                    type: "array",
-                    minItems: 3,
-                    maxItems: 3,
-                    items: { type: "string" },
-                  },
-                  next_best_question: { type: "string" },
-                },
-                required: [
-                  "known_requirements",
-                  "missing_requirements",
-                  "customer_intent",
-                  "objection",
-                  "suggested_replies",
-                  "next_best_question",
-                ],
-              },
-            },
-          },
-        }),
-      });
-      const json = await res.json();
-
-      if (!res.ok) {
-        throw new Error(json.error?.message || "Không gọi được AI.");
-      }
-
-      const outputText =
-        json.output_text ||
-        json.output?.flatMap((item: any) => item.content || [])
-          ?.find((content: any) => content.type === "output_text")?.text ||
-        "";
-      const parsed = parseAssistantResult(JSON.parse(outputText), baseProfile);
-
-      if (parsed) {
-        assistant = parsed;
-        source = "openai";
-      }
-    }
-
-    const saved = await saveProfile(lead, assistant.known_requirements);
+    buildCustomerContextPrompt(updatedContext, conversationHistory, message);
 
     return NextResponse.json({
       success: true,
-      assistant,
-      activity: saved.activity,
-      updated_note: saved.updated_note,
-      lead_scoring: saved.lead_scoring,
-      source,
+      reply,
+      updatedContext,
+      missingFields,
+      nextAction,
+      assistant: buildLegacyAssistant(updatedContext, missingFields, reply),
     });
   } catch (error) {
+    console.error("AI sales assistant failed:", error);
+
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "Không tạo được gợi ý trả lời.",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Không tạo được gợi ý trả lời.",
       },
       { status: 500 }
     );
