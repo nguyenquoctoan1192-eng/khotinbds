@@ -29,6 +29,14 @@ const districtPatterns: DistrictPattern[] = [
     patterns: [/\b(?:quan|q)\s*10\b/],
   },
   {
+    label: "Qu\u1eadn 11",
+    patterns: [/\b(?:quan|q)\s*11\b/],
+  },
+  {
+    label: "Qu\u1eadn 2",
+    patterns: [/\b(?:quan|q)\s*2\b/],
+  },
+  {
     label: "Qu\u1eadn 1",
     patterns: [/\b(?:quan|q)\s*1\b/],
   },

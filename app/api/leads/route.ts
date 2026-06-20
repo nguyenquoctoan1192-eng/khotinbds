@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import {
   LeadRequirement,
+  ListingMatchCandidate,
   MatchResult,
   compareMatchResults,
   getMatchReasons,
@@ -14,6 +15,19 @@ type MatchWithLead = MatchResult & { lead_id: string };
 
 const MIN_MATCH_SCORE = 40;
 const KEYWORD_MATCH_SCORE = 45;
+
+const hardFilterDistricts = [
+  "Quận 1",
+  "Quận 2",
+  "Quận 3",
+  "Quận 10",
+  "Quận 11",
+  "Phú Nhuận",
+  "Bình Thạnh",
+  "Gò Vấp",
+  "Tân Bình",
+  "Tân Phú",
+];
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -29,6 +43,118 @@ function normalizeKeywordText(value: unknown) {
     .replace(/Đ/g, "d")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function normalizeDistrictText(value: unknown) {
+  return normalizeKeywordText(value)
+    .replace(/^quan\s+/, "quan ")
+    .replace(/^q\s*\.?\s*/, "quan ")
+    .trim();
+}
+
+function normalizePreferredDistricts(value: unknown) {
+  const rawDistricts = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(",")
+      : [];
+
+  return rawDistricts
+    .map((district) => String(district || "").trim())
+    .filter(Boolean);
+}
+
+function getHardFilterDistricts(value: unknown) {
+  const preferred = normalizePreferredDistricts(value);
+  const allowed = new Map(
+    hardFilterDistricts.map((district) => [normalizeDistrictText(district), district])
+  );
+
+  return preferred.filter((district) => allowed.has(normalizeDistrictText(district)));
+}
+
+function extractHardFilterDistrictsFromText(value: unknown) {
+  const normalized = normalizeKeywordText(value);
+  const matches: string[] = [];
+
+  for (const district of hardFilterDistricts) {
+    const normalizedDistrict = normalizeDistrictText(district);
+    const withoutPrefix = normalizedDistrict.replace(/^quan\s+/, "");
+    const pattern = /^\d+$/.test(withoutPrefix)
+      ? new RegExp(`\\b(?:quan|q)\\.?\\s*${withoutPrefix}\\b`)
+      : new RegExp(`\\b${withoutPrefix}\\b`);
+
+    if (pattern.test(normalized)) {
+      matches.push(district);
+    }
+  }
+
+  return matches;
+}
+
+function listingMatchesDistrict(listing: Record<string, unknown>, districts: string[]) {
+  const listingDistrict = normalizeDistrictText(listing.district);
+
+  return districts.some(
+    (district) => normalizeDistrictText(district) === listingDistrict
+  );
+}
+
+function getDistrictFilteredListings(
+  listings: ListingMatchCandidate[],
+  preferredDistricts: unknown
+) {
+  const districts = getHardFilterDistricts(preferredDistricts);
+
+  if (districts.length === 0) {
+    return {
+      districts,
+      listingsForScoring: listings,
+      fallbackWarning: null as string | null,
+    };
+  }
+
+  const filteredListings = listings.filter((listing) =>
+    listingMatchesDistrict(listing, districts)
+  );
+
+  if (filteredListings.length > 0) {
+    return {
+      districts,
+      listingsForScoring: filteredListings,
+      fallbackWarning: null as string | null,
+    };
+  }
+
+  return {
+    districts,
+    listingsForScoring: listings,
+    fallbackWarning: `Không tìm thấy bất động sản đúng ${districts.join(", ")}. Đang hiển thị khu vực lân cận.`,
+  };
+}
+
+function isSearchableListing(listing: ListingMatchCandidate) {
+  const status = normalizeKeywordText(listing.status);
+  return !status || ["active", "available"].includes(status);
+}
+
+function createFallbackMatch(listing: ListingMatchCandidate): MatchResult {
+  return {
+    listing_id: listing.id,
+    score: 1,
+    breakdown: {
+      district_score: 0,
+      price_score: 0,
+      area_score: 0,
+      bedroom_score: 0,
+      business_score: 0,
+      data_quality_penalty: 0,
+      total_score: 1,
+      reasons: ["Fallback nearby area"],
+    },
+    reasons: ["Fallback nearby area"],
+    listing,
+  };
 }
 
 function getListingKeywordText(listing: Record<string, unknown>) {
@@ -109,14 +235,25 @@ export async function POST(req: Request) {
         note,
       };
       const hasStructuredFilters = hasStructuredRequirement(requirement);
+      const { listingsForScoring, fallbackWarning } = getDistrictFilteredListings(
+        listings || [],
+        preferred_districts
+      );
+      const scoringRequirement: LeadRequirement = fallbackWarning
+        ? {
+            ...requirement,
+            preferred_districts: [],
+          }
+        : requirement;
 
       const matches: MatchResult[] = [];
+      const minimumScore = fallbackWarning ? 1 : MIN_MATCH_SCORE;
 
-      for (const listing of listings || []) {
-        const match = scoreListingForLead(listing, requirement);
+      for (const listing of listingsForScoring) {
+        const match = scoreListingForLead(listing, scoringRequirement);
         const keywordScore = scoreListingKeyword(listing, keywordSearch);
 
-        if (match && match.score >= MIN_MATCH_SCORE) {
+        if (match && match.score >= minimumScore) {
           if (keywordScore > 0) {
             match.score += keywordScore;
             match.breakdown.total_score += keywordScore;
@@ -147,11 +284,21 @@ export async function POST(req: Request) {
         }
       }
 
+      if (fallbackWarning && matches.length === 0) {
+        matches.push(
+          ...listingsForScoring
+            .filter(isSearchableListing)
+            .slice(0, 10)
+            .map(createFallbackMatch)
+        );
+      }
+
       matches.sort(compareMatchResults);
 
       return NextResponse.json({
         success: true,
         matches,
+        fallbackWarning,
       });
     }
 
@@ -226,18 +373,41 @@ export async function POST(req: Request) {
         "lead-match-debug listings before scoring:",
         listings?.length || 0
       );
+      const { listingsForScoring, fallbackWarning } = getDistrictFilteredListings(
+        listings || [],
+        preferred_districts
+      );
+      const scoringRequirement: LeadRequirement = fallbackWarning
+        ? {
+            ...requirement,
+            preferred_districts: [],
+          }
+        : requirement;
 
       const matches: MatchWithLead[] = [];
+      const minimumScore = fallbackWarning ? 1 : MIN_MATCH_SCORE;
 
-      for (const listing of listings || []) {
-        const match = scoreListingForLead(listing, requirement);
+      for (const listing of listingsForScoring) {
+        const match = scoreListingForLead(listing, scoringRequirement);
 
-        if (match && match.score >= MIN_MATCH_SCORE) {
+        if (match && match.score >= minimumScore) {
           matches.push({
             ...match,
             lead_id: lead.id,
           });
         }
+      }
+
+      if (fallbackWarning && matches.length === 0) {
+        matches.push(
+          ...listingsForScoring
+            .filter(isSearchableListing)
+            .slice(0, 10)
+            .map((listing) => ({
+              ...createFallbackMatch(listing),
+              lead_id: lead.id,
+            }))
+        );
       }
 
       console.log(
@@ -261,6 +431,7 @@ export async function POST(req: Request) {
         success: true,
         lead,
         matches,
+        fallbackWarning,
       });
     }
 
@@ -273,12 +444,19 @@ export async function POST(req: Request) {
         .select("*");
 
       const q = (query || "").toLowerCase();
+      const hardDistricts = extractHardFilterDistrictsFromText(query);
+      const { listingsForScoring, fallbackWarning } = getDistrictFilteredListings(
+        listings || [],
+        hardDistricts
+      );
 
-      const scored = (listings || []).map((item) => {
+      const scored = listingsForScoring.map((item) => {
         let score = 0;
+        const bedrooms = Number(item.bedrooms || 0);
 
-        if (q.includes(item.district?.toLowerCase())) score += 30;
-        if (q.includes("phòng") && item.bedrooms >= 1) score += 20;
+        if (hardDistricts.length > 0 && listingMatchesDistrict(item, hardDistricts)) score += 40;
+        if (hardDistricts.length === 0 && q.includes(item.district?.toLowerCase())) score += 30;
+        if (q.includes("phòng") && bedrooms >= 1) score += 20;
         if (q.includes("tỷ") && item.price) score += 20;
 
         return { ...item, score };
@@ -291,6 +469,7 @@ export async function POST(req: Request) {
       return NextResponse.json({
         success: true,
         matches,
+        fallbackWarning,
       });
     }
 

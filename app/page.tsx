@@ -69,6 +69,7 @@ export default function Home() {
   const [queryReady, setQueryReady] = useState(false);
   const [parsedFilters, setParsedFilters] =
     useState<ParsedRequirementFilters | null>(null);
+  const [searchWarning, setSearchWarning] = useState("");
   const [showTopButton, setShowTopButton] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [showSaveForm, setShowSaveForm] = useState(false);
@@ -352,6 +353,7 @@ export default function Home() {
   const fetchListings = async () => {
     setLoading(true);
     setSaveMessage("");
+    setSearchWarning("");
 
     if (search.trim()) {
       const parsed = parseVietnameseRequirement(search);
@@ -382,11 +384,13 @@ export default function Home() {
       }
 
       setListings(json.matches || []);
+      setSearchWarning(json.fallbackWarning || "");
       setLoading(false);
       return;
     }
 
     setParsedFilters(null);
+    setSearchWarning("");
 
     const { data, error } = await supabase
       .from("listings")
@@ -626,6 +630,22 @@ export default function Home() {
             {parsedFilters.keywordSearch && (
               <p>Từ khóa: {parsedFilters.keywordSearch}</p>
             )}
+          </div>
+        )}
+
+        {searchWarning && (
+          <div
+            style={{
+              background: "#fef3c7",
+              border: "1px solid #f59e0b",
+              borderRadius: 10,
+              color: "#92400e",
+              fontWeight: 700,
+              marginBottom: 12,
+              padding: 12,
+            }}
+          >
+            {searchWarning}
           </div>
         )}
 
