@@ -70,23 +70,24 @@ const namedDistricts = [
   ["binh tan", "Bình Tân"],
 ] as const;
 
-const getCanonicalDistrict = (value: unknown) => {
+export const cleanDistrictName = (value: unknown) => {
   const raw = compactText(value);
-  const normalized = normalizeText(raw)
-    .replace(/^q\.?\s*/, "")
-    .replace(/^quan\s+/, "")
+  const withoutPrefix = raw
+    .replace(/^quận\b\s*/i, "")
+    .replace(/^quan\b\s*/i, "")
+    .replace(/^q\.\s*/i, "")
+    .replace(/^q\s+/i, "")
+    .replace(/^q(?=\d)/i, "")
     .trim();
+  const normalized = normalizeText(withoutPrefix);
   const numericMatch = normalized.match(/^(\d{1,2})$/);
 
-  if (numericMatch) return `Quận ${Number(numericMatch[1])}`;
+  if (numericMatch) return String(Number(numericMatch[1]));
 
   const named = namedDistricts.find(([key]) => normalized === key);
   if (named) return named[1];
 
-  if (/^quan\s+/i.test(raw)) return titleCase(raw);
-  if (/^q\.?\s*/i.test(raw)) return titleCase(raw.replace(/^q\.?\s*/i, "Quận "));
-
-  return raw ? titleCase(raw) : "";
+  return withoutPrefix ? titleCase(withoutPrefix) : "";
 };
 
 const trimWords = (value: string, maxLength: number) => {
@@ -143,18 +144,18 @@ const formatShortPrice = (price: string) => {
 
 const extractDistrict = (input: ListingContentInput, rawText: string) => {
   const explicitDistrict = compactText(input.district);
-  if (explicitDistrict) return getCanonicalDistrict(explicitDistrict);
+  if (explicitDistrict) return cleanDistrictName(explicitDistrict);
 
   const districtMatch =
     rawText.match(/\bQ\.?\s*(\d{1,2})\b/i) ||
     rawText.match(/\bQuận\s*(\d{1,2})\b/i);
 
-  if (districtMatch) return `Quận ${Number(districtMatch[1])}`;
+  if (districtMatch) return String(Number(districtMatch[1]));
 
   const normalized = normalizeText(rawText);
   const qNamedMatch = normalized.match(/\bq\.?\s*([a-z]+(?:\s+[a-z]+){0,2})\b/);
   if (qNamedMatch) {
-    const district = getCanonicalDistrict(qNamedMatch[1]);
+    const district = cleanDistrictName(qNamedMatch[1]);
     if (district) return district;
   }
 
@@ -162,12 +163,11 @@ const extractDistrict = (input: ListingContentInput, rawText: string) => {
 };
 
 const getDistrictShort = (district: string) => {
-  const match = district.match(/(\d{1,2})/);
-  return match ? `Q${Number(match[1])}` : district;
+  return /^\d{1,2}$/.test(district) ? `Q${Number(district)}` : district;
 };
 
 const getDisplayDistrict = (district: string) =>
-  district && !/^quận\s+/i.test(district) ? `Quận ${district}` : district;
+  district ? `Quận ${cleanDistrictName(district)}` : "";
 
 const extractWard = (rawText: string) => {
   const wardMatch =
@@ -285,7 +285,7 @@ const parseListingFacts = (input: ListingContentInput): ParsedListingFacts => {
     "văn phòng đại diện",
     structureParts.some((part) => /\d+\s*lầu/.test(part)) ? "studio" : "",
   ].filter(Boolean);
-  const location = [street, ward, district].filter(Boolean).join(", ");
+  const location = [street, ward, getDisplayDistrict(district)].filter(Boolean).join(", ");
 
   return {
     location: location || "Nhà cho thuê",
@@ -320,7 +320,7 @@ const getFacebookStructure = (facts: ParsedListingFacts) => {
 const getBenefitLines = (facts: ParsedListingFacts) => {
   const lines = [
     facts.access ? `${facts.access} dễ nhận diện` : "",
-    facts.district ? `Khu trung tâm ${facts.district}` : "",
+    facts.district ? `Khu trung tâm ${getDisplayDistrict(facts.district)}` : "",
     facts.structureParts.length ? "Mặt bằng dễ bố trí công năng" : "",
   ];
 
