@@ -1,3 +1,5 @@
+import { normalizeDistrictQuery } from "@/lib/searchNormalization";
+
 export type ListingMatchCandidate = {
   id: string | number;
   price?: number | string | null;
@@ -84,6 +86,10 @@ function normalizeText(value: unknown): string {
 }
 
 function normalizeDistrictName(value: unknown): string {
+  const district = normalizeDistrictQuery(value);
+
+  if (district) return district;
+
   const normalized = normalizeText(value);
   const withoutPrefix = normalized.replace(/^quan\s+/, "").trim();
 

@@ -7,6 +7,7 @@ import {
   ParsedRequirementFilters,
   parseVietnameseRequirement,
 } from "@/lib/requirementParser";
+import { noSearchResultsMessage } from "@/lib/searchNormalization";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -383,8 +384,13 @@ export default function Home() {
         return;
       }
 
-      setListings(json.matches || []);
-      setSearchWarning(json.fallbackWarning || "");
+      const matches = json.matches || [];
+      setListings(matches);
+      setSearchWarning(
+        json.fallbackWarning ||
+          json.message ||
+          (matches.length === 0 ? noSearchResultsMessage : "")
+      );
       setLoading(false);
       return;
     }
@@ -657,7 +663,7 @@ export default function Home() {
 
         {loading ? (
           <p>Đang tải...</p>
-        ) : listings.length === 0 ? (
+        ) : listings.length === 0 && !searchWarning ? (
           <p>Không tìm thấy dữ liệu</p>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 18, marginTop: 20 }}>
