@@ -60,6 +60,35 @@ const titleCase = (value: string) =>
     })
     .join(" ");
 
+const namedDistricts = [
+  ["phu nhuan", "Phú Nhuận"],
+  ["binh thanh", "Bình Thạnh"],
+  ["go vap", "Gò Vấp"],
+  ["tan binh", "Tân Bình"],
+  ["tan phu", "Tân Phú"],
+  ["thu duc", "Thủ Đức"],
+  ["binh tan", "Bình Tân"],
+] as const;
+
+const getCanonicalDistrict = (value: unknown) => {
+  const raw = compactText(value);
+  const normalized = normalizeText(raw)
+    .replace(/^q\.?\s*/, "")
+    .replace(/^quan\s+/, "")
+    .trim();
+  const numericMatch = normalized.match(/^(\d{1,2})$/);
+
+  if (numericMatch) return `Quận ${Number(numericMatch[1])}`;
+
+  const named = namedDistricts.find(([key]) => normalized === key);
+  if (named) return named[1];
+
+  if (/^quan\s+/i.test(raw)) return titleCase(raw);
+  if (/^q\.?\s*/i.test(raw)) return titleCase(raw.replace(/^q\.?\s*/i, "Quận "));
+
+  return raw ? titleCase(raw) : "";
+};
+
 const trimWords = (value: string, maxLength: number) => {
   const normalized = value.replace(/\s+/g, " ").trim();
 
@@ -114,7 +143,7 @@ const formatShortPrice = (price: string) => {
 
 const extractDistrict = (input: ListingContentInput, rawText: string) => {
   const explicitDistrict = compactText(input.district);
-  if (explicitDistrict) return explicitDistrict;
+  if (explicitDistrict) return getCanonicalDistrict(explicitDistrict);
 
   const districtMatch =
     rawText.match(/\bQ\.?\s*(\d{1,2})\b/i) ||
@@ -123,15 +152,11 @@ const extractDistrict = (input: ListingContentInput, rawText: string) => {
   if (districtMatch) return `Quận ${Number(districtMatch[1])}`;
 
   const normalized = normalizeText(rawText);
-  const namedDistricts = [
-    ["phu nhuan", "Phú Nhuận"],
-    ["binh thanh", "Bình Thạnh"],
-    ["go vap", "Gò Vấp"],
-    ["tan binh", "Tân Bình"],
-    ["tan phu", "Tân Phú"],
-    ["thu duc", "Thủ Đức"],
-    ["binh tan", "Bình Tân"],
-  ] as const;
+  const qNamedMatch = normalized.match(/\bq\.?\s*([a-z]+(?:\s+[a-z]+){0,2})\b/);
+  if (qNamedMatch) {
+    const district = getCanonicalDistrict(qNamedMatch[1]);
+    if (district) return district;
+  }
 
   return namedDistricts.find(([key]) => normalized.includes(key))?.[1] || "";
 };
@@ -140,6 +165,9 @@ const getDistrictShort = (district: string) => {
   const match = district.match(/(\d{1,2})/);
   return match ? `Q${Number(match[1])}` : district;
 };
+
+const getDisplayDistrict = (district: string) =>
+  district && !/^quận\s+/i.test(district) ? `Quận ${district}` : district;
 
 const extractWard = (rawText: string) => {
   const wardMatch =
@@ -211,6 +239,8 @@ const extractStreet = (
     .replace(/\bP\.\s*[^,\n]+?(?=\s+Q\.?\s*\d|\s+Quận|\n|$)/i, " ")
     .replace(/\bPhường\s+[^,\n]+?(?=\s+Q\.?\s*\d|\s+Quận|\n|$)/i, " ")
     .replace(/\bQ\.?\s*\d{1,2}\b/gi, " ")
+    .replace(/\bQ\.?\s*(?:Phú\s+Nhuận|Bình\s+Thạnh|Gò\s+Vấp|Tân\s+Bình|Tân\s+Phú|Thủ\s+Đức|Bình\s+Tân)\b/gi, " ")
+    .replace(/\bQuận\s+(?:Phú\s+Nhuận|Bình\s+Thạnh|Gò\s+Vấp|Tân\s+Bình|Tân\s+Phú|Thủ\s+Đức|Bình\s+Tân)\b/gi, " ")
     .replace(/\bQuận\s*\d{1,2}\b/gi, " ")
     .replace(/\b\d+(?:[.,]\d+)?\s*x\s*\d+(?:[.,]\d+)?\b/gi, " ")
     .replace(/\b\d+(?:[.,]\d+)?\s*(?:tr|triệu)\b/gi, " ")
@@ -218,7 +248,7 @@ const extractStreet = (
     .replace(/\s+/g, " ")
     .trim();
 
-  return titleCase(cleaned).replace(/^\d+\s+/, "").trim();
+  return titleCase(cleaned).replace(/^\d+[A-Za-z]?\s*/, "").trim();
 };
 
 const parseListingFacts = (input: ListingContentInput): ParsedListingFacts => {
@@ -309,7 +339,7 @@ const buildFixedPrimaryContent = (
   const headlineAccess = facts.access === "Mặt tiền" ? "MẶT TIỀN" : facts.access.toUpperCase();
   const headline = [
     ["CHO THUÊ", headlineAccess, facts.street].filter(Boolean).join(" "),
-    facts.district,
+    getDisplayDistrict(facts.district),
   ]
     .filter(Boolean)
     .join(" - ");
