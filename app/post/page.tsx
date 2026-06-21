@@ -220,6 +220,9 @@ const [amenities, setAmenities] =
   const [aiContent, setAiContent] =
     useState<AiListingContent | null>(null);
 
+  const [savingAiContent, setSavingAiContent] =
+    useState(false);
+
   const [imageEnhance, setImageEnhance] =
     useState<ImageEnhanceState | null>(null);
 
@@ -447,6 +450,55 @@ const copyAiContent = async (value: string) => {
   }
 };
 
+const getAiListingDimensions = () =>
+  width && length
+    ? `${width}x${length}`
+    : area
+      ? `${area}m²`
+      : "";
+
+const getAiListingStructure = () => (floors ? `${floors} tầng` : "");
+
+const saveAiContentToLibrary = async () => {
+  if (!aiContent) return;
+
+  setSavingAiContent(true);
+  setAiContentMessage("");
+
+  try {
+    const res = await fetch("/api/listing-library", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        raw_input: zaloText || description,
+        title,
+        address,
+        district,
+        street: address,
+        price,
+        area: getAiListingDimensions() || area,
+        structure: getAiListingStructure(),
+        phone: contactPhone,
+        content: aiContent,
+      }),
+    });
+    const json = await res.json();
+
+    if (!res.ok || !json.success) {
+      throw new Error(json.error || "Không lưu được tin vào kho");
+    }
+
+    setAiContentMessage("Đã lưu vào kho tin đăng.");
+  } catch (error) {
+    console.error(error);
+    setAiContentMessage("Chưa lưu được vào kho tin đăng, bạn thử lại sau nhé.");
+  } finally {
+    setSavingAiContent(false);
+  }
+};
+
 const autoFillFromZalo = () => {
   const text = (zaloText || "").trim();
   if (!text) return;
@@ -653,13 +705,8 @@ console.log("SET PRICE:", String(priceValue));
     setAiContentMessage("");
     setAiContent(null);
     setAiContentLoading(true);
-    const dimensions =
-      width && length
-        ? `${width}x${length}`
-        : area
-          ? `${area}m²`
-          : "";
-    const structure = floors ? `${floors} tầng` : "";
+    const dimensions = getAiListingDimensions();
+    const structure = getAiListingStructure();
 
     try {
       const res = await fetch("/api/listing-content", {
@@ -941,6 +988,23 @@ console.log("ERROR =", error);
                   <div style={styles.aiOutput}>{item.value}</div>
                 </div>
               ))}
+              <button
+                type="button"
+                onClick={saveAiContentToLibrary}
+                disabled={savingAiContent}
+                style={{
+                  width: "100%",
+                  padding: 12,
+                  background: savingAiContent ? "#94a3b8" : "#0f766e",
+                  color: "white",
+                  border: "none",
+                  borderRadius: 8,
+                  cursor: savingAiContent ? "not-allowed" : "pointer",
+                  fontWeight: "bold",
+                }}
+              >
+                {savingAiContent ? "Đang lưu..." : "Lưu vào kho tin đăng"}
+              </button>
             </div>
           )}
 
