@@ -7,7 +7,6 @@ import { useState } from "react";
 const menuItems = [
   { href: "/", label: "Trang chủ" },
   { href: "/post", label: "Đăng tin" },
-  { href: "/tim-nha", label: "Tìm nhà" },
   { href: "/listing-library", label: "📚 Kho tin đăng" },
   { href: "/dashboard", label: "Dashboard" },
 ];
