@@ -587,22 +587,6 @@ export default function Home() {
         </div>
       </div>
 
-      <div style={{ maxWidth: 900, margin: "0 auto 20px", padding: "0 20px" }}>
-        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 16, boxShadow: "0 4px 12px rgba(0,0,0,0.06)", padding: 20 }}>
-          <h2 style={{ margin: "0 0 8px", fontSize: 21 }}>📚 Kho tin đăng</h2>
-          <p style={{ margin: "0 0 16px", color: "#4b5563", lineHeight: 1.5 }}>
-            Lưu trữ toàn bộ tin đã tạo bằng AI để sử dụng lại nhanh chóng.
-          </p>
-          <button
-            type="button"
-            onClick={() => router.push("/listing-library")}
-            style={{ width: "auto", background: "#0f766e", border: "none", borderRadius: 9, color: "#fff", cursor: "pointer", fontWeight: 700, padding: "11px 15px" }}
-          >
-            → Mở kho tin đăng
-          </button>
-        </div>
-      </div>
-
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: 20 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <h2 style={{ marginBottom: 8 }}>
