@@ -4,6 +4,7 @@ import { useState, type DragEvent } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import SiteNavbar from "@/app/components/site-navbar";
+import RoleGate from "@/app/components/role-gate";
 
 function DraggableImage({
   img,
@@ -151,7 +152,7 @@ const defaultEnhanceOptions = (): ImageEnhanceOptions => ({
   removeObjects: false,
 });
 
-export default function PostPage() {
+function PostContent() {
   const router = useRouter();
 
   const [title, setTitle] =
@@ -1448,4 +1449,12 @@ const styles: any = {
     fontWeight: "bold",
   },
 };
+
+export default function PostPage() {
+  return (
+    <RoleGate allowedRoles={["admin"]}>
+      <PostContent />
+    </RoleGate>
+  );
+}
 

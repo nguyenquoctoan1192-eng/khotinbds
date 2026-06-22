@@ -15,6 +15,7 @@ import {
   useRouter,
 } from "next/navigation";
 import { useUserRole } from "@/lib/userRole";
+import RoleGate from "@/app/components/role-gate";
 
 const supabase = createClient(
   process.env
@@ -50,7 +51,7 @@ const defaultEnhanceOptions = (): ImageEnhanceOptions => ({
   removeObjects: false,
 });
 
-export default function EditPage() {
+function EditContent() {
   const router = useRouter();
   const { role, roleLoading } = useUserRole();
 
@@ -1185,3 +1186,11 @@ const styles: any = {
     fontWeight: 700,
   },
 };
+
+export default function EditPage() {
+  return (
+    <RoleGate allowedRoles={["admin"]}>
+      <EditContent />
+    </RoleGate>
+  );
+}

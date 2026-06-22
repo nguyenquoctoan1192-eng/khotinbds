@@ -1,5 +1,7 @@
 import Link from "next/link";
 import SiteNavbar from "@/app/components/site-navbar";
+import { redirect } from "next/navigation";
+import { getServerUserRole } from "@/lib/serverAuth";
 import { createClient } from "@supabase/supabase-js";
 import { calculateLeadScoring } from "@/lib/leadScoring";
 import {
@@ -345,6 +347,8 @@ function NextActionList({
 }
 
 export default async function DashboardPage() {
+  const role = await getServerUserRole();
+  if (role !== "admin" && role !== "broker") redirect("/login");
   const { leads, activities, error } = await getLeads();
   const today = startOfLocalDay(new Date()).getTime();
   const assignmentMap = buildLeadAssignments(

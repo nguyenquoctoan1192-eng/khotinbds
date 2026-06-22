@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import RoleGate from "@/app/components/role-gate";
 
-export default function CustomerDetail() {
+function CustomerDetailContent() {
   const { id } = useParams();
   const [data, setData] = useState<any>(null);
 
@@ -35,5 +36,13 @@ export default function CustomerDetail() {
         ))}
       </div>
     </div>
+  );
+}
+
+export default function CustomerDetail() {
+  return (
+    <RoleGate allowedRoles={["admin", "broker"]}>
+      <CustomerDetailContent />
+    </RoleGate>
   );
 }

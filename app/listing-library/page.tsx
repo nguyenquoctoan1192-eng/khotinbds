@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import SiteNavbar from "@/app/components/site-navbar";
 import { useUserRole } from "@/lib/userRole";
+import RoleGate from "@/app/components/role-gate";
 
 type ListingLibraryItem = {
   id: string;
@@ -41,7 +42,7 @@ const formatDate = (value: string | null) => {
   return new Date(value).toLocaleString("vi-VN");
 };
 
-export default function ListingLibraryPage() {
+function ListingLibraryContent() {
   const router = useRouter();
   const { role, roleLoading } = useUserRole();
   const canAccessLibrary = role === "admin" || role === "broker";
@@ -274,6 +275,14 @@ export default function ListingLibraryPage() {
       )}
       </main>
     </>
+  );
+}
+
+export default function ListingLibraryPage() {
+  return (
+    <RoleGate allowedRoles={["admin", "broker"]}>
+      <ListingLibraryContent />
+    </RoleGate>
   );
 }
 

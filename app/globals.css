@@ -54,6 +54,21 @@ input, textarea, select, button {
   text-decoration: none;
 }
 
+.site-navbar__logout {
+  width: auto;
+  border: 1px solid #6b7280;
+  border-radius: 8px;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  padding: 9px 11px;
+  white-space: nowrap;
+}
+
+.site-navbar__logout:hover {
+  background: #374151;
+}
+
 .site-navbar__brand {
   flex: 0 0 auto;
   font-size: 24px;
@@ -146,6 +161,12 @@ input, textarea, select, button {
   .site-navbar__link {
     width: 100%;
     padding: 11px 12px;
+  }
+
+  .site-navbar__logout {
+    width: 100%;
+    padding: 11px 12px;
+    text-align: left;
   }
 
   h1 { font-size: 20px; line-height: 1.3; }

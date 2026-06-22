@@ -16,6 +16,7 @@ import {
   calculateFollowUp,
   type FollowUpEngineResult,
 } from "@/lib/followUpEngine";
+import RoleGate from "@/app/components/role-gate";
 import {
   buildLeadAssignments,
   type LeadAssignmentResult,
@@ -978,7 +979,7 @@ function ReminderSection({
   );
 }
 
-export default function CustomersPage() {
+function CustomersContent() {
   const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [activities, setActivities] = useState<LeadActivity[]>([]);
@@ -1555,5 +1556,13 @@ export default function CustomersPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function CustomersPage() {
+  return (
+    <RoleGate allowedRoles={["admin", "broker"]}>
+      <CustomersContent />
+    </RoleGate>
   );
 }

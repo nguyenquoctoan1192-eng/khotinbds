@@ -20,11 +20,14 @@ const PREFIX_PATTERNS: Array<[RegExp, string]> = [
   [/\b(?:MT|MẶT\s+TIỀN)\b/iu, "Mặt Tiền"],
 ];
 
-const PREFIX_AT_START =
-  /^\s*(?:HXH|HXM|HXT|H3G|2MT|MB|MT|Hẻm\s+Xe\s+Hơi|Hẻm\s+Xe\s+Máy|Hẻm\s+Xe\s+Tải|Hẻm\s+Ba\s+Gác|Hai\s+Mặt\s+Tiền|Mặt\s+Bằng|Mặt\s+Tiền)\s*[-:–—]?\s*/iu;
+const PREFIXES_AT_START =
+  /^(?:(?:HXH|HXM|HXT|H3G|2MT|MB|MT|Hẻm\s+Xe\s+Hơi|Hẻm\s+Xe\s+Máy|Hẻm\s+Xe\s+Tải|Hẻm\s+Ba\s+Gác|Hai\s+Mặt\s+Tiền|Mặt\s+Bằng|Mặt\s+Tiền|Hẻm)\s*[-:–—]?\s*)+/iu;
+
+const PRIVATE_LABEL_AT_START =
+  /^(?:(?:lô\s+[\p{L}\d-]+|căn\s+[\p{L}\d-]+|mã(?:\s+nội\s+bộ)?\s+[\p{L}\d-]+|cc|số|đ\/?c)\s*[-:–—]?\s*)/iu;
 
 const HOUSE_NUMBER_AT_START =
-  /^\s*\d+[A-Za-z]?(?:(?:\s*[-–]\s*\d+[A-Za-z]?)|(?:\/[A-Za-z0-9]+)+)?\s+/u;
+  /^\/?\d+[A-Za-z]?(?:(?:\s*[-–]\s*\d+[A-Za-z]?)|(?:\/[A-Za-z0-9]+)*)?\s+/u;
 
 const SIZE_PATTERN = /\b\d+(?:[.,]\d+)?\s*[xX×]\s*\d+(?:[.,]\d+)?\s*m?\b/iu;
 const PRICE_PATTERN =
@@ -50,28 +53,77 @@ const detectExplicitPrefix = (rawText: string) => {
   return "";
 };
 
+const hasLeadingAlleyNumber = (rawAddress: string) => {
+  let value = firstContentLine(rawAddress).replace(PREFIXES_AT_START, "").trim();
+
+  for (let index = 0; index < 4; index += 1) {
+    const nextValue = value.replace(PRIVATE_LABEL_AT_START, "").trim();
+    if (nextValue === value) break;
+    value = nextValue;
+  }
+
+  return /^\/\d+\b/u.test(value) || /^\d+[A-Za-z]?(?:\/[A-Za-z0-9]+)+\s/u.test(value);
+};
+
+const stripLeadingPrivateParts = (rawAddress: string) => {
+  let value = rawAddress.trim();
+
+  for (let index = 0; index < 8; index += 1) {
+    const previous = value;
+    value = value
+      .replace(PREFIXES_AT_START, "")
+      .replace(PRIVATE_LABEL_AT_START, "")
+      .replace(HOUSE_NUMBER_AT_START, "")
+      .trim();
+
+    if (value === previous) break;
+  }
+
+  return value;
+};
+
+const normalizeAdministrativeAreas = (rawAddress: string) => {
+  const normalized = rawAddress
+    .replace(
+      /(?:\bPhường\s+|\bP\.\s*)([^,\n]+?)(?=\s*,?\s*(?:Quận\b|Q\.)|,|$)/giu,
+      (_match, ward: string) => `Phường ${ward.trim().replace(/[.\s]+$/u, "")}`
+    )
+    .replace(
+      /(?:\bQuận\s+|\bQ\.\s*)([^,\n]+?)(?=,|$)/giu,
+      (_match, district: string) =>
+        `Quận ${district.trim().replace(/[.\s]+$/u, "")}`
+    )
+    .replace(/\s*,\s*/g, ", ")
+    .replace(/\s+(?=Phường\s|Quận\s)/gu, ", ")
+    .replace(/(?:,\s*){2,}/g, ", ")
+    .replace(/^[,\s]+|[,.;:\s]+$/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return normalized;
+};
+
 export function detectListingPrefix(rawText: string): string {
   const text = asText(rawText);
   const explicitPrefix = detectExplicitPrefix(text);
 
   if (explicitPrefix) return explicitPrefix;
-  return firstContentLine(text).includes("/") ? "Hẻm" : "Mặt Tiền";
+  return hasLeadingAlleyNumber(text) ? "Hẻm" : "Mặt Tiền";
 }
 
 const sanitizeAddressWithContext = (rawAddressOrTitle: string, context: string) => {
   const addressLine = firstContentLine(rawAddressOrTitle);
   const prefix =
     detectExplicitPrefix(context) ||
-    (addressLine.includes("/") ? "Hẻm" : "Mặt Tiền");
+    (hasLeadingAlleyNumber(addressLine) ? "Hẻm" : "Mặt Tiền");
 
-  const safeAddress = addressLine
-    .replace(PREFIX_AT_START, "")
-    .replace(HOUSE_NUMBER_AT_START, "")
+  const safeAddress = normalizeAdministrativeAreas(
+    stripLeadingPrivateParts(
+      addressLine
     .replace(PHONE_PATTERN, "")
     .replace(INTERNAL_BOUNDARY_PATTERN, "")
-    .replace(/\s+/g, " ")
-    .replace(/[.,;:\s]+$/u, "")
-    .trim();
+    )
+  );
 
   return [prefix, safeAddress].filter(Boolean).join(" ").trim();
 };

@@ -2,28 +2,40 @@
 
 import { useEffect, useState } from "react";
 import { createClient, type User } from "@supabase/supabase-js";
+import { normalizeProfileRole, type UserRole } from "@/lib/roles";
 
-export type UserRole = "admin" | "broker" | "customer";
+export type { UserRole } from "@/lib/roles";
 
-const authClient = createClient(
+export const authClient = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 );
 
-const normalizeRole = (value: unknown): UserRole | null => {
-  const role = typeof value === "string" ? value.trim().toLowerCase() : "";
-  return role === "admin" || role === "broker" || role === "customer"
-    ? role
-    : null;
+export { normalizeProfileRole } from "@/lib/roles";
+
+export const syncServerSession = async (accessToken?: string) => {
+  await fetch("/api/auth/session", {
+    method: accessToken ? "POST" : "DELETE",
+    headers: accessToken ? { "Content-Type": "application/json" } : undefined,
+    body: accessToken ? JSON.stringify({ accessToken }) : undefined,
+  });
 };
 
-export const getUserRole = (user: User | null): UserRole => {
-  const trustedRole = normalizeRole(user?.app_metadata?.role);
+export const getUserRole = async (user: User | null): Promise<UserRole> => {
+  if (!user) return "customer";
 
-  if (trustedRole === "admin" || trustedRole === "broker") return trustedRole;
+  const { data, error } = await authClient
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
 
-  const profileRole = normalizeRole(user?.user_metadata?.role);
-  return profileRole === "broker" ? "broker" : "customer";
+  if (error || !data) {
+    if (error) console.error("Không tải được profile phân quyền:", error);
+    return "customer";
+  }
+
+  return normalizeProfileRole(data.role);
 };
 
 export function useUserRole() {
@@ -33,16 +45,19 @@ export function useUserRole() {
   useEffect(() => {
     let active = true;
 
-    authClient.auth.getUser().then(({ data }) => {
+    const loadRole = async (user: User | null) => {
+      const nextRole = await getUserRole(user);
       if (!active) return;
-      setRole(getUserRole(data.user));
+      setRole(nextRole);
       setRoleLoading(false);
-    });
+    };
+
+    authClient.auth.getUser().then(({ data }) => loadRole(data.user));
 
     const { data: listener } = authClient.auth.onAuthStateChange((_event, session) => {
       if (!active) return;
-      setRole(getUserRole(session?.user || null));
-      setRoleLoading(false);
+      void syncServerSession(session?.access_token);
+      void loadRole(session?.user || null);
     });
 
     return () => {
