@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import RentedStamp from "@/app/components/rented-stamp";
 
 export default function FindPage() {
   const [query, setQuery] = useState("");
@@ -84,6 +85,16 @@ export default function FindPage() {
             <p>Phòng ngủ: {item.bedrooms}</p>
             <p>Giá: {Number(item.price).toLocaleString()} VND</p>
             <p>Score: {item.score}</p>
+            {item.images?.[0] && (
+              <div style={{ position: "relative", width: 250, maxWidth: "100%" }}>
+                <img
+                  src={item.images[0]}
+                  alt={item.title || "Bất động sản"}
+                  style={{ display: "block", width: "100%", opacity: item.status === "rented" ? 0.6 : 1 }}
+                />
+                {item.status === "rented" && <RentedStamp />}
+              </div>
+            )}
           </div>
         ))}
       </div>

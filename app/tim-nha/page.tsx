@@ -6,6 +6,7 @@ import {
   parseVietnameseRequirement,
 } from "@/lib/requirementParser";
 import SiteNavbar from "@/app/components/site-navbar";
+import RentedStamp from "@/app/components/rented-stamp";
 
 export default function FindHomePage() {
   const [fullname, setFullname] = useState("");
@@ -387,10 +388,14 @@ export default function FindHomePage() {
             <p>{listing.district}</p>
 
             {listing.images?.[0] && (
-              <img
-                src={listing.images[0]}
-                width={250}
-              />
+              <div style={{ position: "relative", width: 250, maxWidth: "100%" }}>
+                <img
+                  src={listing.images[0]}
+                  alt={listing.title || "Bất động sản"}
+                  style={{ display: "block", width: "100%", opacity: listing.status === "rented" ? 0.6 : 1 }}
+                />
+                {listing.status === "rented" && <RentedStamp />}
+              </div>
             )}
           </div>
         );

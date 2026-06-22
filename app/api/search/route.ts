@@ -14,7 +14,7 @@ export async function POST(req: Request) {
 
     const { data: listings, error } = await supabase
       .from("listings")
-      .select("id, title, address, district, price, area, bedrooms");
+      .select("id, title, address, district, price, area, bedrooms, images, status");
 
     if (error) throw error;
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { useParams, useSearchParams } from "next/navigation";
+import RentedStamp from "@/app/components/rented-stamp";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -205,12 +206,17 @@ export default function ListingDetail() {
               {currentImage ? (
                 <img
                   src={currentImage}
-                  style={styles.mainImage}
+                  alt={listing.title || "Bất động sản"}
+                  style={{
+                    ...styles.mainImage,
+                    opacity: listing.status === "rented" ? 0.6 : 1,
+                  }}
                   onClick={() => setShowImageModal(true)}
                 />
               ) : (
                 <div style={styles.imagePlaceholder}>BDS</div>
               )}
+              {listing.status === "rented" && <RentedStamp />}
               {imageCount > 1 && (
                 <button
                   type="button"
