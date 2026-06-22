@@ -10,6 +10,8 @@ import {
 import { noSearchResultsMessage } from "@/lib/searchNormalization";
 import SiteNavbar from "@/app/components/site-navbar";
 import RentedStamp from "@/app/components/rented-stamp";
+import { formatPublicListing } from "@/lib/publicListingFormatter";
+import { useUserRole } from "@/lib/userRole";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -65,6 +67,8 @@ const emptyPublicChatProfile = (): PublicChatProfile => ({
 
 export default function Home() {
   const router = useRouter();
+  const { role } = useUserRole();
+  const canSeeRawListing = role === "admin" || role === "broker";
   const aiChatContainerRef = useRef<HTMLDivElement | null>(null);
   const [listings, setListings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -208,14 +212,14 @@ export default function Home() {
       "",
       ...topMatches.flatMap((item, index) => {
         const listing = getListingFromResult(item);
+        const publicListing = formatPublicListing(listing);
         const reasons = getReasonLabels(item);
-        const location = [listing.district, listing.address].filter(Boolean).join(" - ");
 
         return [
-          `${index + 1}. ${listing.title || "Bất động sản phù hợp"}`,
-          location ? `Khu vực: ${location}` : "",
-          `Giá: ${formatListingPrice(listing.price)}`,
-          listing.area ? `Diện tích: ${listing.area}m²` : "",
+          `${index + 1}. ${publicListing.publicTitle || "Bất động sản phù hợp"}`,
+          publicListing.area ? `Diện tích: ${publicListing.area}` : "",
+          publicListing.structure ? `Kết cấu: ${publicListing.structure}` : "",
+          `Giá: ${publicListing.price}`,
           reasons.length > 0
             ? `Lý do phù hợp: ${reasons.join(", ")}`
             : "Lý do phù hợp: phù hợp với nhu cầu đã tìm",
@@ -663,23 +667,35 @@ export default function Home() {
           <div style={{ display: "flex", flexDirection: "column", gap: 18, marginTop: 20 }}>
             {listings.map((item) => {
               const listing = getListingFromResult(item);
+              const publicListing = formatPublicListing(listing);
 
               return (
                 <div key={listing.id} style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 16, background: "#fff", borderRadius: 14, overflow: "hidden", padding: 14, alignItems: "flex-start", width: "100%", boxSizing: "border-box" }}>
                   <div style={{ position: "relative", width: isMobile ? "100%" : 260, height: isMobile ? 200 : 180, flexShrink: 0 }}>
                     <img
                       src={listing.images?.[0] || "https://placehold.co/600x400"}
-                      alt={listing.title || "Bất động sản"}
+                      alt={canSeeRawListing ? listing.title || "Bất động sản" : publicListing.publicTitle}
                       style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 10, opacity: listing.status === "rented" ? 0.6 : 1 }}
                     />
                     {listing.status === "rented" && <RentedStamp />}
                   </div>
                   <div style={{ flex: "1 1 auto", minWidth: 0 }}>
-                    <h3 style={{ fontSize: 24, fontWeight: 700, color: "#1f2937", marginBottom: 6 }}>{listing.title}</h3>
+                    <h3 style={{ fontSize: 24, fontWeight: 700, color: "#1f2937", marginBottom: 6 }}>
+                      {canSeeRawListing ? listing.title : publicListing.publicTitle}
+                    </h3>
                     <p style={{ color: "#dc2626", fontWeight: "bold", fontSize: 22 }}>
-                      {Number(listing.price || 0).toLocaleString("vi-VN")} VNĐ
+                      Giá: {canSeeRawListing
+                        ? `${Number(listing.price || 0).toLocaleString("vi-VN")} VNĐ`
+                        : publicListing.price}
                     </p>
-                    <p>Vị trí: {listing.district}</p>
+                    {canSeeRawListing ? (
+                      <p>Vị trí: {listing.district}</p>
+                    ) : (
+                      <>
+                        <p>Diện tích: {publicListing.area || "Đang cập nhật"}</p>
+                        <p>Kết cấu: {publicListing.structure || "Đang cập nhật"}</p>
+                      </>
+                    )}
                     {search.trim() && (
                       <div style={{ marginTop: 8, marginBottom: 8 }}>
                         <p style={{ fontWeight: 700, marginBottom: 6 }}>
@@ -697,15 +713,19 @@ export default function Home() {
                         )}
                       </div>
                     )}
-                    <div style={{ display: "flex", gap: 15, flexWrap: "wrap", marginTop: 8, marginBottom: 8 }}>
-                      <span>{listing.bedrooms || 0} PN</span>
-                      <span>{listing.bathrooms || 0} WC</span>
-                      <span>{listing.area || 0}m²</span>
-                      <span>{listing.floors || 0} tầng</span>
-                    </div>
-                    <p style={{ color: "#555", lineHeight: 1.5, marginTop: 10, wordBreak: "break-word", fontSize: isMobile ? 14 : 16 }}>
-                      {listing.description}
-                    </p>
+                    {canSeeRawListing && (
+                      <>
+                        <div style={{ display: "flex", gap: 15, flexWrap: "wrap", marginTop: 8, marginBottom: 8 }}>
+                          <span>{listing.bedrooms || 0} PN</span>
+                          <span>{listing.bathrooms || 0} WC</span>
+                          <span>{listing.area || 0}m²</span>
+                          <span>{listing.floors || 0} tầng</span>
+                        </div>
+                        <p style={{ color: "#555", lineHeight: 1.5, marginTop: 10, wordBreak: "break-word", fontSize: isMobile ? 14 : 16 }}>
+                          {listing.description}
+                        </p>
+                      </>
+                    )}
                     <p style={{ marginTop: 10, color: "#6b7280", fontSize: 13 }}>
                       {new Date(listing.updated_at || listing.created_at).toLocaleDateString("vi-VN")}
                     </p>

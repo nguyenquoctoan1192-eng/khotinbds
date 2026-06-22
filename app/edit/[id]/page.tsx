@@ -14,6 +14,7 @@ import {
   useParams,
   useRouter,
 } from "next/navigation";
+import { useUserRole } from "@/lib/userRole";
 
 const supabase = createClient(
   process.env
@@ -51,6 +52,7 @@ const defaultEnhanceOptions = (): ImageEnhanceOptions => ({
 
 export default function EditPage() {
   const router = useRouter();
+  const { role, roleLoading } = useUserRole();
 
   const params = useParams();
   const id = Array.isArray(params?.id)
@@ -127,9 +129,9 @@ const [amenities, setAmenities] =
 
   // LOAD DATA
  useEffect(() => {
-  if (!id) return;
+  if (!id || roleLoading || role !== "admin") return;
   fetchData();
-}, [id]);
+}, [id, role, roleLoading]);
 
   const fetchData = async () => {
   if (!id) return;
@@ -430,6 +432,18 @@ alert("Đã cập nhật");
 // QUAY VỀ TRANG CHỦ
 window.location.href = "/";
 };
+
+  if (roleLoading) {
+    return <div style={{ padding: 20 }}>Đang kiểm tra quyền truy cập...</div>;
+  }
+
+  if (role !== "admin") {
+    return (
+      <div style={{ padding: 20 }}>
+        Bạn không có quyền quản trị tin đăng này.
+      </div>
+    );
+  }
 
   return (
     <div style={styles.page}>

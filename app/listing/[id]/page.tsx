@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { useParams, useSearchParams } from "next/navigation";
 import RentedStamp from "@/app/components/rented-stamp";
+import { formatPublicListing } from "@/lib/publicListingFormatter";
+import { useUserRole } from "@/lib/userRole";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -13,6 +15,9 @@ const supabase = createClient(
 export default function ListingDetail() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const { role } = useUserRole();
+  const canSeeRawListing = role === "admin" || role === "broker";
+  const canManageListing = role === "admin";
 
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const fromSearch = searchParams.get("fromSearch")?.trim() || "";
@@ -62,9 +67,6 @@ export default function ListingDetail() {
     location.reload();
   };
 
-  const formatSharePrice = () =>
-    `${Number(listing.price || 0).toLocaleString("vi-VN")} VNĐ`;
-
   const getListingUrl = () => {
     if (typeof window === "undefined") return "";
     return window.location.href;
@@ -72,13 +74,14 @@ export default function ListingDetail() {
 
   const buildShareText = () => {
     const imageCount = Array.isArray(listing.images) ? listing.images.length : 0;
+    const publicListing = formatPublicListing(listing);
     const parts = [
-      listing.title,
+      publicListing.publicTitle,
       "",
-      listing.description ? `📐 ${listing.description}` : listing.area ? `📐 ${listing.area}m²` : "",
-      `💰 ${formatSharePrice()}`,
-      `📞 ${listing.contact_phone || "Liên hệ"}`,
-      `📍 ${listing.district || listing.address || "Đang cập nhật"}`,
+      publicListing.area ? `📐 Diện tích: ${publicListing.area}` : "",
+      publicListing.structure ? `🏠 Kết cấu: ${publicListing.structure}` : "",
+      `💰 Giá: ${publicListing.price}`,
+      `📞 ${publicListing.contactPhone}`,
       `🖼️ ${imageCount} ảnh`,
       `🔗 ${getListingUrl()}`,
     ].filter(Boolean);
@@ -171,6 +174,10 @@ export default function ListingDetail() {
     return <div style={{ padding: 20 }}>Đang tải...</div>;
   }
 
+  const publicListing = formatPublicListing(listing);
+  const displayTitle = canSeeRawListing ? listing.title : publicListing.publicTitle;
+  const displayAddress = canSeeRawListing ? listing.address : publicListing.publicTitle;
+
   return (
     <div style={styles.page}>
       {/* NAV */}
@@ -206,7 +213,7 @@ export default function ListingDetail() {
               {currentImage ? (
                 <img
                   src={currentImage}
-                  alt={listing.title || "Bất động sản"}
+                  alt={displayTitle || "Bất động sản"}
                   style={{
                     ...styles.mainImage,
                     opacity: listing.status === "rented" ? 0.6 : 1,
@@ -250,11 +257,13 @@ export default function ListingDetail() {
           </div>
 
           <div style={styles.card}>
-            <h1 style={styles.title}>{listing.title}</h1>
+            <h1 style={styles.title}>{displayTitle}</h1>
 
             <div style={styles.priceRow}>
               <div style={styles.price}>
-                {Number(listing.price || 0).toLocaleString("vi-VN")} VNĐ
+                Giá: {canSeeRawListing
+                  ? `${Number(listing.price || 0).toLocaleString("vi-VN")} VNĐ`
+                  : publicListing.price}
               </div>
               <div style={styles.date}>
                 {listing.updated_at
@@ -263,8 +272,15 @@ export default function ListingDetail() {
               </div>
             </div>
 
-            <div style={styles.address}>📍 {listing.address}</div>
-            <div style={styles.desc}>{listing.description}</div>
+            <div style={styles.address}>📍 {displayAddress}</div>
+            {canSeeRawListing ? (
+              <div style={styles.desc}>{listing.description}</div>
+            ) : (
+              <div style={styles.desc}>
+                <div>Diện tích: {publicListing.area || "Đang cập nhật"}</div>
+                <div>Kết cấu: {publicListing.structure || "Đang cập nhật"}</div>
+              </div>
+            )}
           </div>
 
           <div style={styles.card}>
@@ -272,7 +288,7 @@ export default function ListingDetail() {
             <iframe
               style={styles.map}
               src={`https://www.google.com/maps?q=${encodeURIComponent(
-                listing.address || ""
+                displayAddress || ""
               )}&output=embed`}
             />
           </div>
@@ -285,20 +301,26 @@ export default function ListingDetail() {
             onClick={() => setShowPhone(true)}
           >
             {showPhone
-              ? `📞 ${listing.contact_phone || "Chưa có số"}`
+              ? `📞 ${canSeeRawListing
+                ? listing.contact_phone || "Chưa có số"
+                : publicListing.contactPhone}`
               : "📞 Liên hệ"}
           </button>
 
-          <button style={styles.btnOrange} onClick={refreshPost}>
-            🔁 Làm mới
-          </button>
+          {canManageListing && (
+            <>
+              <button style={styles.btnOrange} onClick={refreshPost}>
+                🔁 Làm mới
+              </button>
 
-          <button
-            style={styles.btnGreen}
-            onClick={() => window.location.assign(`/edit/${listing.id}`)}
-          >
-            ✏️ Sửa tin
-          </button>
+              <button
+                style={styles.btnGreen}
+                onClick={() => window.location.assign(`/edit/${listing.id}`)}
+              >
+                ✏️ Sửa tin
+              </button>
+            </>
+          )}
 
           <button style={styles.btnShare} onClick={shareListing}>
             Chia sẻ
@@ -314,21 +336,23 @@ export default function ListingDetail() {
             </div>
           )}
 
-          <button
-            style={styles.btnRed}
-            onClick={async () => {
-              if (!confirm("Xóa tin?")) return;
+          {canManageListing && (
+            <button
+              style={styles.btnRed}
+              onClick={async () => {
+                if (!confirm("Xóa tin?")) return;
 
-              await supabase
-                .from("listings")
-                .delete()
-                .eq("id", listing.id);
+                await supabase
+                  .from("listings")
+                  .delete()
+                  .eq("id", listing.id);
 
-              location.href = "/";
-            }}
-          >
-            🗑 Xóa
-          </button>
+                location.href = "/";
+              }}
+            >
+              🗑 Xóa
+            </button>
+          )}
         </div>
 
       </div>

@@ -7,8 +7,12 @@ import {
 } from "@/lib/requirementParser";
 import SiteNavbar from "@/app/components/site-navbar";
 import RentedStamp from "@/app/components/rented-stamp";
+import { formatPublicListing } from "@/lib/publicListingFormatter";
+import { useUserRole } from "@/lib/userRole";
 
 export default function FindHomePage() {
+  const { role } = useUserRole();
+  const canSeeRawListing = role === "admin" || role === "broker";
   const [fullname, setFullname] = useState("");
   const [phone, setPhone] = useState("");
   const [requirementText, setRequirementText] = useState("");
@@ -110,14 +114,14 @@ export default function FindHomePage() {
       "",
       ...topMatches.flatMap((item, index) => {
         const listing = item.listing || item;
+        const publicListing = formatPublicListing(listing);
         const reasons = getReasonLabels(item);
-        const location = [listing.district, listing.address].filter(Boolean).join(" - ");
 
         return [
-          `${index + 1}. ${listing.title || "Bất động sản phù hợp"}`,
-          location ? `Khu vực: ${location}` : "",
-          `Giá: ${formatListingPrice(listing.price)}`,
-          listing.area ? `Diện tích: ${listing.area}m²` : "",
+          `${index + 1}. ${publicListing.publicTitle || "Bất động sản phù hợp"}`,
+          publicListing.area ? `Diện tích: ${publicListing.area}` : "",
+          publicListing.structure ? `Kết cấu: ${publicListing.structure}` : "",
+          `Giá: ${publicListing.price}`,
           reasons.length > 0
             ? `Lý do phù hợp: ${reasons.join(", ")}`
             : "Lý do phù hợp: phù hợp với nhu cầu đã tìm",
@@ -354,6 +358,7 @@ export default function FindHomePage() {
 
       {results.map((item) => {
         const listing = item.listing || item;
+        const publicListing = formatPublicListing(listing);
         const reasonLabels = getReasonLabels(item);
 
         return (
@@ -366,7 +371,7 @@ export default function FindHomePage() {
               borderRadius: 10,
             }}
           >
-            <h3>{listing.title}</h3>
+            <h3>{canSeeRawListing ? listing.title : publicListing.publicTitle}</h3>
 
             <p style={{ fontWeight: 700 }}>
               Điểm phù hợp: {item.score}
@@ -383,15 +388,28 @@ export default function FindHomePage() {
               </div>
             )}
 
-            <p>Giá: {Number(listing.price).toLocaleString()}</p>
-            <p>{listing.address}</p>
-            <p>{listing.district}</p>
+            <p>
+              Giá: {canSeeRawListing
+                ? Number(listing.price).toLocaleString("vi-VN")
+                : publicListing.price}
+            </p>
+            {canSeeRawListing ? (
+              <>
+                <p>{listing.address}</p>
+                <p>{listing.district}</p>
+              </>
+            ) : (
+              <>
+                <p>Diện tích: {publicListing.area || "Đang cập nhật"}</p>
+                <p>Kết cấu: {publicListing.structure || "Đang cập nhật"}</p>
+              </>
+            )}
 
             {listing.images?.[0] && (
               <div style={{ position: "relative", width: 250, maxWidth: "100%" }}>
                 <img
                   src={listing.images[0]}
-                  alt={listing.title || "Bất động sản"}
+                  alt={canSeeRawListing ? listing.title || "Bất động sản" : publicListing.publicTitle}
                   style={{ display: "block", width: "100%", opacity: listing.status === "rented" ? 0.6 : 1 }}
                 />
                 {listing.status === "rented" && <RentedStamp />}

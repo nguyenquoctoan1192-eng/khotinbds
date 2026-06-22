@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import SiteNavbar from "@/app/components/site-navbar";
+import { useUserRole } from "@/lib/userRole";
 
 type ListingLibraryItem = {
   id: string;
@@ -42,6 +43,9 @@ const formatDate = (value: string | null) => {
 
 export default function ListingLibraryPage() {
   const router = useRouter();
+  const { role, roleLoading } = useUserRole();
+  const canAccessLibrary = role === "admin" || role === "broker";
+  const canManageLibrary = role === "admin";
   const [items, setItems] = useState<ListingLibraryItem[]>([]);
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
@@ -97,8 +101,9 @@ export default function ListingLibraryPage() {
   };
 
   useEffect(() => {
+    if (roleLoading || !canAccessLibrary) return;
     fetchItems();
-  }, [page, appliedSearch]);
+  }, [page, appliedSearch, roleLoading, canAccessLibrary]);
 
   const copyText = async (value: string | null) => {
     if (!value) return;
@@ -140,6 +145,19 @@ export default function ListingLibraryPage() {
     setPage(1);
     setAppliedSearch(search);
   };
+
+  if (roleLoading) {
+    return <div style={{ padding: 20 }}>Đang kiểm tra quyền truy cập...</div>;
+  }
+
+  if (!canAccessLibrary) {
+    return (
+      <>
+        <SiteNavbar />
+        <div style={{ padding: 20 }}>Kho tin đăng chỉ dành cho quản trị viên và môi giới.</div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -207,9 +225,11 @@ export default function ListingLibraryPage() {
                 <button type="button" onClick={() => setSelectedItem(item)} style={styles.smallButton}>
                   Xem chi tiết
                 </button>
-                <button type="button" onClick={() => deleteItem(item)} style={styles.deleteButton}>
-                  Xóa
-                </button>
+                {canManageLibrary && (
+                  <button type="button" onClick={() => deleteItem(item)} style={styles.deleteButton}>
+                    Xóa
+                  </button>
+                )}
               </div>
             </article>
           ))}

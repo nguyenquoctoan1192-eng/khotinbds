@@ -2,9 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import RentedStamp from "@/app/components/rented-stamp";
+import { formatPublicListing } from "@/lib/publicListingFormatter";
+import { useUserRole } from "@/lib/userRole";
 
 export default function FavoritesPage() {
   const router = useRouter();
+  const { role } = useUserRole();
+  const canSeeRawListing = role === "admin" || role === "broker";
   const [favorites, setFavorites] = useState<any[]>([]);
 
   // LOAD FROM LOCALSTORAGE
@@ -47,21 +52,39 @@ export default function FavoritesPage() {
           <p>Chưa có tin yêu thích</p>
         ) : (
           <div style={styles.grid}>
-            {favorites.map((item) => (
-              <div key={item.id} style={styles.card}>
-                <img
-                  src={item.image || "https://placehold.co/600x400"}
-                  style={styles.image}
-                />
+            {favorites.map((item) => {
+              const publicListing = formatPublicListing(item);
+
+              return <div key={item.id} style={styles.card}>
+                <div style={styles.imageFrame}>
+                  <img
+                    src={item.image || item.images?.[0] || "https://placehold.co/600x400"}
+                    alt={canSeeRawListing ? item.title || "Bất động sản" : publicListing.publicTitle}
+                    style={{
+                      ...styles.image,
+                      opacity: item.status === "rented" ? 0.6 : 1,
+                    }}
+                  />
+                  {item.status === "rented" && <RentedStamp />}
+                </div>
 
                 <div style={styles.body}>
-                  <h3>{item.title}</h3>
+                  <h3>{canSeeRawListing ? item.title : publicListing.publicTitle}</h3>
 
                   <p style={styles.price}>
-                    {Number(item.price || 0).toLocaleString("vi-VN")} VNĐ
+                    Giá: {canSeeRawListing
+                      ? `${Number(item.price || 0).toLocaleString("vi-VN")} VNĐ`
+                      : publicListing.price}
                   </p>
 
-                  <p>📍 {item.district}</p>
+                  {canSeeRawListing ? (
+                    <p>📍 {item.district}</p>
+                  ) : (
+                    <>
+                      <p>Diện tích: {publicListing.area || "Đang cập nhật"}</p>
+                      <p>Kết cấu: {publicListing.structure || "Đang cập nhật"}</p>
+                    </>
+                  )}
 
                   <div style={styles.actions}>
                     <button
@@ -81,8 +104,8 @@ export default function FavoritesPage() {
                     </button>
                   </div>
                 </div>
-              </div>
-            ))}
+              </div>;
+            })}
           </div>
         )}
       </div>
@@ -143,6 +166,12 @@ const styles: any = {
     width: "100%",
     height: 200,
     objectFit: "cover",
+  },
+
+  imageFrame: {
+    position: "relative",
+    width: "100%",
+    height: 200,
   },
 
   body: {
