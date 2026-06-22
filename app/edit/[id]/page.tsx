@@ -39,6 +39,8 @@ type ImageEnhanceState = {
   enhancedImageUrl: string;
 };
 
+type ListingStatus = "available" | "rented";
+
 const defaultEnhanceOptions = (): ImageEnhanceOptions => ({
   removeLogo: false,
   removePhone: false,
@@ -60,6 +62,15 @@ export default function EditPage() {
   
   const [loading, setLoading] =
     useState(false);
+
+  const [status, setStatus] =
+    useState<ListingStatus>("available");
+
+  const [statusLoading, setStatusLoading] =
+    useState(false);
+
+  const [statusMessage, setStatusMessage] =
+    useState("");
 
   const [uploading, setUploading] =
     useState(false);
@@ -149,6 +160,7 @@ const [amenities, setAmenities] =
   setBathrooms(String(data.bathrooms || ""));
   setDescription(data.description || "");
   setImages(data.images || []);
+  setStatus(data.status === "rented" ? "rented" : "available");
 };
 
   // UPLOAD IMAGES
@@ -336,6 +348,36 @@ const [amenities, setAmenities] =
     setImageEnhance(null);
   };
 
+  const toggleListingStatus = async () => {
+    if (!id || statusLoading) return;
+
+    const nextStatus: ListingStatus =
+      status === "available" ? "rented" : "available";
+
+    setStatusLoading(true);
+    setStatusMessage("");
+
+    const { error } = await supabase
+      .from("listings")
+      .update({ status: nextStatus })
+      .eq("id", id);
+
+    setStatusLoading(false);
+
+    if (error) {
+      console.error("Không cập nhật được trạng thái tin:", error);
+      setStatusMessage(`Không cập nhật được trạng thái: ${error.message}`);
+      return;
+    }
+
+    setStatus(nextStatus);
+    setStatusMessage(
+      nextStatus === "rented"
+        ? "Đã đánh dấu tin này là đã cho thuê"
+        : "Tin đã được mở lại"
+    );
+  };
+
   // UPDATE
   const updatePost = async () => {
   setLoading(true);
@@ -361,6 +403,7 @@ const [amenities, setAmenities] =
 
     description,
     images,
+    status,
   };
 
   console.log("ID =", params.id);
@@ -745,15 +788,53 @@ window.location.href = "/";
             </div>
           )}
 
-          {/* BUTTON */}
-          <button
-            onClick={updatePost}
-            style={styles.button}
-          >
-            {loading
-              ? "Đang cập nhật..."
-              : "💾 Cập nhật tin"}
-          </button>
+          {/* BUTTONS */}
+          {statusMessage && (
+            <p
+              style={
+                statusMessage.startsWith("Không")
+                  ? styles.statusError
+                  : styles.statusSuccess
+              }
+            >
+              {statusMessage}
+            </p>
+          )}
+
+          <div style={styles.primaryActions}>
+            <button
+              type="button"
+              onClick={toggleListingStatus}
+              disabled={statusLoading}
+              style={{
+                ...styles.statusButton,
+                ...(status === "rented"
+                  ? styles.reopenButton
+                  : styles.rentedButton),
+                ...(statusLoading ? styles.disabledButton : {}),
+              }}
+            >
+              {statusLoading
+                ? "Đang cập nhật trạng thái..."
+                : status === "available"
+                  ? "Đánh dấu đã cho thuê"
+                  : "Mở lại tin"}
+            </button>
+
+            <button
+              type="button"
+              onClick={updatePost}
+              disabled={loading || statusLoading}
+              style={{
+                ...styles.button,
+                ...(loading || statusLoading ? styles.disabledButton : {}),
+              }}
+            >
+              {loading
+                ? "Đang cập nhật..."
+                : "💾 Cập nhật tin"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1041,5 +1122,52 @@ const styles: any = {
     cursor: "pointer",
     fontWeight: "bold",
     fontSize: 16,
+  },
+
+  primaryActions: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 12,
+  },
+
+  statusButton: {
+    border: "none",
+    padding: 16,
+    borderRadius: 12,
+    cursor: "pointer",
+    color: "white",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+
+  rentedButton: {
+    background: "#dc2626",
+  },
+
+  reopenButton: {
+    background: "#16a34a",
+  },
+
+  disabledButton: {
+    background: "#94a3b8",
+    cursor: "not-allowed",
+  },
+
+  statusSuccess: {
+    margin: 0,
+    padding: 12,
+    borderRadius: 10,
+    background: "#dcfce7",
+    color: "#166534",
+    fontWeight: 700,
+  },
+
+  statusError: {
+    margin: 0,
+    padding: 12,
+    borderRadius: 10,
+    background: "#fee2e2",
+    color: "#991b1b",
+    fontWeight: 700,
   },
 };
