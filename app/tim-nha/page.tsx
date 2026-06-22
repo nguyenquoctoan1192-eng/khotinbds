@@ -5,6 +5,7 @@ import {
   ParsedRequirementFilters,
   parseVietnameseRequirement,
 } from "@/lib/requirementParser";
+import SiteNavbar from "@/app/components/site-navbar";
 
 export default function FindHomePage() {
   const [fullname, setFullname] = useState("");
@@ -257,13 +258,15 @@ export default function FindHomePage() {
   };
 
   return (
-    <div
-      style={{
-        maxWidth: 800,
-        margin: "0 auto",
-        padding: 20,
-      }}
-    >
+    <>
+      <SiteNavbar />
+      <div
+        style={{
+          maxWidth: 800,
+          margin: "0 auto",
+          padding: 20,
+        }}
+      >
       <h1>Tìm nhà phù hợp</h1>
 
       <input
@@ -517,6 +520,7 @@ export default function FindHomePage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

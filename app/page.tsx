@@ -8,6 +8,7 @@ import {
   parseVietnameseRequirement,
 } from "@/lib/requirementParser";
 import { noSearchResultsMessage } from "@/lib/searchNormalization";
+import SiteNavbar from "@/app/components/site-navbar";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -558,15 +559,7 @@ export default function Home() {
 
   return (
     <div style={{ fontFamily: "Arial", minHeight: "100vh", background: "#f3f4f6" }}>
-      <div style={{ position: "relative", zIndex: 10000, pointerEvents: "auto", background: "#111827", color: "#fff", padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2 style={{ cursor: "pointer", pointerEvents: "auto" }} onClick={() => router.push("/")}>BDS</h2>
-        <div style={{ position: "relative", zIndex: 10001, pointerEvents: "auto", display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
-          <button type="button" style={{ position: "relative", zIndex: 10002, pointerEvents: "auto", background: "transparent", border: "none", color: "#fff", cursor: "pointer" }} onClick={() => router.push("/")}>Trang chủ</button>
-          <button type="button" style={{ position: "relative", zIndex: 10002, pointerEvents: "auto", background: "transparent", border: "none", color: "#fff", cursor: "pointer" }} onClick={() => router.push("/dashboard")}>Dashboard</button>
-          <button type="button" style={{ position: "relative", zIndex: 10002, pointerEvents: "auto", background: "transparent", border: "none", color: "#fff", cursor: "pointer" }} onClick={() => router.push("/post")}>Đăng tin</button>
-          <button type="button" style={{ position: "relative", zIndex: 10002, pointerEvents: "auto", background: "transparent", border: "none", color: "#fff", cursor: "pointer" }} onClick={() => router.push("/customers")}>Thông tin khách</button>
-        </div>
-      </div>
+      <SiteNavbar />
 
       <div style={{ background: "linear-gradient(to right,#2563eb,#1d4ed8)", color: "#fff", padding: "60px 20px", textAlign: "center" }}>
         <h1>Tìm bất động sản nhanh chóng</h1>
@@ -591,6 +584,22 @@ export default function Home() {
               X
             </button>
           )}
+        </div>
+      </div>
+
+      <div style={{ maxWidth: 900, margin: "0 auto 20px", padding: "0 20px" }}>
+        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 16, boxShadow: "0 4px 12px rgba(0,0,0,0.06)", padding: 20 }}>
+          <h2 style={{ margin: "0 0 8px", fontSize: 21 }}>📚 Kho tin đăng</h2>
+          <p style={{ margin: "0 0 16px", color: "#4b5563", lineHeight: 1.5 }}>
+            Lưu trữ toàn bộ tin đã tạo bằng AI để sử dụng lại nhanh chóng.
+          </p>
+          <button
+            type="button"
+            onClick={() => router.push("/listing-library")}
+            style={{ width: "auto", background: "#0f766e", border: "none", borderRadius: 9, color: "#fff", cursor: "pointer", fontWeight: 700, padding: "11px 15px" }}
+          >
+            → Mở kho tin đăng
+          </button>
         </div>
       </div>
 

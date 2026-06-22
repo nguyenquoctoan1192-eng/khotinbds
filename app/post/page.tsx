@@ -3,6 +3,7 @@
 import { useState, type DragEvent } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
+import SiteNavbar from "@/app/components/site-navbar";
 
 function DraggableImage({
   img,
@@ -492,8 +493,12 @@ const saveAiContentToLibrary = async () => {
 
     setAiContentMessage("Đã lưu vào kho tin đăng.");
   } catch (error) {
-    console.error(error);
-    setAiContentMessage("Chưa lưu được vào kho tin đăng, bạn thử lại sau nhé.");
+    console.error("Không lưu được tin vào kho:", error);
+    setAiContentMessage(
+      error instanceof Error
+        ? error.message
+        : "Chưa lưu được vào kho tin đăng, bạn thử lại sau nhé."
+    );
   } finally {
     setSavingAiContent(false);
   }
@@ -849,25 +854,8 @@ console.log("ERROR =", error);
 
   return (
   <div style={{ width: "100%", overflowX: "hidden" }}>
-    
+    <SiteNavbar />
     <div style={styles.page}>
-
-      {/* NAVBAR */}
-      <div style={styles.nav}>
-        <h2
-          style={{ cursor: "pointer" }}
-          onClick={() => router.push("/")}
-        >
-          🏠 BDS
-        </h2>
-
-        <button
-          style={styles.backBtn}
-          onClick={() => router.push("/")}
-        >
-          ← Trang chủ
-        </button>
-      </div>
 
       {/* FORM */}
       <div className="container" style={styles.container}>

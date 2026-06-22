@@ -7,6 +7,46 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+const LISTING_LIBRARY_MIGRATION_MESSAGE =
+  "Bạn cần chạy migration 202606210001_create_listing_library.sql trên Supabase.";
+
+type SupabaseError = {
+  code?: string;
+  message?: string;
+  details?: string;
+  hint?: string;
+};
+
+const isMissingListingLibraryTable = (error: SupabaseError) => {
+  const message = [error.message, error.details, error.hint]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    error.code === "42P01" ||
+    error.code === "PGRST205" ||
+    (message.includes("listing_library") &&
+      (message.includes("does not exist") ||
+        message.includes("schema cache") ||
+        message.includes("could not find")))
+  );
+};
+
+const logSupabaseError = (operation: "GET" | "POST", error: SupabaseError) => {
+  console.error(`[listing-library] Supabase ${operation} failed`, {
+    code: error.code,
+    message: error.message,
+    details: error.details,
+    hint: error.hint,
+  });
+};
+
+const getSupabaseErrorMessage = (error: SupabaseError) =>
+  isMissingListingLibraryTable(error)
+    ? LISTING_LIBRARY_MIGRATION_MESSAGE
+    : `Lỗi Supabase: ${error.message || "Không xác định."}`;
+
 const clampPagination = (value: string | null, fallback: number, max: number) => {
   const parsed = Number(value);
 
@@ -74,8 +114,9 @@ export async function POST(req: Request) {
       .single();
 
     if (error) {
+      logSupabaseError("POST", error);
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: getSupabaseErrorMessage(error) },
         { status: 500 }
       );
     }
@@ -85,57 +126,79 @@ export async function POST(req: Request) {
     console.error("Create listing library item failed:", error);
 
     return NextResponse.json(
-      { success: false, error: "Không lưu được tin vào kho." },
+      {
+        success: false,
+        error:
+          error instanceof Error
+            ? `Không lưu được tin vào kho: ${error.message}`
+            : "Không lưu được tin vào kho.",
+      },
       { status: 500 }
     );
   }
 }
 
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const page = clampPagination(searchParams.get("page"), 1, 100000);
-  const limit = clampPagination(searchParams.get("limit"), 20, 50);
-  const search = compactText(searchParams.get("search"));
-  const from = (page - 1) * limit;
-  const to = from + limit - 1;
+  try {
+    const { searchParams } = new URL(req.url);
+    const page = clampPagination(searchParams.get("page"), 1, 100000);
+    const limit = clampPagination(searchParams.get("limit"), 20, 50);
+    const search = compactText(searchParams.get("search"));
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
 
-  let query = supabase
-    .from("listing_library")
-    .select("*", { count: "exact" })
-    .order("created_at", { ascending: false })
-    .range(from, to);
+    let query = supabase
+      .from("listing_library")
+      .select("*", { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(from, to);
 
-  if (search) {
-    const keyword = `%${escapeSearch(search)}%`;
-    query = query.or(
-      [
-        `raw_input.ilike.${keyword}`,
-        `title.ilike.${keyword}`,
-        `primary_content.ilike.${keyword}`,
-        `chotot_title.ilike.${keyword}`,
-        `facebook_title.ilike.${keyword}`,
-        `district.ilike.${keyword}`,
-        `street.ilike.${keyword}`,
-        `phone.ilike.${keyword}`,
-      ].join(",")
-    );
-  }
+    if (search) {
+      const keyword = `%${escapeSearch(search)}%`;
+      query = query.or(
+        [
+          `raw_input.ilike.${keyword}`,
+          `title.ilike.${keyword}`,
+          `primary_content.ilike.${keyword}`,
+          `chotot_title.ilike.${keyword}`,
+          `facebook_title.ilike.${keyword}`,
+          `district.ilike.${keyword}`,
+          `street.ilike.${keyword}`,
+          `phone.ilike.${keyword}`,
+        ].join(",")
+      );
+    }
 
-  const { data, error, count } = await query;
+    const { data, error, count } = await query;
 
-  if (error) {
+    if (error) {
+      logSupabaseError("GET", error);
+      return NextResponse.json(
+        { success: false, error: getSupabaseErrorMessage(error) },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      items: data || [],
+      total: count || 0,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil((count || 0) / limit)),
+    });
+  } catch (error) {
+    console.error("[listing-library] GET failed before Supabase response:", error);
+
     return NextResponse.json(
-      { success: false, error: error.message },
+      {
+        success: false,
+        error:
+          error instanceof Error
+            ? `Không tải được kho tin đăng: ${error.message}`
+            : "Không tải được kho tin đăng.",
+      },
       { status: 500 }
     );
   }
-
-  return NextResponse.json({
-    success: true,
-    items: data || [],
-    total: count || 0,
-    page,
-    limit,
-    totalPages: Math.max(1, Math.ceil((count || 0) / limit)),
-  });
 }

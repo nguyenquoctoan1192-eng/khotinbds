@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
+import SiteNavbar from "@/app/components/site-navbar";
 
 type ListingLibraryItem = {
   id: string;
@@ -83,9 +84,13 @@ export default function ListingLibraryPage() {
       setTotal(json.total || 0);
       setTotalPages(json.totalPages || 1);
     } catch (error) {
-      console.error(error);
+      console.error("Không tải được kho tin đăng:", error);
       setItems([]);
-      setMessage("Không tải được kho tin đăng.");
+      setTotal(0);
+      setTotalPages(1);
+      setMessage(
+        error instanceof Error ? error.message : "Không tải được kho tin đăng."
+      );
     } finally {
       setLoading(false);
     }
@@ -127,7 +132,7 @@ export default function ListingLibraryPage() {
       fetchItems();
     } catch (error) {
       console.error(error);
-      setMessage("Chưa xóa được tin.");
+      setMessage(error instanceof Error ? error.message : "Chưa xóa được tin.");
     }
   };
 
@@ -137,7 +142,9 @@ export default function ListingLibraryPage() {
   };
 
   return (
-    <main style={styles.page}>
+    <>
+      <SiteNavbar />
+      <main style={styles.page}>
       <section style={styles.header}>
         <div>
           <h1 style={styles.title}>Kho tin đăng</h1>
@@ -245,7 +252,8 @@ export default function ListingLibraryPage() {
           </section>
         </div>
       )}
-    </main>
+      </main>
+    </>
   );
 }
 

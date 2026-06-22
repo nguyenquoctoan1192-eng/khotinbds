@@ -1,4 +1,5 @@
 import Link from "next/link";
+import SiteNavbar from "@/app/components/site-navbar";
 import { createClient } from "@supabase/supabase-js";
 import { calculateLeadScoring } from "@/lib/leadScoring";
 import {
@@ -461,25 +462,7 @@ export default async function DashboardPage() {
 
   return (
     <div style={{ fontFamily: "Arial", minHeight: "100vh", background: "#f3f4f6" }}>
-      <div style={{ background: "#111827", color: "#fff", padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <Link href="/" style={{ color: "#fff", textDecoration: "none", fontSize: 24, fontWeight: 700 }}>
-          BDS
-        </Link>
-        <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-          <Link href="/" style={{ color: "#fff", textDecoration: "none" }}>
-            Trang chủ
-          </Link>
-          <Link href="/dashboard" style={{ color: "#fff", textDecoration: "none", fontWeight: 700 }}>
-            Dashboard
-          </Link>
-          <Link href="/post" style={{ color: "#fff", textDecoration: "none" }}>
-            Đăng tin
-          </Link>
-          <Link href="/customers" style={{ color: "#fff", textDecoration: "none" }}>
-            Khách hàng
-          </Link>
-        </div>
-      </div>
+      <SiteNavbar />
 
       <main style={{ maxWidth: 1180, margin: "0 auto", padding: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
