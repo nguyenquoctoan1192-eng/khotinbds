@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { authorizeRequest } from "@/lib/auth";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,6 +9,11 @@ const supabase = createClient(
 
 export async function POST(req: Request) {
   try {
+    const auth = await authorizeRequest(req, ["admin", "agent"]);
+    if (!auth) {
+      return NextResponse.json({ success: false, error: "Không có quyền truy cập." }, { status: 403 });
+    }
+
     const body = await req.json();
     const { message, customerId } = body;
 

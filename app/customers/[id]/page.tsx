@@ -41,7 +41,7 @@ function CustomerDetailContent() {
 
 export default function CustomerDetail() {
   return (
-    <RoleGate allowedRoles={["admin", "broker"]}>
+    <RoleGate allowedRoles={["admin", "agent"]}>
       <CustomerDetailContent />
     </RoleGate>
   );

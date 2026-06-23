@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { authorizeRequest } from "@/lib/auth";
 
 type ImageEnhanceOptions = {
   removeLogo?: boolean;
@@ -26,6 +27,11 @@ const normalizeOptions = (options: ImageEnhanceOptions = {}) => ({
 
 export async function POST(req: Request) {
   try {
+    const auth = await authorizeRequest(req, ["admin"]);
+    if (!auth) {
+      return NextResponse.json({ success: false, message: "Chỉ Admin được xử lý ảnh nguồn nhà." }, { status: 403 });
+    }
+
     const body = (await req.json()) as ImageEnhanceRequest;
     const imageUrl =
       typeof body.imageUrl === "string" ? body.imageUrl.trim() : "";

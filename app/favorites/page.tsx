@@ -9,7 +9,7 @@ import { useUserRole } from "@/lib/userRole";
 export default function FavoritesPage() {
   const router = useRouter();
   const { role } = useUserRole();
-  const canSeeRawListing = role === "admin" || role === "broker";
+  const canSeeRawListing = role === "admin" || role === "agent";
   const [favorites, setFavorites] = useState<any[]>([]);
 
   // LOAD FROM LOCALSTORAGE

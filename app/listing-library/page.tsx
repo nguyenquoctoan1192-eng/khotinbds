@@ -45,7 +45,7 @@ const formatDate = (value: string | null) => {
 function ListingLibraryContent() {
   const router = useRouter();
   const { role, roleLoading } = useUserRole();
-  const canAccessLibrary = role === "admin" || role === "broker";
+  const canAccessLibrary = role === "admin" || role === "agent";
   const canManageLibrary = role === "admin";
   const [items, setItems] = useState<ListingLibraryItem[]>([]);
   const [search, setSearch] = useState("");
@@ -280,7 +280,7 @@ function ListingLibraryContent() {
 
 export default function ListingLibraryPage() {
   return (
-    <RoleGate allowedRoles={["admin", "broker"]}>
+    <RoleGate allowedRoles={["admin", "agent"]}>
       <ListingLibraryContent />
     </RoleGate>
   );

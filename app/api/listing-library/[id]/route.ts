@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { authorizeRequest } from "@/lib/auth";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,7 +13,15 @@ type RouteContext = {
   }>;
 };
 
-export async function DELETE(_req: Request, context: RouteContext) {
+export async function DELETE(req: Request, context: RouteContext) {
+  const auth = await authorizeRequest(req, ["admin"]);
+  if (!auth) {
+    return NextResponse.json(
+      { success: false, error: "Chỉ Admin được xóa tin." },
+      { status: 403 }
+    );
+  }
+
   const { id } = await context.params;
 
   if (!id) {

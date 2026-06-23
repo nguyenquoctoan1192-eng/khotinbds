@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { authorizeRequest } from "@/lib/auth";
 
-export async function GET() {
+export async function GET(req: Request) {
+  const auth = await authorizeRequest(req, ["admin", "agent"]);
+  if (!auth) {
+    return NextResponse.json(
+      { success: false, leads: [], error: "Không có quyền truy cập." },
+      { status: 403 }
+    );
+  }
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -18,11 +26,14 @@ export async function GET() {
 
   try {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
-    const leadSelect = await supabase
+    let leadQuery = supabase
       .from("leads")
-      .select("id, fullname, phone, preferred_districts, note, max_price, status, created_at")
-      .order("created_at", { ascending: false })
-      .limit(200);
+      .select("id, fullname, phone, preferred_districts, note, max_price, status, created_at, assigned_to")
+      .order("created_at", { ascending: false });
+    if (auth.profile.role === "agent") {
+      leadQuery = leadQuery.eq("assigned_to", auth.profile.id);
+    }
+    const leadSelect = await leadQuery.limit(200);
     let data: any[] | null = leadSelect.data;
     let error = leadSelect.error;
 
@@ -31,11 +42,14 @@ export async function GET() {
       String(error.message || "").includes("lead_score")
     ) {
       console.error("lead scoring columns missing; loading leads without score", error);
-      const fallbackSelect = await supabase
+      let fallbackQuery = supabase
         .from("leads")
         .select("id, fullname, phone, preferred_districts, note, max_price, status, created_at")
-        .order("created_at", { ascending: false })
-        .limit(200);
+        .order("created_at", { ascending: false });
+      if (auth.profile.role === "agent") {
+        fallbackQuery = fallbackQuery.eq("assigned_to", auth.profile.id);
+      }
+      const fallbackSelect = await fallbackQuery.limit(200);
 
       data = fallbackSelect.data;
       error = fallbackSelect.error;

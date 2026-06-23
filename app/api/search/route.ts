@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { authorizeRequest } from "@/lib/auth";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,6 +9,11 @@ const supabase = createClient(
 
 export async function POST(req: Request) {
   try {
+    const auth = await authorizeRequest(req, ["admin"]);
+    if (!auth) {
+      return NextResponse.json({ success: false, message: "Chỉ Admin được truy cập kho nhà." }, { status: 403 });
+    }
+
     const { query } = await req.json();
 
     if (!query) return NextResponse.json({ success: false, message: "Missing query" });

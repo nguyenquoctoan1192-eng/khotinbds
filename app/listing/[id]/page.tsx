@@ -16,7 +16,7 @@ export default function ListingDetail() {
   const params = useParams();
   const searchParams = useSearchParams();
   const { role } = useUserRole();
-  const canSeeRawListing = role === "admin" || role === "broker";
+  const canSeeRawListing = role === "admin" || role === "agent";
   const canManageListing = role === "admin";
 
   const id = Array.isArray(params.id) ? params.id[0] : params.id;

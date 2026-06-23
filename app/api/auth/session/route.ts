@@ -23,12 +23,12 @@ export async function POST(req: Request) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, status")
     .eq("id", authData.user.id)
     .maybeSingle();
   const role = normalizeProfileRole(profile?.role);
 
-  if (role === "customer") {
+  if (role === "customer" || profile?.status !== "approved") {
     return NextResponse.json({ success: false }, { status: 403 });
   }
 

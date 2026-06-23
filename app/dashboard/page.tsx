@@ -1,7 +1,7 @@
 import Link from "next/link";
 import SiteNavbar from "@/app/components/site-navbar";
 import { redirect } from "next/navigation";
-import { getServerUserRole } from "@/lib/serverAuth";
+import { getServerProfile, type ServerProfile } from "@/lib/serverAuth";
 import { createClient } from "@supabase/supabase-js";
 import { calculateLeadScoring } from "@/lib/leadScoring";
 import {
@@ -217,7 +217,7 @@ const sortByFollowUp = (a: LeadWithNextAction, b: LeadWithNextAction) =>
   getDaysSince(b.latestActivity?.created_at || b.lead.created_at) -
     getDaysSince(a.latestActivity?.created_at || a.lead.created_at);
 
-const getLeads = async () => {
+const getLeads = async (profile: ServerProfile) => {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -230,11 +230,12 @@ const getLeads = async () => {
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey);
-  const leadSelect = await supabase
+  let leadQuery = supabase
     .from("leads")
-    .select("id, fullname, phone, preferred_districts, note, max_price, status, created_at")
-    .order("created_at", { ascending: false })
-    .limit(200);
+    .select("id, fullname, phone, preferred_districts, note, max_price, status, created_at, assigned_to")
+    .order("created_at", { ascending: false });
+  if (profile.role === "agent") leadQuery = leadQuery.eq("assigned_to", profile.id);
+  const leadSelect = await leadQuery.limit(200);
   let data: any[] | null = leadSelect.data;
   let error = leadSelect.error;
 
@@ -243,11 +244,12 @@ const getLeads = async () => {
     String(error.message || "").includes("lead_score")
   ) {
     console.error("lead scoring columns missing; loading dashboard leads without score", error);
-    const fallbackSelect = await supabase
+    let fallbackQuery = supabase
       .from("leads")
       .select("id, fullname, phone, preferred_districts, note, max_price, status, created_at")
-      .order("created_at", { ascending: false })
-      .limit(200);
+      .order("created_at", { ascending: false });
+    if (profile.role === "agent") fallbackQuery = fallbackQuery.eq("assigned_to", profile.id);
+    const fallbackSelect = await fallbackQuery.limit(200);
 
     data = fallbackSelect.data;
     error = fallbackSelect.error;
@@ -347,9 +349,10 @@ function NextActionList({
 }
 
 export default async function DashboardPage() {
-  const role = await getServerUserRole();
-  if (role !== "admin" && role !== "broker") redirect("/login");
-  const { leads, activities, error } = await getLeads();
+  const profile = await getServerProfile();
+  if (!profile || profile.status !== "approved") redirect("/login");
+  if (profile.role !== "admin" && profile.role !== "agent") redirect("/login");
+  const { leads, activities, error } = await getLeads(profile);
   const today = startOfLocalDay(new Date()).getTime();
   const assignmentMap = buildLeadAssignments(
     leads.map((lead) => ({

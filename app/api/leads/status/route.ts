@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { calculateLeadScoring } from "@/lib/leadScoring";
+import { authorizeRequest } from "@/lib/auth";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,6 +10,11 @@ const supabase = createClient(
 
 export async function PATCH(req: Request) {
   try {
+    const auth = await authorizeRequest(req, ["admin", "agent"]);
+    if (!auth) {
+      return NextResponse.json({ success: false, error: "Không có quyền cập nhật." }, { status: 403 });
+    }
+
     const body = await req.json();
     const leadId = String(body.lead_id || "").trim();
     const newStatus = String(body.status || "").trim();
@@ -20,11 +26,12 @@ export async function PATCH(req: Request) {
       );
     }
 
-    const { data: lead, error: leadError } = await supabase
+    let leadQuery = supabase
       .from("leads")
       .select("status, phone, max_price, preferred_districts, note")
-      .eq("id", leadId)
-      .single();
+      .eq("id", leadId);
+    if (auth.profile.role === "agent") leadQuery = leadQuery.eq("assigned_to", auth.profile.id);
+    const { data: lead, error: leadError } = await leadQuery.single();
 
     if (leadError) {
       throw leadError;
@@ -34,13 +41,15 @@ export async function PATCH(req: Request) {
 
     const leadScoring = calculateLeadScoring(lead || {});
 
-    const { data: updatedLead, error: updateError } = await supabase
+    let updateQuery = supabase
       .from("leads")
       .update({
         status: newStatus,
         ...leadScoring,
       })
-      .eq("id", leadId)
+      .eq("id", leadId);
+    if (auth.profile.role === "agent") updateQuery = updateQuery.eq("assigned_to", auth.profile.id);
+    const { data: updatedLead, error: updateError } = await updateQuery
       .select("id, status, lead_score, lead_temperature")
       .single();
 

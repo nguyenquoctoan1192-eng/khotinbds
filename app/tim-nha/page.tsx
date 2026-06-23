@@ -12,7 +12,7 @@ import { useUserRole } from "@/lib/userRole";
 
 export default function FindHomePage() {
   const { role } = useUserRole();
-  const canSeeRawListing = role === "admin" || role === "broker";
+  const canSeeRawListing = role === "admin" || role === "agent";
   const [fullname, setFullname] = useState("");
   const [phone, setPhone] = useState("");
   const [requirementText, setRequirementText] = useState("");

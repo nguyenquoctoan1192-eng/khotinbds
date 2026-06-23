@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { calculateLeadScore } from "@/lib/leadScore";
-import { getAuthenticatedUser } from "@/lib/auth";
+import { authorizeRequest } from "@/lib/auth";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,9 +10,9 @@ const supabase = createClient(
 
 export async function POST(req: Request) {
   try {
-    const user = await getAuthenticatedUser(req);
+    const auth = await authorizeRequest(req, ["admin", "agent"]);
 
-    if (!user) {
+    if (!auth) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

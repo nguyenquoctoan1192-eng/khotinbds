@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient, type User } from "@supabase/supabase-js";
 import { normalizeProfileRole, type UserRole } from "@/lib/roles";
+import type { ProfileStatus } from "@/lib/agentProfile";
 
 export type { UserRole } from "@/lib/roles";
 
@@ -14,7 +15,7 @@ export const authClient = createClient(
 export { normalizeProfileRole } from "@/lib/roles";
 
 export const syncServerSession = async (accessToken?: string) => {
-  await fetch("/api/auth/session", {
+  return fetch("/api/auth/session", {
     method: accessToken ? "POST" : "DELETE",
     headers: accessToken ? { "Content-Type": "application/json" } : undefined,
     body: accessToken ? JSON.stringify({ accessToken }) : undefined,
@@ -26,7 +27,7 @@ export const getUserRole = async (user: User | null): Promise<UserRole> => {
 
   const { data, error } = await authClient
     .from("profiles")
-    .select("role")
+    .select("role, status")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -35,6 +36,7 @@ export const getUserRole = async (user: User | null): Promise<UserRole> => {
     return "customer";
   }
 
+  if ((data.status as ProfileStatus) !== "approved") return "customer";
   return normalizeProfileRole(data.role);
 };
 

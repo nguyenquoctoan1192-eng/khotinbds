@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getAuthenticatedUser } from "@/lib/auth";
+import { authorizeRequest } from "@/lib/auth";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -77,11 +77,17 @@ const inferStreet = (value: unknown) => {
 
 export async function POST(req: Request) {
   try {
-    const user = await getAuthenticatedUser(req);
+    const auth = await authorizeRequest(req, ["admin"]);
+    if (!auth) {
+      return NextResponse.json(
+        { success: false, error: "Chỉ Admin được tạo tin trong kho." },
+        { status: 403 }
+      );
+    }
     const body = await req.json();
     const content = body.content || {};
     const payload = {
-      user_id: user?.id || null,
+      user_id: auth.user.id,
       raw_input: compactText(body.raw_input),
       title: compactText(body.title),
       primary_content: compactText(content.primary_content) || compactText(body.primary_content),
@@ -140,6 +146,14 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   try {
+    const auth = await authorizeRequest(req, ["admin", "agent"]);
+    if (!auth) {
+      return NextResponse.json(
+        { success: false, error: "Không có quyền truy cập kho tin đăng." },
+        { status: 403 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const page = clampPagination(searchParams.get("page"), 1, 100000);
     const limit = clampPagination(searchParams.get("limit"), 20, 50);

@@ -4,10 +4,12 @@ import { useState, useEffect } from "react";
 import RentedStamp from "@/app/components/rented-stamp";
 import { formatPublicListing } from "@/lib/publicListingFormatter";
 import { useUserRole } from "@/lib/userRole";
+import SiteNavbar from "@/app/components/site-navbar";
+import RoleGate from "@/app/components/role-gate";
 
-export default function FindPage() {
+function FindContent() {
   const { role } = useUserRole();
-  const canSeeRawListing = role === "admin" || role === "broker";
+  const canSeeRawListing = role === "admin" || role === "agent";
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -60,7 +62,9 @@ export default function FindPage() {
   };
 
   return (
-    <div style={{ maxWidth: 700, margin: "20px auto", padding: 20 }}>
+    <div>
+      <SiteNavbar />
+      <main style={{ maxWidth: 700, margin: "20px auto", padding: 20 }}>
       <h1>Tìm nhà (Level 2.5)</h1>
 
       <input
@@ -114,6 +118,15 @@ export default function FindPage() {
           </div>;
         })}
       </div>
+      </main>
     </div>
+  );
+}
+
+export default function FindPage() {
+  return (
+    <RoleGate allowedRoles={["admin"]}>
+      <FindContent />
+    </RoleGate>
   );
 }

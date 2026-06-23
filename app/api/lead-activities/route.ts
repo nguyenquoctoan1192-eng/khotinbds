@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { calculateLeadScoring } from "@/lib/leadScoring";
+import { authorizeRequest } from "@/lib/auth";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,6 +10,11 @@ const supabase = createClient(
 
 export async function POST(req: Request) {
   try {
+    const auth = await authorizeRequest(req, ["admin", "agent"]);
+    if (!auth) {
+      return NextResponse.json({ success: false, error: "Không có quyền cập nhật." }, { status: 403 });
+    }
+
     const body = await req.json();
     const leadId = String(body.lead_id || "").trim();
     const type = String(body.type || "").trim();
@@ -19,6 +25,13 @@ export async function POST(req: Request) {
         { success: false, error: "Thiếu thông tin hoạt động." },
         { status: 400 }
       );
+    }
+
+    let accessQuery = supabase.from("leads").select("id").eq("id", leadId);
+    if (auth.profile.role === "agent") accessQuery = accessQuery.eq("assigned_to", auth.profile.id);
+    const { data: accessibleLead } = await accessQuery.maybeSingle();
+    if (!accessibleLead) {
+      return NextResponse.json({ success: false, error: "Bạn không phụ trách khách hàng này." }, { status: 403 });
     }
 
     const { data, error } = await supabase

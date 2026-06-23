@@ -5,9 +5,15 @@ import {
   sanitizeListingContent,
   type ListingContentInput,
 } from "@/lib/listingContent";
+import { authorizeRequest } from "@/lib/auth";
 
 export async function POST(req: Request) {
   try {
+    const auth = await authorizeRequest(req, ["admin"]);
+    if (!auth) {
+      return NextResponse.json({ success: false, error: "Chỉ Admin được tạo nội dung tin." }, { status: 403 });
+    }
+
     const input = (await req.json()) as ListingContentInput;
     const fallback = generateListingContentFallback(input);
     const apiKey = process.env.OPENAI_API_KEY;

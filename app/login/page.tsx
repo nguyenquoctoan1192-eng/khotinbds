@@ -5,9 +5,13 @@ import { useRouter } from "next/navigation";
 import SiteNavbar from "@/app/components/site-navbar";
 import { authClient, syncServerSession } from "@/lib/userRole";
 import { normalizeProfileRole } from "@/lib/roles";
+import Link from "next/link";
 
-const UNASSIGNED_MESSAGE =
-  "Tài khoản chưa được phân quyền. Vui lòng liên hệ admin.";
+const STATUS_MESSAGES: Record<string, string> = {
+  pending: "Tài khoản của bạn đang chờ Admin xét duyệt.",
+  rejected: "Tài khoản của bạn chưa được phê duyệt.",
+  suspended: "Tài khoản của bạn đang bị tạm khóa.",
+};
 
 export default function LoginPage() {
   const router = useRouter();
@@ -35,21 +39,38 @@ export default function LoginPage() {
 
     const { data: profile, error: profileError } = await authClient
       .from("profiles")
-      .select("role")
+      .select("role, status")
       .eq("id", authData.user.id)
       .maybeSingle();
 
     const role = normalizeProfileRole(profile?.role);
 
-    if (profileError || !profile || (role !== "admin" && role !== "broker")) {
+    if (profileError || !profile || (role !== "admin" && role !== "agent")) {
       if (profileError) console.error("Không tải được profile đăng nhập:", profileError);
       await authClient.auth.signOut();
       setLoading(false);
-      setMessage(UNASSIGNED_MESSAGE);
+      setMessage("Tài khoản chưa được phân quyền. Vui lòng liên hệ Admin.");
       return;
     }
 
-    await syncServerSession(authData.session.access_token);
+    if (profile.status !== "approved") {
+      await authClient.auth.signOut();
+      await syncServerSession();
+      setLoading(false);
+      setMessage(
+        STATUS_MESSAGES[profile.status] ||
+          "Tài khoản của bạn chưa được phê duyệt."
+      );
+      return;
+    }
+
+    const sessionResponse = await syncServerSession(authData.session.access_token);
+    if (!sessionResponse.ok) {
+      await authClient.auth.signOut();
+      setLoading(false);
+      setMessage("Không thể tạo phiên đăng nhập. Vui lòng thử lại.");
+      return;
+    }
     router.replace("/dashboard");
     router.refresh();
   };
@@ -77,7 +98,7 @@ export default function LoginPage() {
           </label>
 
           <label style={styles.label}>
-            Password
+            Mật khẩu
             <input
               type="password"
               value={password}
@@ -93,6 +114,10 @@ export default function LoginPage() {
           <button type="submit" disabled={loading} style={styles.button}>
             {loading ? "Đang đăng nhập..." : "Đăng nhập"}
           </button>
+
+          <p style={styles.registerHint}>
+            Chưa có tài khoản? <Link href="/register">Đăng ký môi giới</Link>
+          </p>
         </form>
       </main>
     </div>
@@ -139,4 +164,5 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     padding: 13,
   },
+  registerHint: { margin: 0, textAlign: "center", color: "#64748b" },
 };

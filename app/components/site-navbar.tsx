@@ -6,17 +6,24 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authClient, syncServerSession, useUserRole } from "@/lib/userRole";
 
-const publicMenuItems = [{ href: "/", label: "Trang chủ" }];
+const publicMenuItems = [
+  { href: "/", label: "Trang chủ" },
+  { href: "/login", label: "Đăng nhập" },
+  { href: "/register", label: "Đăng ký môi giới" },
+];
 const agentMenuItems = [
   { href: "/", label: "Trang chủ" },
-  { href: "/listing-library", label: "📚 Kho tin đăng" },
   { href: "/dashboard", label: "Dashboard" },
   { href: "/customers", label: "Khách hàng" },
+  { href: "/assigned-homes", label: "Nhà được giao" },
 ];
 const adminMenuItems = [
-  agentMenuItems[0],
-  { href: "/post", label: "Đăng tin" },
-  ...agentMenuItems.slice(1),
+  { href: "/", label: "Trang chủ" },
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/customers", label: "Khách hàng" },
+  { href: "/find", label: "Kho nhà" },
+  { href: "/listing-library", label: "Kho tin đăng" },
+  { href: "/admin/agents", label: "Quản lý môi giới" },
 ];
 
 export default function SiteNavbar() {
@@ -27,7 +34,7 @@ export default function SiteNavbar() {
   const visibleMenuItems =
     role === "admin"
       ? adminMenuItems
-      : role === "broker"
+      : role === "agent"
         ? agentMenuItems
         : publicMenuItems;
 
