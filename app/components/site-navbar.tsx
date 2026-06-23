@@ -11,7 +11,7 @@ const publicMenuItems = [
 ];
 
 const agentMenuItems = [
-  { href: "/", label: "Trang chủ" },
+  { href: "/agent", label: "Trang chủ" },
   { href: "/agent", label: "Dashboard" },
   { href: "/customers", label: "Khách được giao" },
   { href: "/assigned-homes", label: "Nhà được giao" },
@@ -19,7 +19,7 @@ const agentMenuItems = [
 ];
 
 const adminMenuItems = [
-  { href: "/", label: "Trang chủ" },
+  { href: "/admin", label: "Trang chủ" },
   { href: "/admin", label: "Dashboard" },
   { href: "/post", label: "Đăng tin" },
   { href: "/customers", label: "Khách hàng" },
@@ -46,6 +46,13 @@ export default function SiteNavbar() {
       ? agentMenuItems
       : publicMenuItems;
 
+  const brandHref =
+    role === "admin"
+      ? "/admin"
+      : role === "agent"
+      ? "/agent"
+      : "/";
+
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
@@ -65,7 +72,7 @@ export default function SiteNavbar() {
     <header className="site-navbar">
       <div className="site-navbar__inner">
         <Link
-          href="/"
+          href={brandHref}
           className="site-navbar__brand"
           onClick={() => setIsOpen(false)}
         >
@@ -104,8 +111,8 @@ export default function SiteNavbar() {
           })}
 
           {!roleLoading &&
-            ((isAdminRoute && role === "admin") ||
-              (isAgentRoute && role === "agent")) && (
+            ((role === "admin" && isAdminRoute) ||
+              (role === "agent" && isAgentRoute)) && (
               <button
                 type="button"
                 className="site-navbar__logout"
