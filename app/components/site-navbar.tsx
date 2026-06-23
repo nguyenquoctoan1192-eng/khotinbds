@@ -12,7 +12,7 @@ const publicMenuItems = [
 
 const adminMenuItems = [
   { href: "/admin", label: "Trang chủ" },
-  { href: "/admin", label: "Dashboard" },
+  { href: "/admin/dashboard", label: "Dashboard" },
   { href: "/admin/post", label: "Đăng tin" },
   { href: "/admin/customers", label: "Khách hàng" },
   { href: "/admin/listing-library", label: "Kho tin đăng" },
@@ -21,7 +21,7 @@ const adminMenuItems = [
 
 const agentMenuItems = [
   { href: "/agent", label: "Trang chủ" },
-  { href: "/agent", label: "Dashboard" },
+  { href: "/agent/dashboard", label: "Dashboard" },
   { href: "/agent/customers", label: "Khách được giao" },
   { href: "/agent/assigned-homes", label: "Nhà được giao" },
   { href: "/agent/account", label: "Tài khoản" },
@@ -57,8 +57,10 @@ export default function SiteNavbar() {
     !roleLoading &&
     ((role === "admin" && isAdminArea) || (role === "agent" && isAgentArea));
 
-  const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href);
+  const isActive = (href: string) => {
+    if (href === "/") return pathname === "/";
+    return pathname === href;
+  };
 
   const logout = async () => {
     await Promise.allSettled([
