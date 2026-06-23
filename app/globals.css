@@ -36,12 +36,15 @@ input, textarea, select, button {
 .auth-page__main { min-height: calc(100vh - 64px); display: grid; place-items: center; padding: 28px 16px; }
 .auth-card { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 20px; padding: 28px; border-radius: 16px; background: #fff; box-shadow: 0 12px 32px rgba(15, 23, 42, .1); }
 .auth-card--wide { max-width: 760px; }
+.auth-card--register { max-width: 520px; }
 .auth-card h1 { margin: 0; font-size: 28px; color: #0f172a; }
 .auth-card p { margin: 7px 0 0; color: #64748b; }
 .auth-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.auth-card--register .auth-grid { grid-template-columns: 1fr; }
 .auth-grid label { display: flex; flex-direction: column; gap: 7px; color: #334155; font-weight: 700; }
 .auth-grid label span { color: #dc2626; }
 .auth-grid label small { color: #64748b; font-weight: 400; }
+.auth-grid .auth-field-note { margin-top: -1px; line-height: 1.45; }
 .auth-grid input, .auth-grid select { width: 100%; border: 1px solid #cbd5e1; border-radius: 9px; padding: 11px 12px; background: #fff; }
 .auth-grid input:focus, .auth-grid select:focus { border-color: #2563eb; outline: 3px solid #dbeafe; }
 .auth-message { border: 1px solid; border-radius: 9px; padding: 11px 13px; }

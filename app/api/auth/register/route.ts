@@ -5,6 +5,31 @@ import { AGENT_AREAS } from "@/lib/agentProfile";
 const clean = (value: unknown) =>
   typeof value === "string" ? value.trim() : "";
 
+const isExistingEmailError = (error: { code?: string; message?: string }) => {
+  const code = error.code?.toLowerCase() || "";
+  const message = error.message?.toLowerCase() || "";
+
+  return (
+    code === "email_exists" ||
+    code === "user_already_exists" ||
+    message.includes("already been registered") ||
+    message.includes("already registered") ||
+    message.includes("already exists") ||
+    message.includes("email exists")
+  );
+};
+
+const isDatabaseProfileError = (error: { code?: string; message?: string }) => {
+  const code = error.code?.toLowerCase() || "";
+  const message = error.message?.toLowerCase() || "";
+
+  return (
+    code === "unexpected_failure" ||
+    message.includes("database error") ||
+    message.includes("profile")
+  );
+};
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -50,34 +75,103 @@ export async function POST(req: Request) {
       );
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-    const { data, error } = await supabase.auth.signUp({
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      console.error("Agent registration is missing Supabase server configuration.", {
+        hasSupabaseUrl: Boolean(supabaseUrl),
+        hasServiceRoleKey: Boolean(serviceRoleKey),
+      });
+      return NextResponse.json(
+        { success: false, error: "Thiếu cấu hình Supabase trên server." },
+        { status: 500 }
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+    const { data, error } = await supabase.auth.admin.createUser({
       email,
       password,
-      options: {
-        data: { full_name: fullName, phone, zalo: zalo || null, area },
-      },
+      email_confirm: true,
+      user_metadata: { full_name: fullName, phone, zalo, area },
     });
 
     if (error || !data.user) {
+      if (error) {
+        console.error("Supabase Admin failed to create agent user.", {
+          code: error.code,
+          message: error.message,
+          status: error.status,
+        });
+      }
+
+      if (error && isExistingEmailError(error)) {
+        return NextResponse.json(
+          { success: false, error: "Email này đã được đăng ký." },
+          { status: 409 }
+        );
+      }
+
+      if (error && isDatabaseProfileError(error)) {
+        return NextResponse.json(
+          { success: false, error: "Không thể tạo hồ sơ môi giới." },
+          { status: 500 }
+        );
+      }
+
       return NextResponse.json(
         {
           success: false,
-          error: error?.message.includes("already")
-            ? "Email này đã được đăng ký."
-            : "Không thể tạo tài khoản. Vui lòng thử lại.",
+          error: error?.message || "Không thể tạo tài khoản. Vui lòng thử lại.",
         },
         { status: 400 }
       );
     }
 
-    if (Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    const { error: profileError } = await supabase.from("profiles").upsert(
+      {
+        id: data.user.id,
+        email,
+        full_name: fullName,
+        phone,
+        zalo: zalo || null,
+        area,
+        role: "agent",
+        status: "pending",
+      },
+      { onConflict: "id" }
+    );
+
+    if (profileError) {
+      console.error("Failed to create agent profile after Auth User creation.", {
+        userId: data.user.id,
+        code: profileError.code,
+        message: profileError.message,
+        details: profileError.details,
+        hint: profileError.hint,
+      });
+
+      const { error: cleanupError } = await supabase.auth.admin.deleteUser(
+        data.user.id
+      );
+      if (cleanupError) {
+        console.error("Failed to clean up Auth User after profile error.", {
+          userId: data.user.id,
+          code: cleanupError.code,
+          message: cleanupError.message,
+          status: cleanupError.status,
+        });
+      }
+
       return NextResponse.json(
-        { success: false, error: "Email này đã được đăng ký." },
-        { status: 409 }
+        { success: false, error: "Không thể tạo hồ sơ môi giới." },
+        { status: 500 }
       );
     }
 

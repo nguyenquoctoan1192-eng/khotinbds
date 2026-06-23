@@ -11,6 +11,7 @@ const publicMenuItems = [
   { href: "/login", label: "Đăng nhập" },
   { href: "/register", label: "Đăng ký môi giới" },
 ];
+const registerMenuItems = [{ href: "/", label: "Trang chủ" }];
 const agentMenuItems = [
   { href: "/", label: "Trang chủ" },
   { href: "/dashboard", label: "Dashboard" },
@@ -31,8 +32,11 @@ export default function SiteNavbar() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const { role } = useUserRole();
+  const isRegisterPage = pathname === "/register";
   const visibleMenuItems =
-    role === "admin"
+    isRegisterPage
+      ? registerMenuItems
+      : role === "admin"
       ? adminMenuItems
       : role === "agent"
         ? agentMenuItems
@@ -87,7 +91,7 @@ export default function SiteNavbar() {
               </Link>
             );
           })}
-          {role !== "customer" && (
+          {!isRegisterPage && role !== "customer" && (
             <button type="button" className="site-navbar__logout" onClick={logout}>
               Đăng xuất
             </button>

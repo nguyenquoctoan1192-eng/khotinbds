@@ -41,7 +41,7 @@ export default function RegisterPage() {
     <div className="auth-page">
       <SiteNavbar />
       <main className="auth-page__main">
-        <form className="auth-card auth-card--wide" onSubmit={register}>
+        <form className="auth-card auth-card--register" onSubmit={register}>
           <div>
             <h1>Đăng ký môi giới</h1>
             <p>Tham gia hệ thống để nhận khách hàng theo khu vực phụ trách.</p>
@@ -59,6 +59,9 @@ export default function RegisterPage() {
             <label>
               Email <span>*</span>
               <input name="email" type="email" autoComplete="email" required />
+              <small className="auth-field-note">
+                Email dùng để đăng nhập tài khoản. Số điện thoại dùng để liên hệ và phân công khách.
+              </small>
             </label>
             <label>
               Mật khẩu <span>*</span>
