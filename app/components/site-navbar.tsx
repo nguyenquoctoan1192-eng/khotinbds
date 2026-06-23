@@ -9,20 +9,19 @@ import { authClient, syncServerSession, useUserRole } from "@/lib/userRole";
 const publicMenuItems = [
   { href: "/", label: "Trang chủ" },
   { href: "/login", label: "Đăng nhập" },
-  { href: "/register", label: "Đăng ký môi giới" },
 ];
-const registerMenuItems = [{ href: "/", label: "Trang chủ" }];
 const agentMenuItems = [
   { href: "/", label: "Trang chủ" },
   { href: "/dashboard", label: "Dashboard" },
-  { href: "/customers", label: "Khách hàng" },
-  { href: "/assigned-homes", label: "Nhà được giao" },
+  { href: "/customers", label: "Khách được giao" },
+  { href: "/account", label: "Tài khoản" },
+  { href: "/listing-library", label: "Kho tin đăng" },
 ];
 const adminMenuItems = [
   { href: "/", label: "Trang chủ" },
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/post", label: "Đăng tin" },
   { href: "/customers", label: "Khách hàng" },
-  { href: "/find", label: "Kho nhà" },
   { href: "/listing-library", label: "Kho tin đăng" },
   { href: "/admin/agents", label: "Quản lý môi giới" },
 ];
@@ -31,11 +30,10 @@ export default function SiteNavbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
-  const { role } = useUserRole();
-  const isRegisterPage = pathname === "/register";
+  const { role, roleLoading } = useUserRole();
   const visibleMenuItems =
-    isRegisterPage
-      ? registerMenuItems
+    roleLoading
+      ? []
       : role === "admin"
       ? adminMenuItems
       : role === "agent"
@@ -46,8 +44,10 @@ export default function SiteNavbar() {
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   const logout = async () => {
-    await authClient.auth.signOut();
-    await syncServerSession();
+    await Promise.allSettled([
+      authClient.auth.signOut(),
+      syncServerSession(),
+    ]);
     setIsOpen(false);
     router.replace("/");
     router.refresh();
@@ -91,7 +91,7 @@ export default function SiteNavbar() {
               </Link>
             );
           })}
-          {!isRegisterPage && role !== "customer" && (
+          {!roleLoading && role !== "customer" && (
             <button type="button" className="site-navbar__logout" onClick={logout}>
               Đăng xuất
             </button>

@@ -19,6 +19,7 @@ export const config = {
     "/post/:path*",
     "/edit/:path*",
     "/assigned-homes/:path*",
+    "/account/:path*",
     "/admin/:path*",
   ],
 };

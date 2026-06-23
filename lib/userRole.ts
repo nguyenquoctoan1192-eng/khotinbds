@@ -14,11 +14,15 @@ export const authClient = createClient(
 
 export { normalizeProfileRole } from "@/lib/roles";
 
-export const syncServerSession = async (accessToken?: string) => {
+export const syncServerSession = async (
+  accessToken?: string,
+  signal?: AbortSignal
+) => {
   return fetch("/api/auth/session", {
     method: accessToken ? "POST" : "DELETE",
     headers: accessToken ? { "Content-Type": "application/json" } : undefined,
     body: accessToken ? JSON.stringify({ accessToken }) : undefined,
+    signal,
   });
 };
 
@@ -43,11 +47,13 @@ export const getUserRole = async (user: User | null): Promise<UserRole> => {
 export function useUserRole() {
   const [role, setRole] = useState<UserRole>("customer");
   const [roleLoading, setRoleLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     let active = true;
 
     const loadRole = async (user: User | null) => {
+      if (active) setIsAuthenticated(Boolean(user));
       const nextRole = await getUserRole(user);
       if (!active) return;
       setRole(nextRole);
@@ -56,9 +62,12 @@ export function useUserRole() {
 
     authClient.auth.getUser().then(({ data }) => loadRole(data.user));
 
-    const { data: listener } = authClient.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = authClient.auth.onAuthStateChange((event, session) => {
       if (!active) return;
-      void syncServerSession(session?.access_token);
+      if (event === "SIGNED_OUT") void syncServerSession();
+      if (event === "TOKEN_REFRESHED" && session?.access_token) {
+        void syncServerSession(session.access_token);
+      }
       void loadRole(session?.user || null);
     });
 
@@ -68,5 +77,5 @@ export function useUserRole() {
     };
   }, []);
 
-  return { role, roleLoading };
+  return { role, roleLoading, isAuthenticated };
 }

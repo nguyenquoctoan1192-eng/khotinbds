@@ -21,15 +21,44 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: false }, { status: 401 });
   }
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("role, status")
     .eq("id", authData.user.id)
     .maybeSingle();
+
+  if (profileError) {
+    console.error("Cannot load profile while creating server session.", {
+      userId: authData.user.id,
+      code: profileError.code,
+      message: profileError.message,
+    });
+    return NextResponse.json(
+      { success: false, error: "Không thể tải hồ sơ tài khoản." },
+      { status: 500 }
+    );
+  }
+
+  if (
+    !profile ||
+    typeof profile.role !== "string" ||
+    !profile.role.trim() ||
+    typeof profile.status !== "string" ||
+    !profile.status.trim()
+  ) {
+    return NextResponse.json(
+      { success: false, error: "Hồ sơ tài khoản thiếu role hoặc status." },
+      { status: 422 }
+    );
+  }
+
   const role = normalizeProfileRole(profile?.role);
 
-  if (role === "customer" || profile?.status !== "approved") {
-    return NextResponse.json({ success: false }, { status: 403 });
+  if (role === "customer" || profile.status !== "approved") {
+    return NextResponse.json(
+      { success: false, role, status: profile.status },
+      { status: 403 }
+    );
   }
 
   (await cookies()).set(AUTH_COOKIE_NAME, accessToken, {
@@ -40,7 +69,7 @@ export async function POST(req: Request) {
     maxAge: 60 * 60,
   });
 
-  return NextResponse.json({ success: true, role });
+  return NextResponse.json({ success: true, role, status: profile.status });
 }
 
 export async function DELETE() {
