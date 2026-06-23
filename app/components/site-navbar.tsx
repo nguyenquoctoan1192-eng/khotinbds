@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { authClient, syncServerSession, useUserRole } from "@/lib/userRole";
+import { authClient, syncServerSession } from "@/lib/userRole";
 
 const publicMenuItems = [
   { href: "/", label: "Trang chủ" },
@@ -32,30 +32,17 @@ export default function SiteNavbar() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
 
-  const { role, roleLoading } = useUserRole();
-
   const isAdminArea = pathname.startsWith("/admin");
   const isAgentArea = pathname.startsWith("/agent");
 
-  const menuItems =
-    roleLoading
-      ? []
-      : role === "admin" && isAdminArea
-        ? adminMenuItems
-        : role === "agent" && isAgentArea
-          ? agentMenuItems
-          : publicMenuItems;
+  const menuItems = isAdminArea
+    ? adminMenuItems
+    : isAgentArea
+    ? agentMenuItems
+    : publicMenuItems;
 
-  const brandHref =
-    role === "admin" && isAdminArea
-      ? "/admin"
-      : role === "agent" && isAgentArea
-        ? "/agent"
-        : "/";
-
-  const showLogout =
-    !roleLoading &&
-    ((role === "admin" && isAdminArea) || (role === "agent" && isAgentArea));
+  const brandHref = isAdminArea ? "/admin" : isAgentArea ? "/agent" : "/";
+  const showLogout = isAdminArea || isAgentArea;
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
