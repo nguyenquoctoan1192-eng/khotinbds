@@ -10,21 +10,21 @@ const publicMenuItems = [
   { href: "/login", label: "Đăng nhập" },
 ];
 
-const agentMenuItems = [
-  { href: "/agent", label: "Trang chủ" },
-  { href: "/agent", label: "Dashboard" },
-  { href: "/customers", label: "Khách được giao" },
-  { href: "/assigned-homes", label: "Nhà được giao" },
-  { href: "/account", label: "Tài khoản" },
-];
-
 const adminMenuItems = [
   { href: "/admin", label: "Trang chủ" },
   { href: "/admin", label: "Dashboard" },
-  { href: "/post", label: "Đăng tin" },
-  { href: "/customers", label: "Khách hàng" },
-  { href: "/listing-library", label: "Kho tin đăng" },
+  { href: "/admin/post", label: "Đăng tin" },
+  { href: "/admin/customers", label: "Khách hàng" },
+  { href: "/admin/listing-library", label: "Kho tin đăng" },
   { href: "/admin/agents", label: "Quản lý môi giới" },
+];
+
+const agentMenuItems = [
+  { href: "/agent", label: "Trang chủ" },
+  { href: "/agent", label: "Dashboard" },
+  { href: "/agent/customers", label: "Khách được giao" },
+  { href: "/agent/assigned-homes", label: "Nhà được giao" },
+  { href: "/agent/account", label: "Tài khoản" },
 ];
 
 export default function SiteNavbar() {
@@ -34,24 +34,28 @@ export default function SiteNavbar() {
 
   const { role, roleLoading } = useUserRole();
 
-  const isAdminRoute = pathname.startsWith("/admin");
-  const isAgentRoute = pathname.startsWith("/agent");
+  const isAdminArea = pathname.startsWith("/admin");
+  const isAgentArea = pathname.startsWith("/agent");
 
-  const visibleMenuItems =
+  const menuItems =
     roleLoading
       ? []
-      : isAdminRoute && role === "admin"
-      ? adminMenuItems
-      : isAgentRoute && role === "agent"
-      ? agentMenuItems
-      : publicMenuItems;
+      : role === "admin" && isAdminArea
+        ? adminMenuItems
+        : role === "agent" && isAgentArea
+          ? agentMenuItems
+          : publicMenuItems;
 
   const brandHref =
-    role === "admin"
+    role === "admin" && isAdminArea
       ? "/admin"
-      : role === "agent"
-      ? "/agent"
-      : "/";
+      : role === "agent" && isAgentArea
+        ? "/agent"
+        : "/";
+
+  const showLogout =
+    !roleLoading &&
+    ((role === "admin" && isAdminArea) || (role === "agent" && isAgentArea));
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -63,7 +67,6 @@ export default function SiteNavbar() {
     ]);
 
     setIsOpen(false);
-
     router.replace("/");
     router.refresh();
   };
@@ -83,7 +86,8 @@ export default function SiteNavbar() {
           type="button"
           className="site-navbar__toggle"
           aria-expanded={isOpen}
-          onClick={() => setIsOpen((v) => !v)}
+          aria-label={isOpen ? "Đóng menu" : "Mở menu"}
+          onClick={() => setIsOpen((current) => !current)}
         >
           {isOpen ? "✕" : "☰"}
         </button>
@@ -92,8 +96,9 @@ export default function SiteNavbar() {
           className={`site-navbar__links${
             isOpen ? " site-navbar__links--open" : ""
           }`}
+          aria-label="Điều hướng chính"
         >
-          {visibleMenuItems.map((item) => {
+          {menuItems.map((item) => {
             const active = isActive(item.href);
 
             return (
@@ -103,6 +108,7 @@ export default function SiteNavbar() {
                 className={`site-navbar__link${
                   active ? " site-navbar__link--active" : ""
                 }`}
+                aria-current={active ? "page" : undefined}
                 onClick={() => setIsOpen(false)}
               >
                 {item.label}
@@ -110,17 +116,15 @@ export default function SiteNavbar() {
             );
           })}
 
-          {!roleLoading &&
-            ((role === "admin" && isAdminRoute) ||
-              (role === "agent" && isAgentRoute)) && (
-              <button
-                type="button"
-                className="site-navbar__logout"
-                onClick={logout}
-              >
-                Đăng xuất
-              </button>
-            )}
+          {showLogout && (
+            <button
+              type="button"
+              className="site-navbar__logout"
+              onClick={logout}
+            >
+              Đăng xuất
+            </button>
+          )}
         </nav>
       </div>
     </header>
