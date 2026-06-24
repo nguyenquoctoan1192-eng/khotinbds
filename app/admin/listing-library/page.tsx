@@ -169,7 +169,7 @@ function ListingLibraryContent() {
           <h1 style={styles.title}>Kho tin đăng</h1>
           <p style={styles.subtitle}>Lưu và dùng lại nội dung AI đã tạo.</p>
         </div>
-        <button type="button" onClick={() => router.push("/post")} style={styles.primaryButton}>
+        <button type="button" onClick={() => router.push("/admin/post")} style={styles.primaryButton}>
           Tạo tin mới
         </button>
       </section>

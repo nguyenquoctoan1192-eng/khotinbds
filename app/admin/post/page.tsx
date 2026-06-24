@@ -825,7 +825,7 @@ console.log("ERROR =", error);
 
     alert("Đăng tin thành công");
 
-    router.push("/");
+   router.push("/admin/listing-library");
   };
 
   const aiContentSections = aiContent
