@@ -1,5 +1,6 @@
 "use client";
 
+import SiteNavbar from "@/app/components/site-navbar";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -1310,42 +1311,37 @@ function CustomersContent() {
   };
 
   return (
-    <div style={{ fontFamily: "Arial", minHeight: "100vh", background: "#f3f4f6" }}>
-      <div style={{ background: "#111827", color: "#fff", padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <Link href="/" style={{ color: "#fff", textDecoration: "none", fontSize: 24, fontWeight: 700 }}>
-          BDS
-        </Link>
-        <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-          <Link href="/" style={{ color: "#fff", textDecoration: "none" }}>
-            Trang chủ
-          </Link>
-          <Link href="/dashboard" style={{ color: "#fff", textDecoration: "none" }}>
-            Dashboard
-          </Link>
-          <Link href="/post" style={{ color: "#fff", textDecoration: "none" }}>
-            Đăng tin
-          </Link>
-          <Link href="/customers" style={{ color: "#fff", textDecoration: "none", fontWeight: 700 }}>
-            Khách hàng
-          </Link>
-        </div>
-      </div>
+  <div
+    style={{
+      fontFamily: "Arial",
+      minHeight: "100vh",
+      background: "#f3f4f6",
+    }}
+  >
+    <SiteNavbar />
 
-      <main style={{ maxWidth: 1180, margin: "0 auto", padding: 20 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
-          <div>
-            <h1 style={{ marginBottom: 6 }}>Khách hàng</h1>
-            <p style={{ marginTop: 0, color: "#6b7280" }}>
-              Danh sách khách đã lưu từ form Lưu khách.
-            </p>
-          </div>
-          <Link
-            href="/"
-            style={{ background: "#2563eb", color: "#fff", textDecoration: "none", padding: "11px 16px", borderRadius: 8, fontWeight: 700 }}
-          >
-            Thêm khách
-          </Link>
+    <main
+      style={{
+        maxWidth: 1180,
+        margin: "0 auto",
+        padding: 20,
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
+        <div>
+          <h1 style={{ marginBottom: 6 }}>Khách hàng</h1>
+          <p style={{ marginTop: 0, color: "#6b7280" }}>
+            Danh sách khách đã lưu từ form Lưu khách.
+          </p>
         </div>
+
+        <Link
+          href="/admin/customers"
+          style={{ background: "#2563eb", color: "#fff", textDecoration: "none", padding: "11px 16px", borderRadius: 8, fontWeight: 700 }}
+        >
+          Thêm khách
+        </Link>
+      </div>
 
         {!loading && !error && leads.length > 0 && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10, marginBottom: 20 }}>
