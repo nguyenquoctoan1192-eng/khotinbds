@@ -51,30 +51,82 @@ export default function AdminPage() {
         )}
 
         <div style={{ display: "grid", gap: 16 }}>
-          {listings.map((item) => (
-            <div key={item.id} style={{ background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
-              <h2 style={{ marginTop: 0 }}>{item.title || item.address || "Tin chưa có tiêu đề"}</h2>
+          {listings.map((item) => {
+  const imageUrl = Array.isArray(item.images) ? item.images[0] : null;
 
-              <div style={{ display: "grid", gap: 6, color: "#374151" }}>
-                <div><b>Địa chỉ:</b> {item.address || item.location || "Chưa có"}</div>
-                <div><b>Giá:</b> {item.price || "Chưa có"}</div>
-                <div><b>Diện tích:</b> {item.area || "Chưa có"}</div>
-                <div><b>Kết cấu:</b> {item.structure || "Chưa có"}</div>
-                <div><b>SĐT:</b> {item.phone || "Chưa có"}</div>
-                <div><b>Hoa hồng:</b> {item.commission || item.hh || "Chưa có"}</div>
-                <div><b>Trạng thái:</b> {item.status === "rented" ? "Đã cho thuê" : "Còn trống"}</div>
-              </div>
+  return (
+    <div
+      key={item.id}
+      style={{
+        background: "#fff",
+        borderRadius: 12,
+        padding: 16,
+        boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+        display: "grid",
+        gridTemplateColumns: "220px 1fr",
+        gap: 16,
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          height: 160,
+          borderRadius: 10,
+          overflow: "hidden",
+          background: "#e5e7eb",
+        }}
+      >
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={item.title || "Hình nhà"}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              height: "100%",
+              display: "grid",
+              placeItems: "center",
+              color: "#6b7280",
+            }}
+          >
+            Chưa có ảnh
+          </div>
+        )}
+      </div>
 
-              <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-                <Link href={`/admin/edit/${item.id}`} style={{ color: "#2563eb", fontWeight: 700 }}>
-                  Sửa tin
-                </Link>
-                <Link href={`/listing/${item.id}`} style={{ color: "#111827", fontWeight: 700 }}>
-                  Xem chi tiết
-                </Link>
-              </div>
-            </div>
-          ))}
+      <div>
+        <h2 style={{ marginTop: 0 }}>
+          {item.title || item.address || "Tin chưa có tiêu đề"}
+        </h2>
+
+        <div style={{ display: "grid", gap: 6, color: "#374151" }}>
+          <div><b>Địa chỉ:</b> {item.address || item.location || "Chưa có"}</div>
+          <div><b>Giá:</b> {item.price || "Chưa có"}</div>
+          <div><b>Diện tích:</b> {item.area || "Chưa có"}</div>
+          <div><b>Kết cấu:</b> {item.structure || "Chưa có"}</div>
+          <div><b>SĐT:</b> {item.phone || "Chưa có"}</div>
+          <div><b>Hoa hồng:</b> {item.commission || item.hh || "Chưa có"}</div>
+          <div><b>Trạng thái:</b> {item.status === "rented" ? "Đã cho thuê" : "Còn trống"}</div>
+        </div>
+
+        <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+          <Link href={`/admin/edit/${item.id}`} style={{ color: "#2563eb", fontWeight: 700 }}>
+            Sửa tin
+          </Link>
+          <Link href={`/listing/${item.id}`} style={{ color: "#111827", fontWeight: 700 }}>
+            Xem chi tiết
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+})}
         </div>
       </main>
     </div>
