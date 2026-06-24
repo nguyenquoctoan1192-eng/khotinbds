@@ -18,7 +18,12 @@ export default function ListingDetail() {
   const { role } = useUserRole();
   const canSeeRawListing = role === "admin" || role === "agent";
   const canManageListing = role === "admin";
-
+  const homeHref =
+  role === "admin"
+    ? "/admin"
+    : role === "agent"
+    ? "/agent"
+    : "/";
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const fromSearch = searchParams.get("fromSearch")?.trim() || "";
   const returnUrl = searchParams.get("returnUrl") || "";
@@ -189,7 +194,7 @@ export default function ListingDetail() {
               Quay lại kết quả tìm kiếm
             </a>
           )}
-          <a href="/" style={styles.backBtn}>← Trang chủ</a>
+          <a href={homeHref} style={styles.backBtn}>← Trang chủ</a>
         </div>
       </div>
 
@@ -347,7 +352,7 @@ export default function ListingDetail() {
                   .delete()
                   .eq("id", listing.id);
 
-                location.href = "/";
+                location.href = homeHref;
               }}
             >
               🗑 Xóa
