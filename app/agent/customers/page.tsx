@@ -1458,8 +1458,6 @@ function CustomersContent() {
         </div>
       )}
     </main>
-  </div>
-);
 
       {noteModal.open && (
         <div
