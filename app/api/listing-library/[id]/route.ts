@@ -14,10 +14,11 @@ type RouteContext = {
 };
 
 export async function DELETE(req: Request, context: RouteContext) {
-  const auth = await authorizeRequest(req, ["admin"]);
+  const auth = await authorizeRequest(req, ["admin", "agent"]);
+
   if (!auth) {
     return NextResponse.json(
-      { success: false, error: "Chỉ Admin được xóa tin." },
+      { success: false, error: "Không có quyền xóa tin." },
       { status: 403 }
     );
   }
@@ -28,6 +29,36 @@ export async function DELETE(req: Request, context: RouteContext) {
     return NextResponse.json(
       { success: false, error: "Thiếu ID tin đăng." },
       { status: 400 }
+    );
+  }
+
+  const { data: existingItem, error: loadError } = await supabase
+    .from("listing_library")
+    .select("id, user_id")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (loadError) {
+    return NextResponse.json(
+      { success: false, error: loadError.message },
+      { status: 500 }
+    );
+  }
+
+  if (!existingItem) {
+    return NextResponse.json(
+      { success: false, error: "Không tìm thấy tin cần xóa." },
+      { status: 404 }
+    );
+  }
+
+  const isAdmin = auth.profile.role === "admin";
+  const isOwner = existingItem.user_id === auth.user.id;
+
+  if (!isAdmin && !isOwner) {
+    return NextResponse.json(
+      { success: false, error: "Bạn chỉ được xóa tin do chính bạn lưu." },
+      { status: 403 }
     );
   }
 
