@@ -1,5 +1,6 @@
 "use client";
 
+import SiteNavbar from "@/app/components/site-navbar";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -1310,113 +1311,155 @@ function CustomersContent() {
   };
 
   return (
-    <div style={{ fontFamily: "Arial", minHeight: "100vh", background: "#f3f4f6" }}>
-      <div style={{ background: "#111827", color: "#fff", padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <Link href="/" style={{ color: "#fff", textDecoration: "none", fontSize: 24, fontWeight: 700 }}>
-          BDS
-        </Link>
-        <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-          <Link href="/" style={{ color: "#fff", textDecoration: "none" }}>
-            Trang chủ
-          </Link>
-          <Link href="/dashboard" style={{ color: "#fff", textDecoration: "none" }}>
-            Dashboard
-          </Link>
-          <Link href="/post" style={{ color: "#fff", textDecoration: "none" }}>
-            Đăng tin
-          </Link>
-          <Link href="/customers" style={{ color: "#fff", textDecoration: "none", fontWeight: 700 }}>
-            Khách hàng
-          </Link>
+  <div
+    style={{
+      fontFamily: "Arial",
+      minHeight: "100vh",
+      background: "#f3f4f6",
+    }}
+  >
+    <SiteNavbar />
+
+    <main style={{ maxWidth: 1180, margin: "0 auto", padding: 20 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-end",
+          gap: 12,
+          flexWrap: "wrap",
+          marginBottom: 18,
+        }}
+      >
+        <div>
+          <h1 style={{ marginBottom: 6 }}>Khách hàng</h1>
+          <p style={{ marginTop: 0, color: "#6b7280" }}>
+            Danh sách khách đã lưu từ form Lưu khách.
+          </p>
         </div>
+
+        <Link
+          href="/agent/customers"
+          style={{
+            background: "#2563eb",
+            color: "#fff",
+            textDecoration: "none",
+            padding: "11px 16px",
+            borderRadius: 8,
+            fontWeight: 700,
+          }}
+        >
+          Thêm khách
+        </Link>
       </div>
 
-      <main style={{ maxWidth: 1180, margin: "0 auto", padding: 20 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
-          <div>
-            <h1 style={{ marginBottom: 6 }}>Khách hàng</h1>
-            <p style={{ marginTop: 0, color: "#6b7280" }}>
-              Danh sách khách đã lưu từ form Lưu khách.
-            </p>
-          </div>
-          <Link
-            href="/"
-            style={{ background: "#2563eb", color: "#fff", textDecoration: "none", padding: "11px 16px", borderRadius: 8, fontWeight: 700 }}
+      {!loading && !error && leads.length > 0 && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+            gap: 10,
+            marginBottom: 20,
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 8,
+              padding: 12,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+            }}
           >
-            Thêm khách
-          </Link>
-        </div>
-
-        {!loading && !error && leads.length > 0 && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10, marginBottom: 20 }}>
-            <div style={{ background: "#fff", borderRadius: 8, padding: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
-              <div style={{ color: "#6b7280", fontSize: 13, marginBottom: 6 }}>
-                Leads cần chăm sóc hôm nay
-              </div>
-              <strong style={{ fontSize: 24 }}>{followUpDueTodayCount}</strong>
+            <div style={{ color: "#6b7280", fontSize: 13, marginBottom: 6 }}>
+              Leads cần chăm sóc hôm nay
             </div>
-            {statusCounts.map((item) => (
-              <div key={item.status} style={{ background: "#fff", borderRadius: 8, padding: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
-                <div style={{ color: "#6b7280", fontSize: 13, marginBottom: 6 }}>{item.status}</div>
-                <strong style={{ fontSize: 24 }}>{item.count}</strong>
+            <strong style={{ fontSize: 24 }}>{followUpDueTodayCount}</strong>
+          </div>
+
+          {statusCounts.map((item) => (
+            <div
+              key={item.status}
+              style={{
+                background: "#fff",
+                borderRadius: 8,
+                padding: 12,
+                boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+              }}
+            >
+              <div style={{ color: "#6b7280", fontSize: 13, marginBottom: 6 }}>
+                {item.status}
               </div>
-            ))}
-          </div>
-        )}
+              <strong style={{ fontSize: 24 }}>{item.count}</strong>
+            </div>
+          ))}
+        </div>
+      )}
 
-        {loading && (
-          <div style={{ background: "#fff", padding: 20, borderRadius: 10 }}>
-            Đang tải danh sách khách...
-          </div>
-        )}
+      {loading && (
+        <div style={{ background: "#fff", padding: 20, borderRadius: 10 }}>
+          Đang tải danh sách khách...
+        </div>
+      )}
 
-        {!loading && error && (
-          <div style={{ background: "#fee2e2", color: "#991b1b", padding: 14, borderRadius: 8, marginBottom: 16 }}>
-            Không tải được danh sách khách: {error}
-          </div>
-        )}
+      {!loading && error && (
+        <div
+          style={{
+            background: "#fee2e2",
+            color: "#991b1b",
+            padding: 14,
+            borderRadius: 8,
+            marginBottom: 16,
+          }}
+        >
+          Không tải được danh sách khách: {error}
+        </div>
+      )}
 
-        {!loading && !error && leads.length === 0 && (
-          <div style={{ background: "#fff", padding: 20, borderRadius: 10 }}>
-            Chưa có khách hàng nào được lưu.
-          </div>
-        )}
+      {!loading && !error && leads.length === 0 && (
+        <div style={{ background: "#fff", padding: 20, borderRadius: 10 }}>
+          Chưa có khách hàng nào được lưu.
+        </div>
+      )}
 
-        {!loading && !error && leads.length > 0 && (
-          <div style={{ display: "grid", gap: 24 }}>
-            <ReminderSection
-              title="Cần chăm sóc hôm nay"
-              items={todayItems}
-              composingLeadId={composingLeadId}
-              onComposeMessage={openCustomerMessage}
-              onFindMatches={findMatchesForLead}
-              onOpenNote={openNoteModal}
-              onStatusChange={updateLeadStatus}
-              onAssistantProfileSaved={updateAssistantProfileState}
-            />
-            <ReminderSection
-              title="Sắp tới"
-              items={upcomingItems}
-              composingLeadId={composingLeadId}
-              onComposeMessage={openCustomerMessage}
-              onFindMatches={findMatchesForLead}
-              onOpenNote={openNoteModal}
-              onStatusChange={updateLeadStatus}
-              onAssistantProfileSaved={updateAssistantProfileState}
-            />
-            <ReminderSection
-              title="Chưa có lịch hẹn"
-              items={unscheduledItems}
-              composingLeadId={composingLeadId}
-              onComposeMessage={openCustomerMessage}
-              onFindMatches={findMatchesForLead}
-              onOpenNote={openNoteModal}
-              onStatusChange={updateLeadStatus}
-              onAssistantProfileSaved={updateAssistantProfileState}
-            />
-          </div>
-        )}
-      </main>
+      {!loading && !error && leads.length > 0 && (
+        <div style={{ display: "grid", gap: 24 }}>
+          <ReminderSection
+            title="Cần chăm sóc hôm nay"
+            items={todayItems}
+            composingLeadId={composingLeadId}
+            onComposeMessage={openCustomerMessage}
+            onFindMatches={findMatchesForLead}
+            onOpenNote={openNoteModal}
+            onStatusChange={updateLeadStatus}
+            onAssistantProfileSaved={updateAssistantProfileState}
+          />
+
+          <ReminderSection
+            title="Sắp tới"
+            items={upcomingItems}
+            composingLeadId={composingLeadId}
+            onComposeMessage={openCustomerMessage}
+            onFindMatches={findMatchesForLead}
+            onOpenNote={openNoteModal}
+            onStatusChange={updateLeadStatus}
+            onAssistantProfileSaved={updateAssistantProfileState}
+          />
+
+          <ReminderSection
+            title="Chưa có lịch hẹn"
+            items={unscheduledItems}
+            composingLeadId={composingLeadId}
+            onComposeMessage={openCustomerMessage}
+            onFindMatches={findMatchesForLead}
+            onOpenNote={openNoteModal}
+            onStatusChange={updateLeadStatus}
+            onAssistantProfileSaved={updateAssistantProfileState}
+          />
+        </div>
+      )}
+    </main>
+  </div>
+);
 
       {noteModal.open && (
         <div
