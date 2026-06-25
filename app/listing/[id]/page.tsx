@@ -16,14 +16,22 @@ export default function ListingDetail() {
   const params = useParams();
   const searchParams = useSearchParams();
   const { role } = useUserRole();
-  const canSeeRawListing = role === "admin" || role === "agent";
-  const canManageListing = role === "admin";
-  const homeHref =
-  role === "admin"
+
+const viewMode = searchParams.get("view") || "public";
+
+const isAdminView = viewMode === "admin" && role === "admin";
+const isAgentView = viewMode === "agent" && role === "agent";
+
+const canSeeRawListing = isAdminView || isAgentView;
+const canManageListing = isAdminView;
+
+const homeHref =
+  viewMode === "admin"
     ? "/admin"
-    : role === "agent"
+    : viewMode === "agent"
     ? "/agent"
     : "/";
+ 
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const fromSearch = searchParams.get("fromSearch")?.trim() || "";
   const returnUrl = searchParams.get("returnUrl") || "";
