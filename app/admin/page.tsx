@@ -119,9 +119,9 @@ export default function AdminPage() {
           <Link href={`/admin/edit/${item.id}`} style={{ color: "#2563eb", fontWeight: 700 }}>
             Sửa tin
           </Link>
-          <Link href={`/listing/${item.id}`} style={{ color: "#111827", fontWeight: 700 }}>
-            Xem chi tiết
-          </Link>
+          <Link href={`/listing/${item.id}?view=admin`}>
+  Xem chi tiết
+</Link>
         </div>
       </div>
     </div>

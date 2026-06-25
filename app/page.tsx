@@ -799,7 +799,7 @@ export default function Home() {
                     </p>
                   </div>
                   <div style={{ display: "flex", flexDirection: isMobile ? "row" : "column", gap: 10, justifyContent: isMobile ? "flex-start" : "flex-end", width: isMobile ? "100%" : "auto", marginTop: isMobile ? 10 : 0, flexShrink: 0, flexWrap: "wrap" }}>
-                    <button style={{ background: "#111827", color: "#fff", border: "none", padding: "12px 18px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" }} onClick={() => router.push(buildListingUrl(listing.id))}>
+                    <button style={{ background: "#111827", color: "#fff", border: "none", padding: "12px 18px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" }} onClick={() => router.push(`/listing/${listing.id}?view=public`)}>
                       Xem chi tiết
                     </button>
                   </div>
