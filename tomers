@@ -1,0 +1,84 @@
+warning: in the working copy of 'app/admin/customers/page.tsx', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/app/admin/customers/page.tsx b/app/admin/customers/page.tsx[m
+[1mindex bc16f61..0bbab23 100644[m
+[1m--- a/app/admin/customers/page.tsx[m
+[1m+++ b/app/admin/customers/page.tsx[m
+[36m@@ -1,5 +1,6 @@[m
+ "use client";[m
+ [m
+[32m+[m[32mimport SiteNavbar from "@/app/components/site-navbar";[m
+ import Link from "next/link";[m
+ import { useRouter } from "next/navigation";[m
+ import { useEffect, useState } from "react";[m
+[36m@@ -1310,42 +1311,37 @@[m [mfunction CustomersContent() {[m
+   };[m
+ [m
+   return ([m
+[31m-    <div style={{ fontFamily: "Arial", minHeight: "100vh", background: "#f3f4f6" }}>[m
+[31m-      <div style={{ background: "#111827", color: "#fff", padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>[m
+[31m-        <Link href="/" style={{ color: "#fff", textDecoration: "none", fontSize: 24, fontWeight: 700 }}>[m
+[31m-          BDS[m
+[31m-        </Link>[m
+[31m-        <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>[m
+[31m-          <Link href="/" style={{ color: "#fff", textDecoration: "none" }}>[m
+[31m-            Trang chủ[m
+[31m-          </Link>[m
+[31m-          <Link href="/dashboard" style={{ color: "#fff", textDecoration: "none" }}>[m
+[31m-            Dashboard[m
+[31m-          </Link>[m
+[31m-          <Link href="/post" style={{ color: "#fff", textDecoration: "none" }}>[m
+[31m-            Đăng tin[m
+[31m-          </Link>[m
+[31m-          <Link href="/customers" style={{ color: "#fff", textDecoration: "none", fontWeight: 700 }}>[m
+[31m-            Khách hàng[m
+[31m-          </Link>[m
+[32m+[m[32m  <div[m
+[32m+[m[32m    style={{[m
+[32m+[m[32m      fontFamily: "Arial",[m
+[32m+[m[32m      minHeight: "100vh",[m
+[32m+[m[32m      background: "#f3f4f6",[m
+[32m+[m[32m    }}[m
+[32m+[m[32m  >[m
+[32m+[m[32m    <SiteNavbar />[m
+[32m+[m
+[32m+[m[32m    <main[m
+[32m+[m[32m      style={{[m
+[32m+[m[32m        maxWidth: 1180,[m
+[32m+[m[32m        margin: "0 auto",[m
+[32m+[m[32m        padding: 20,[m
+[32m+[m[32m      }}[m
+[32m+[m[32m    >[m
+[32m+[m[32m      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>[m
+[32m+[m[32m        <div>[m
+[32m+[m[32m          <h1 style={{ marginBottom: 6 }}>Khách hàng</h1>[m
+[32m+[m[32m          <p style={{ marginTop: 0, color: "#6b7280" }}>[m
+[32m+[m[32m            Danh sách khách đã lưu từ form Lưu khách.[m
+[32m+[m[32m          </p>[m
+         </div>[m
+[31m-      </div>[m
+ [m
+[31m-      <main style={{ maxWidth: 1180, margin: "0 auto", padding: 20 }}>[m
+[31m-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>[m
+[31m-          <div>[m
+[31m-            <h1 style={{ marginBottom: 6 }}>Khách hàng</h1>[m
+[31m-            <p style={{ marginTop: 0, color: "#6b7280" }}>[m
+[31m-              Danh sách khách đã lưu từ form Lưu khách.[m
+[31m-            </p>[m
+[31m-          </div>[m
+[31m-          <Link[m
+[31m-            href="/"[m
+[31m-            style={{ background: "#2563eb", color: "#fff", textDecoration: "none", padding: "11px 16px", borderRadius: 8, fontWeight: 700 }}[m
+[31m-          >[m
+[31m-            Thêm khách[m
+[31m-          </Link>[m
+[31m-        </div>[m
+[32m+[m[32m        <Link[m
+[32m+[m[32m          href="/admin/customers"[m
+[32m+[m[32m          style={{ background: "#2563eb", color: "#fff", textDecoration: "none", padding: "11px 16px", borderRadius: 8, fontWeight: 700 }}[m
+[32m+[m[32m        >[m
+[32m+[m[32m          Thêm khách[m
+[32m+[m[32m        </Link>[m
+[32m+[m[32m      </div>[m
+ [m
+         {!loading && !error && leads.length > 0 && ([m
+           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10, marginBottom: 20 }}>[m

@@ -194,6 +194,9 @@ export default function LoginPage() {
           <p style={styles.registerHint}>
             Chưa có tài khoản? <Link href="/register">Đăng ký môi giới</Link>
           </p>
+          <p style={styles.registerHint}>
+  <Link href="/forgot-password">Quên mật khẩu?</Link>
+</p>
         </form>
       </main>
     </div>
