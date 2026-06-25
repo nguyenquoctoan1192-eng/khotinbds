@@ -22,8 +22,9 @@ const adminMenuItems = [
 const agentMenuItems = [
   { href: "/agent", label: "Trang chủ" },
   { href: "/agent/dashboard", label: "Dashboard" },
-  { href: "/agent/customers", label: "Khách được giao" },
-  { href: "/agent/assigned-homes", label: "Nhà được giao" },
+  { href: "/agent/customers", label: "Khách hàng" },
+  { href: "/agent/assigned-homes", label: "Khách được giao" },
+  { href: "/agent/listing-library", label: "Kho tin đăng" },
   { href: "/agent/account", label: "Tài khoản" },
 ];
 
