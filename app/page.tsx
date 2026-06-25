@@ -68,7 +68,7 @@ const emptyPublicChatProfile = (): PublicChatProfile => ({
 export default function Home() {
   const router = useRouter();
   const { role, roleLoading, isAuthenticated } = useUserRole();
-  const canSeeRawListing = role === "admin" || role === "agent";
+  const canSeeRawListing = false;
   const aiChatContainerRef = useRef<HTMLDivElement | null>(null);
   const [listings, setListings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
