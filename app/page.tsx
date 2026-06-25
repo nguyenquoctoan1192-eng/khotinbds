@@ -779,7 +779,18 @@ export default function Home() {
                           <span>{listing.floors || 0} tầng</span>
                         </div>
                         <p style={{ color: "#555", lineHeight: 1.5, marginTop: 10, wordBreak: "break-word", fontSize: isMobile ? 14 : 16 }}>
-                          {listing.description}
+                          {(() => {
+  const publicListing = formatPublicListing(listing);
+
+  return canSeeRawListing
+    ? listing.description
+    : [
+        publicListing.area ? `Diện tích: ${publicListing.area}` : "",
+        publicListing.structure ? `Kết cấu: ${publicListing.structure}` : "",
+      ]
+        .filter(Boolean)
+        .join(" - ");
+})()}
                         </p>
                       </>
                     )}
