@@ -354,7 +354,9 @@ export default function Home() {
     }
 
     const query = params.toString();
-    return query ? `/listing/${listingId}?${query}` : `/listing/${listingId}`;
+    return query
+  ? `/listing/${listingId}?view=public&${query}`
+  : `/listing/${listingId}?view=public`;
   };
 
   const fetchListings = async () => {

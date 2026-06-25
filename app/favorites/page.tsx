@@ -89,7 +89,7 @@ export default function FavoritesPage() {
                   <div style={styles.actions}>
                     <button
                       onClick={() =>
-                        router.push(`/listing/${item.id}`)
+                        router.push(`/listing/${item.id}?view=public`)
                       }
                       style={styles.viewBtn}
                     >
