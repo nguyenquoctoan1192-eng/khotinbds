@@ -47,7 +47,11 @@ const getSupabaseErrorMessage = (error: SupabaseError) =>
     ? LISTING_LIBRARY_MIGRATION_MESSAGE
     : `Lỗi Supabase: ${error.message || "Không xác định."}`;
 
-const clampPagination = (value: string | null, fallback: number, max: number) => {
+const clampPagination = (
+  value: string | null,
+  fallback: number,
+  max: number
+) => {
   const parsed = Number(value);
 
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
@@ -77,30 +81,50 @@ const inferStreet = (value: unknown) => {
 
 export async function POST(req: Request) {
   try {
-    const auth = await authorizeRequest(req, ["admin"]);
+    const auth = await authorizeRequest(req, ["admin", "agent"]);
+
     if (!auth) {
       return NextResponse.json(
-        { success: false, error: "Chỉ Admin được tạo tin trong kho." },
+        {
+          success: false,
+          error: "Không có quyền tạo tin trong kho.",
+        },
         { status: 403 }
       );
     }
+
     const body = await req.json();
     const content = body.content || {};
+
     const payload = {
       user_id: auth.user.id,
+
       raw_input: compactText(body.raw_input),
       title: compactText(body.title),
-      primary_content: compactText(content.primary_content) || compactText(body.primary_content),
-      chotot_title: compactText(content.cho_tot_title) || compactText(body.chotot_title),
+
+      primary_content:
+        compactText(content.primary_content) ||
+        compactText(body.primary_content),
+
+      chotot_title:
+        compactText(content.cho_tot_title) || compactText(body.chotot_title),
+
       facebook_title:
         compactText(content.facebook_title) || compactText(body.facebook_title),
+
       short_description:
-        compactText(content.short_description) || compactText(body.short_description),
+        compactText(content.short_description) ||
+        compactText(body.short_description),
+
       seo_description:
         compactText(content.seo_description) || compactText(body.seo_description),
+
       phone: compactText(body.phone),
       district: compactText(body.district),
-      street: compactText(body.street) || inferStreet(body.address || body.title),
+
+      street:
+        compactText(body.street) || inferStreet(body.address || body.title),
+
       price: compactText(body.price),
       area: compactText(body.area),
       structure: compactText(body.structure),
@@ -108,7 +132,10 @@ export async function POST(req: Request) {
 
     if (!payload.primary_content) {
       return NextResponse.json(
-        { success: false, error: "Thiếu nội dung chia sẻ." },
+        {
+          success: false,
+          error: "Thiếu nội dung chia sẻ.",
+        },
         { status: 400 }
       );
     }
@@ -121,13 +148,20 @@ export async function POST(req: Request) {
 
     if (error) {
       logSupabaseError("POST", error);
+
       return NextResponse.json(
-        { success: false, error: getSupabaseErrorMessage(error) },
+        {
+          success: false,
+          error: getSupabaseErrorMessage(error),
+        },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ success: true, item: data });
+    return NextResponse.json({
+      success: true,
+      item: data,
+    });
   } catch (error) {
     console.error("Create listing library item failed:", error);
 
@@ -147,9 +181,13 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   try {
     const auth = await authorizeRequest(req, ["admin", "agent"]);
+
     if (!auth) {
       return NextResponse.json(
-        { success: false, error: "Không có quyền truy cập kho tin đăng." },
+        {
+          success: false,
+          error: "Không có quyền truy cập kho tin đăng.",
+        },
         { status: 403 }
       );
     }
@@ -167,8 +205,13 @@ export async function GET(req: Request) {
       .order("created_at", { ascending: false })
       .range(from, to);
 
+    if (auth.profile.role === "agent") {
+  query = query.eq("user_id", auth.user.id);
+}
+
     if (search) {
       const keyword = `%${escapeSearch(search)}%`;
+
       query = query.or(
         [
           `raw_input.ilike.${keyword}`,
@@ -187,8 +230,12 @@ export async function GET(req: Request) {
 
     if (error) {
       logSupabaseError("GET", error);
+
       return NextResponse.json(
-        { success: false, error: getSupabaseErrorMessage(error) },
+        {
+          success: false,
+          error: getSupabaseErrorMessage(error),
+        },
         { status: 500 }
       );
     }
