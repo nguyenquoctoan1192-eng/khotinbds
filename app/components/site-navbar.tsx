@@ -5,12 +5,17 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { authClient, syncServerSession } from "@/lib/userRole";
 
-const publicMenuItems = [
+type MenuItem = {
+  href: string;
+  label: string;
+};
+
+const publicMenuItems: MenuItem[] = [
   { href: "/", label: "Trang chủ" },
   { href: "/login", label: "Đăng nhập" },
 ];
 
-const adminMenuItems = [
+const adminMenuItems: MenuItem[] = [
   { href: "/admin", label: "Trang chủ" },
   { href: "/admin/dashboard", label: "Dashboard" },
   { href: "/admin/post", label: "Đăng tin" },
@@ -19,7 +24,7 @@ const adminMenuItems = [
   { href: "/admin/agents", label: "Quản lý môi giới" },
 ];
 
-const agentMenuItems = [
+const agentMenuItems: MenuItem[] = [
   { href: "/agent", label: "Trang chủ" },
   { href: "/agent/dashboard", label: "Dashboard" },
   { href: "/agent/customers", label: "Khách hàng" },
@@ -39,22 +44,22 @@ export default function SiteNavbar() {
   const menuItems = isAdminArea
     ? adminMenuItems
     : isAgentArea
-    ? agentMenuItems
-    : publicMenuItems;
+      ? agentMenuItems
+      : publicMenuItems;
 
   const brandHref = isAdminArea ? "/admin" : isAgentArea ? "/agent" : "/";
   const showLogout = isAdminArea || isAgentArea;
 
   const isActive = (href: string) => {
-    if (href === "/") return pathname === "/";
-    return pathname === href;
+    if (href === "/" || href === "/admin" || href === "/agent") {
+      return pathname === href;
+    }
+
+    return pathname === href || pathname.startsWith(`${href}/`);
   };
 
   const logout = async () => {
-    await Promise.allSettled([
-      authClient.auth.signOut(),
-      syncServerSession(),
-    ]);
+    await Promise.allSettled([authClient.auth.signOut(), syncServerSession()]);
 
     setIsOpen(false);
     router.replace("/");
