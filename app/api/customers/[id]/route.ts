@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
-import { createSupabaseServiceClient } from "@/lib/services/supabaseServer";
 import { getAccess } from "@/lib/access";
-
-const supabase = createSupabaseServiceClient();
+import { getCustomerDetail } from "@/lib/services/customerService";
 
 export async function GET(
   req: Request,
@@ -16,30 +14,10 @@ export async function GET(
 
   const { id } = await params;
 
-  const { data: customer, error: customerError } = await supabase
-    .from("customers")
-    .select("*")
-    .eq("id", id)
-    .single();
+  const { customer, conversations, error } = await getCustomerDetail(id);
 
-  if (customerError) {
-    return NextResponse.json(
-      { error: customerError.message },
-      { status: 500 }
-    );
-  }
-
-  const { data: conversations, error: conversationsError } = await supabase
-    .from("conversations")
-    .select("*")
-    .eq("customer_id", id)
-    .order("created_at", { ascending: true });
-
-  if (conversationsError) {
-    return NextResponse.json(
-      { error: conversationsError.message },
-      { status: 500 }
-    );
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
   return NextResponse.json({
