@@ -3,17 +3,23 @@
 import RentedStamp from "@/app/components/rented-stamp";
 import { formatPublicListing } from "@/lib/publicListingFormatter";
 import { getPermissions } from "@/lib/permissions";
+import type { Listing } from "@/types/listing";
+
+type ListingCardItem = {
+  listing?: Listing;
+  [key: string]: unknown;
+};
 
 type ListingCardProps = {
-  item: any;
+  item: ListingCardItem;
   isMobile: boolean;
   mode: "public" | "agent" | "admin";
   search: string;
-  getListingFromResult: (item: any) => any;
-  getReasonLabels: (item: any) => string[];
+  getListingFromResult: (item: ListingCardItem) => Listing;
+  getReasonLabels: (item: ListingCardItem) => string[];
   onView: (listingId: string) => void;
   onEdit?: (listingId: string) => void;
-  onDelete?: (listing: any) => void;
+  onDelete?: (listing: Listing) => void;
 };
 
 export default function ListingCard({
@@ -64,7 +70,7 @@ const canDeleteListing = permissions.canDeleteListing;
         {search.trim() && (
           <div style={{ marginTop: 8, marginBottom: 8 }}>
             <p style={{ fontWeight: 700, marginBottom: 6 }}>
-              Điểm phù hợp: {item.score}
+              Điểm phù hợp: {String(item.score ?? 0)}
             </p>
             {getReasonLabels(item).length > 0 && (
               <div>
@@ -99,7 +105,9 @@ const canDeleteListing = permissions.canDeleteListing;
           </div>
         )}
         <p style={{ marginTop: 10, color: "#6b7280", fontSize: 13 }}>
-          {new Date(listing.updated_at || listing.created_at).toLocaleDateString("vi-VN")}
+          {listing.updated_at || listing.created_at
+  ? new Date(String(listing.updated_at || listing.created_at)).toLocaleDateString("vi-VN")
+  : ""}
         </p>
       </div>
       <div style={{ display: "flex", flexDirection: isMobile ? "row" : "column", gap: 10, justifyContent: isMobile ? "flex-start" : "flex-end", width: isMobile ? "100%" : "auto", marginTop: isMobile ? 10 : 0, flexShrink: 0, flexWrap: "wrap" }}>
