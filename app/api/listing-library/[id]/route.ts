@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServiceClient } from "@/lib/services/supabaseServer";
 import { getAccess } from "@/lib/access";
+import { getListingLibraryItem } from "@/lib/services/listingLibraryService";
 
 const supabase = createSupabaseServiceClient();
 
@@ -30,11 +31,10 @@ if (!access) {
     );
   }
 
-  const { data: existingItem, error: loadError } = await supabase
-    .from("listing_library")
-    .select("id, user_id")
-    .eq("id", id)
-    .maybeSingle();
+ const {
+  data: existingItem,
+  error: loadError,
+} = await getListingLibraryItem(id);
 
   if (loadError) {
     return NextResponse.json(
