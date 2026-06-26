@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { authorizeRequest } from "@/lib/auth";
+import { getAccess } from "@/lib/access";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,9 +14,10 @@ type RouteContext = {
 };
 
 export async function DELETE(req: Request, context: RouteContext) {
-  const auth = await authorizeRequest(req, ["admin", "agent"]);
+  const access = await getAccess(req, ["admin", "agent"]);
 
-  if (!auth) {
+if (!access) {
+  
     return NextResponse.json(
       { success: false, error: "Không có quyền xóa tin." },
       { status: 403 }
@@ -52,8 +53,8 @@ export async function DELETE(req: Request, context: RouteContext) {
     );
   }
 
-  const isAdmin = auth.profile.role === "admin";
-  const isOwner = existingItem.user_id === auth.user.id;
+ const isAdmin = access.isAdmin;
+const isOwner = existingItem.user_id === access.user.id;
 
   if (!isAdmin && !isOwner) {
     return NextResponse.json(
