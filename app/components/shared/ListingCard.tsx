@@ -2,6 +2,7 @@
 
 import RentedStamp from "@/app/components/rented-stamp";
 import { formatPublicListing } from "@/lib/publicListingFormatter";
+import { getPermissions } from "@/lib/permissions";
 
 type ListingCardProps = {
   item: any;
@@ -28,8 +29,10 @@ export default function ListingCard({
 }: ListingCardProps) {
   const listing = getListingFromResult(item);
   const publicListing = formatPublicListing(listing);
-  const canSeeRawListing = mode === "agent" || mode === "admin";
-  const canManageListing = mode === "admin";
+const permissions = getPermissions(mode);
+const canSeeRawListing = permissions.canViewOwnerPhone;
+const canManageListing = permissions.canEditListing;
+const canDeleteListing = permissions.canDeleteListing;
 
   return (
     <div key={listing.id} style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 16, background: "#fff", borderRadius: 14, overflow: "hidden", padding: 14, alignItems: "flex-start", width: "100%", boxSizing: "border-box" }}>
@@ -108,7 +111,7 @@ export default function ListingCard({
             Sửa tin
           </button>
         )}
-        {canManageListing && onDelete && (
+        {canDeleteListing && onDelete && (
           <button style={{ background: "#ef4444", color: "#fff", border: "none", padding: "12px 18px", borderRadius: 10, cursor: "pointer", fontWeight: "bold" }} onClick={() => onDelete(listing)}>
             Xóa
           </button>
