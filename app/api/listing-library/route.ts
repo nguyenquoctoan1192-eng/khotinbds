@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { authorizeRequest } from "@/lib/auth";
+import { getAccess } from "@/lib/access";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -81,9 +81,9 @@ const inferStreet = (value: unknown) => {
 
 export async function POST(req: Request) {
   try {
-    const auth = await authorizeRequest(req, ["admin", "agent"]);
+    const access = await getAccess(req, ["admin", "agent"]);
 
-    if (!auth) {
+    if (!access) {
       return NextResponse.json(
         {
           success: false,
@@ -97,7 +97,7 @@ export async function POST(req: Request) {
     const content = body.content || {};
 
     const payload = {
-      user_id: auth.user.id,
+      user_id: access.user.id,
 
       raw_input: compactText(body.raw_input),
       title: compactText(body.title),
@@ -180,9 +180,9 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   try {
-    const auth = await authorizeRequest(req, ["admin", "agent"]);
+    const access = await getAccess(req, ["admin", "agent"]);
 
-    if (!auth) {
+    if (!access) {
       return NextResponse.json(
         {
           success: false,
@@ -205,8 +205,8 @@ export async function GET(req: Request) {
       .order("created_at", { ascending: false })
       .range(from, to);
 
-    if (auth.profile.role === "agent") {
-  query = query.eq("user_id", auth.user.id);
+    if (access.isAgent) {
+  query = query.eq("user_id", access.user.id);
 }
 
     if (search) {
