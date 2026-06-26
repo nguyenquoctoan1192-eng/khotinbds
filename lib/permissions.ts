@@ -1,4 +1,7 @@
-export type AppRole = "public" | "agent" | "admin";
+import type { UserRole } from "@/lib/roles";
+
+export type AppRole = UserRole | "public";
+
 
 export type Permissions = {
   canEditListing: boolean;
