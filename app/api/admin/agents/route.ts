@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { authorizeRequest } from "@/lib/auth";
+import { getAccess } from "@/lib/access";
 import { AGENT_AREAS, isProfileStatus } from "@/lib/agentProfile";
 
 const supabase = createClient(
@@ -12,8 +12,8 @@ const cleanSearch = (value: string) =>
   value.replace(/[%_]/g, (character) => `\\${character}`).replace(/[,()]/g, " ");
 
 export async function GET(req: Request) {
-  const auth = await authorizeRequest(req, ["admin"]);
-  if (!auth) {
+  const access = await getAccess(req, ["admin"]);
+if (!access) {
     return NextResponse.json({ success: false, error: "Không có quyền truy cập." }, { status: 403 });
   }
 
@@ -46,8 +46,8 @@ export async function GET(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  const auth = await authorizeRequest(req, ["admin"]);
-  if (!auth) {
+  const access = await getAccess(req, ["admin"]);
+if (!access) {
     return NextResponse.json({ success: false, error: "Không có quyền thực hiện." }, { status: 403 });
   }
 
