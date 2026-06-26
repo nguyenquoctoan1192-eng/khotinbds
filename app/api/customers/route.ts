@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getAuthenticatedUser } from "@/lib/auth";
+import { getAccess } from "@/lib/access";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,16 +8,13 @@ const supabase = createClient(
 );
 
 export async function GET(req: Request) {
-  const user = await getAuthenticatedUser(req);
+  const access = await getAccess(req, ["admin", "agent"]);
 
-  if (!user) {
+  if (!access) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data, error } = await supabase
-    .from("customers")
-    .select("*")
-    .order("created_at", { ascending: false });
+  const { data, error } = await supabase.from("customers").select("*");
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
