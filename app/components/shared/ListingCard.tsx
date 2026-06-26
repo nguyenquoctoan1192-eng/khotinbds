@@ -5,8 +5,11 @@ import { formatPublicListing } from "@/lib/publicListingFormatter";
 import { getPermissions } from "@/lib/permissions";
 import type { Listing } from "@/types/listing";
 
-type ListingCardItem = {
+export type ListingCardItem = {
   listing?: Listing;
+  score?: number | string | null;
+  breakdown?: unknown;
+  reasons?: unknown;
   [key: string]: unknown;
 };
 

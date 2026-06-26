@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import type { ListingCardItem } from "./ListingCard";
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
@@ -12,11 +13,30 @@ import SiteNavbar from "@/app/components/site-navbar";
 import ListingCard from "@/app/components/shared/ListingCard";
 import { formatPublicListing } from "@/lib/publicListingFormatter";
 import { useUserRole } from "@/lib/userRole";
+import type { Listing } from "@/types/listing";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 );
+
+type ListingMatchBreakdown = {
+  district_score?: number;
+  price_score?: number;
+  area_score?: number;
+  business_score?: number;
+  reasons?: string[];
+};
+
+type ListingResult = Listing & {
+  listing?: Listing;
+  listing_id?: string;
+  score?: number | string | null;
+  breakdown?: ListingMatchBreakdown;
+  reasons?: string[];
+};
+
+
 
 type PublicChatProfile = {
   name: string | null;
@@ -71,7 +91,10 @@ export default function ListingsHome({ mode }: { mode: AccessMode }) {
   const router = useRouter();
   const { roleLoading, isAuthenticated } = useUserRole();
   const aiChatContainerRef = useRef<HTMLDivElement | null>(null);
-  const [listings, setListings] = useState<any[]>([]);
+  const [listings, setListings] = useState<ListingResult[]>([]);
+  const searchAbortRef = useRef<AbortController | null>(null);
+  const getListingFromResult = (item: { listing?: Listing; [key: string]: unknown }): Listing =>
+  item.listing ?? (item as Listing);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [queryReady, setQueryReady] = useState(false);
@@ -134,7 +157,6 @@ export default function ListingsHome({ mode }: { mode: AccessMode }) {
     return () => window.clearTimeout(timer);
   }, [aiChatMessages, aiChatLoading, aiPropertySuggestionsKey, showAiChat]);
 
-  const getListingFromResult = (item: any) => item.listing || item;
 
   const getExistingMatches = () =>
     listings
@@ -142,7 +164,7 @@ export default function ListingsHome({ mode }: { mode: AccessMode }) {
         const listing = getListingFromResult(item);
 
         return {
-          listing_id: item.listing_id || listing?.id,
+          listing_id: item.listing_id || listing.id,
           score: item.score,
           breakdown: item.breakdown,
           reasons: item.reasons || item.breakdown?.reasons || [],
@@ -150,34 +172,45 @@ export default function ListingsHome({ mode }: { mode: AccessMode }) {
       })
       .filter((match) => match.listing_id);
 
-  const getReasonLabels = (item: any) => {
-    const breakdown = item.breakdown;
-    const reasons = item.reasons || breakdown?.reasons || [];
-    const labels: string[] = [];
+  const getReasonLabels = (item: ListingCardItem) => {
+  const breakdown = item.breakdown as ListingMatchBreakdown | undefined;
+  const itemReasons = Array.isArray(item.reasons) ? item.reasons : [];
+  const reasons = itemReasons.length > 0 ? itemReasons : breakdown?.reasons || [];
+  const labels: string[] = [];
 
-    if (breakdown?.district_score > 0 || reasons.some((reason: string) => reason.includes("District"))) {
-      labels.push("Đúng quận");
-    }
+    if (
+  Number(breakdown?.district_score ?? 0) > 0 ||
+  reasons.some((reason: string) => reason.includes("District"))
+) {
+  labels.push("Đúng quận");
+}
 
-    if (breakdown?.price_score > 0 || reasons.some((reason: string) => reason.includes("Giá"))) {
-      labels.push("Giá gần ngân sách");
-    }
+if (
+  Number(breakdown?.price_score ?? 0) > 0 ||
+  reasons.some((reason: string) => reason.includes("Giá"))
+) {
+  labels.push("Giá gần ngân sách");
+}
 
-    if (breakdown?.area_score > 0 || reasons.some((reason: string) => reason.includes("Area"))) {
-      labels.push("Diện tích phù hợp");
-    }
+if (
+  Number(breakdown?.area_score ?? 0) > 0 ||
+  reasons.some((reason: string) => reason.includes("Area"))
+) {
+  labels.push("Diện tích phù hợp");
+}
 
-    if (breakdown?.business_score > 0) {
-      const businessReason = reasons.find((reason: string) =>
-        /spa|cafe|office|restaurant|business|MT\/MB|VP|frontage|Premise/i.test(reason)
-      );
-      const businessType =
-        businessReason?.match(/spa|cafe|office|restaurant/i)?.[0] || "kinh doanh";
+if (Number(breakdown?.business_score ?? 0) > 0) {
+  const businessReason = reasons.find((reason: string) =>
+    /spa|cafe|office|restaurant|business|MT\/MB|VP|frontage|Premise/i.test(reason)
+  );
 
-      labels.push(`Phù hợp ${businessType}`);
-    }
+  const businessType =
+    businessReason?.match(/spa|cafe|office|restaurant/i)?.[0] ?? "kinh doanh";
 
-    return labels;
+  labels.push(`Phù hợp ${businessType}`);
+}
+
+return labels;
   };
 
   const formatListingPrice = (price: unknown) => {
@@ -275,6 +308,7 @@ export default function ListingsHome({ mode }: { mode: AccessMode }) {
         }),
       });
       const json = await res.json();
+      
 
       if (!res.ok || !json.success) {
         throw new Error(json.error || "AI chưa phản hồi được.");
@@ -360,7 +394,7 @@ export default function ListingsHome({ mode }: { mode: AccessMode }) {
   : `/listing/${listingId}?view=${mode}`;
   };
 
-  const deleteListing = async (listing: any) => {
+  const deleteListing = async (listing: Listing) => {
     if (!confirm("Xóa tin?")) return;
 
     const { error } = await supabase
@@ -379,9 +413,14 @@ export default function ListingsHome({ mode }: { mode: AccessMode }) {
   };
 
   const fetchListings = async () => {
-    setLoading(true);
-    setSaveMessage("");
-    setSearchWarning("");
+  searchAbortRef.current?.abort();
+
+  const controller = new AbortController();
+  searchAbortRef.current = controller;
+
+  setLoading(true);
+  setSaveMessage("");
+  setSearchWarning("");
 
     if (search.trim()) {
       const parsed = parseVietnameseRequirement(search);
@@ -389,11 +428,13 @@ export default function ListingsHome({ mode }: { mode: AccessMode }) {
       setParsedFilters(parsed);
 
       const res = await fetch("/api/leads", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  signal: controller.signal,
+  body: JSON.stringify({
+           query: search.trim(),
           mode: "match",
           note: parsed.note || null,
           preferred_districts: parsed.preferred_districts,
@@ -404,6 +445,9 @@ export default function ListingsHome({ mode }: { mode: AccessMode }) {
       });
 
       const json = await res.json();
+      if (controller.signal.aborted) {
+  return;
+}
 
       if (!res.ok || !json.success) {
         setListings([]);
@@ -553,12 +597,19 @@ export default function ListingsHome({ mode }: { mode: AccessMode }) {
   };
 
   useEffect(() => {
-    if (!queryReady) {
-      return;
-    }
+  if (!queryReady) {
+    return;
+  }
 
+  const timer = window.setTimeout(() => {
     fetchListings();
-  }, [queryReady, search]);
+  }, search.trim() ? 500 : 0);
+
+  return () => {
+    window.clearTimeout(timer);
+    searchAbortRef.current?.abort();
+  };
+}, [queryReady, search]);
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search).get("q");
