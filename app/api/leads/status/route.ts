@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { calculateLeadScoring } from "@/lib/leadScoring";
-import { authorizeRequest } from "@/lib/auth";
+import { getAccess } from "@/lib/access";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,8 +10,8 @@ const supabase = createClient(
 
 export async function PATCH(req: Request) {
   try {
-    const auth = await authorizeRequest(req, ["admin", "agent"]);
-    if (!auth) {
+    const access = await getAccess(req, ["admin", "agent"]);
+if (!access) {
       return NextResponse.json({ success: false, error: "Không có quyền cập nhật." }, { status: 403 });
     }
 
@@ -30,7 +30,7 @@ export async function PATCH(req: Request) {
       .from("leads")
       .select("status, phone, max_price, preferred_districts, note")
       .eq("id", leadId);
-    if (auth.profile.role === "agent") leadQuery = leadQuery.eq("assigned_to", auth.profile.id);
+    if (access.isAgent) leadQuery = leadQuery.eq("assigned_to", access.profile.id);
     const { data: lead, error: leadError } = await leadQuery.single();
 
     if (leadError) {
@@ -48,7 +48,7 @@ export async function PATCH(req: Request) {
         ...leadScoring,
       })
       .eq("id", leadId);
-    if (auth.profile.role === "agent") updateQuery = updateQuery.eq("assigned_to", auth.profile.id);
+  if (access.isAgent) updateQuery = updateQuery.eq("assigned_to", access.profile.id);
     const { data: updatedLead, error: updateError } = await updateQuery
       .select("id, status, lead_score, lead_temperature")
       .single();

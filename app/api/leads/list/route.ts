@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { authorizeRequest } from "@/lib/auth";
+import { getAccess } from "@/lib/access";
 
 export async function GET(req: Request) {
-  const auth = await authorizeRequest(req, ["admin", "agent"]);
-  if (!auth) {
+  const access = await getAccess(req, ["admin", "agent"]);
+if (!access) {
     return NextResponse.json(
       { success: false, leads: [], error: "Không có quyền truy cập." },
       { status: 403 }
@@ -30,9 +30,9 @@ export async function GET(req: Request) {
       .from("leads")
       .select("id, fullname, phone, preferred_districts, note, max_price, status, created_at, assigned_to")
       .order("created_at", { ascending: false });
-    if (auth.profile.role === "agent") {
-      leadQuery = leadQuery.eq("assigned_to", auth.profile.id);
-    }
+    if (access.isAgent) {
+  leadQuery = leadQuery.eq("assigned_to", access.profile.id);
+}
     const leadSelect = await leadQuery.limit(200);
     let data: any[] | null = leadSelect.data;
     let error = leadSelect.error;
@@ -46,9 +46,9 @@ export async function GET(req: Request) {
         .from("leads")
         .select("id, fullname, phone, preferred_districts, note, max_price, status, created_at")
         .order("created_at", { ascending: false });
-      if (auth.profile.role === "agent") {
-        fallbackQuery = fallbackQuery.eq("assigned_to", auth.profile.id);
-      }
+    if (access.isAgent) {
+  fallbackQuery = fallbackQuery.eq("assigned_to", access.profile.id);
+}
       const fallbackSelect = await fallbackQuery.limit(200);
 
       data = fallbackSelect.data;
