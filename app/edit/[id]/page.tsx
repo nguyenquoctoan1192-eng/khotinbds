@@ -54,6 +54,22 @@ const defaultEnhanceOptions = (): ImageEnhanceOptions => ({
 function EditContent() {
   const router = useRouter();
   const { role, roleLoading } = useUserRole();
+  const getViewMode = () => {
+  if (typeof window === "undefined") return "admin";
+
+  const view = new URLSearchParams(window.location.search).get("view");
+
+  if (view === "agent") return "agent";
+  if (view === "admin") return "admin";
+
+  return "admin";
+};
+
+const getAfterUpdateUrl = () => {
+  const view = getViewMode();
+
+  return `/listing/${id}?view=${view}`;
+};
 
   const params = useParams();
   const id = Array.isArray(params?.id)
@@ -427,6 +443,12 @@ const [amenities, setAmenities] =
   alert(error.message);
   return;
 }
+if (error) {
+  alert("Cập nhật tin thất bại");
+  return;
+}
+
+router.push(getAfterUpdateUrl());
 
 alert("Đã cập nhật");
 
@@ -455,7 +477,7 @@ window.location.href = "/";
             cursor: "pointer",
           }}
           onClick={() =>
-            router.push("/")
+            router.push(getAfterUpdateUrl())
           }
         >
           🏠 BDS
