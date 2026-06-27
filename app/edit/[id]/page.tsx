@@ -53,28 +53,32 @@ const defaultEnhanceOptions = (): ImageEnhanceOptions => ({
 
 function EditContent() {
   const router = useRouter();
+  const params = useParams();
   const { role, roleLoading } = useUserRole();
+
+  const id = Array.isArray(params?.id) ? params.id[0] : params?.id;
+
   const getViewMode = () => {
-  if (typeof window === "undefined") return "admin";
+    if (typeof window === "undefined") return "admin";
 
-  const view = new URLSearchParams(window.location.search).get("view");
+    const view = new URLSearchParams(window.location.search).get("view");
 
-  if (view === "agent") return "agent";
-  if (view === "admin") return "admin";
+    if (view === "agent") return "agent";
+    if (view === "admin") return "admin";
 
-  return "admin";
-};
+    return "admin";
+  };
 
-const getAfterUpdateUrl = () => {
+  const getAfterUpdateUrl = () => {
   const view = getViewMode();
 
-  return `/listing/${id}?view=${view}`;
+  if (view === "agent") return "/agent/listing-library";
+
+  return "/admin/listing-library";
 };
 
-  const params = useParams();
-  const id = Array.isArray(params?.id)
-  ? params.id[0]
-  : params?.id;
+  
+  
 
   console.log("PARAMS =", params);
   console.log("ID =", id);
@@ -398,7 +402,7 @@ const [amenities, setAmenities] =
   };
 
   // UPDATE
-  const updatePost = async () => {
+const updatePost = async () => {
   setLoading(true);
 
   const payload = {
@@ -425,14 +429,14 @@ const [amenities, setAmenities] =
     status,
   };
 
-  console.log("ID =", params.id);
+  console.log("ID =", id);
   console.log("PAYLOAD =", payload);
 
   const { data, error } = await supabase
-  .from("listings")
-  .update(payload)
-  .eq("id", id)
-  .select();
+    .from("listings")
+    .update(payload)
+    .eq("id", id)
+    .select();
 
   console.log("DATA =", data);
   console.log("ERROR =", error);
@@ -440,20 +444,13 @@ const [amenities, setAmenities] =
   setLoading(false);
 
   if (error) {
-  alert(error.message);
-  return;
-}
-if (error) {
-  alert("Cập nhật tin thất bại");
-  return;
-}
+    alert(`Cập nhật tin thất bại: ${error.message}`);
+    return;
+  }
 
-router.push(getAfterUpdateUrl());
+  alert("Đã cập nhật");
 
-alert("Đã cập nhật");
-
-// QUAY VỀ TRANG CHỦ
-window.location.href = "/";
+  router.replace(getAfterUpdateUrl());
 };
 
   if (roleLoading) {
@@ -476,9 +473,11 @@ window.location.href = "/";
           style={{
             cursor: "pointer",
           }}
-          onClick={() =>
-            router.push(getAfterUpdateUrl())
-          }
+         onClick={() => {
+  const view = getViewMode();
+
+  router.push(view === "agent" ? "/agent" : "/admin");
+}}
         >
           🏠 BDS
         </h2>
@@ -869,7 +868,7 @@ window.location.href = "/";
             >
               {loading
                 ? "Đang cập nhật..."
-                : "💾 Cập nhật tin"}
+                : "Cập nhật tin"}
             </button>
           </div>
         </div>
