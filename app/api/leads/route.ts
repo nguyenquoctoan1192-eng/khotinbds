@@ -10,6 +10,7 @@ import {
   scoreListingForLead,
 } from "@/lib/matching";
 import { calculateLeadScoring } from "@/lib/leadScoring";
+import { parseVietnameseRequirement } from "@/lib/requirementParser";
 import {
   getDistrictLabel,
   noSearchResultsMessage,
@@ -50,6 +51,32 @@ function normalizePreferredDistricts(value: unknown) {
     .filter(Boolean);
 }
 
+function normalizeStringList(value: unknown) {
+  const rawValues = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(",")
+      : [];
+
+  return rawValues
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+}
+
+function firstDefined<T>(...values: Array<T | null | undefined>) {
+  return values.find((value) => value !== null && value !== undefined);
+}
+
+function firstScalar(...values: unknown[]): string | number | null {
+  for (const value of values) {
+    if (typeof value === "string" || typeof value === "number") {
+      return value;
+    }
+  }
+
+  return null;
+}
+
 function getHardFilterDistricts(value: unknown) {
   const preferred = normalizePreferredDistricts(value);
   const allowed = new Map(
@@ -80,9 +107,21 @@ function extractHardFilterDistrictsFromText(value: unknown) {
 
 function listingMatchesDistrict(listing: Record<string, unknown>, districts: string[]) {
   const listingDistrict = normalizeDistrictText(listing.district);
+  const listingText = getListingKeywordText(listing);
 
   return districts.some(
-    (district) => normalizeDistrictText(district) === listingDistrict
+    (district) => {
+      const normalizedDistrict = normalizeDistrictText(district);
+      const withoutPrefix = normalizedDistrict.replace(/^quan\s+/, "");
+
+      if (normalizedDistrict === listingDistrict) return true;
+
+      if (/^\d+$/.test(withoutPrefix)) {
+        return new RegExp(`\\b(?:quan|q)\\.?\\s*${withoutPrefix}\\b`).test(listingText);
+      }
+
+      return listingText.includes(withoutPrefix);
+    }
   );
 }
 
@@ -143,6 +182,7 @@ function createSearchMatch(
       reasons: [reason],
     },
     reasons: [reason],
+    warnings: [],
     listing,
   };
 }
@@ -203,15 +243,133 @@ function scoreListingKeyword(listing: Record<string, unknown>, keywordSearch: un
 function hasStructuredRequirement(requirement: LeadRequirement) {
   return Boolean(
     requirement.min_price ||
+      requirement.minPrice ||
       requirement.max_price ||
+      requirement.maxPrice ||
       requirement.min_area ||
+      requirement.minArea ||
+      requirement.max_area ||
+      requirement.maxArea ||
       requirement.bedrooms ||
       requirement.note ||
+      (Array.isArray(requirement.businessTypes) &&
+        requirement.businessTypes.length > 0) ||
+      (Array.isArray(requirement.concepts) &&
+        requirement.concepts.length > 0) ||
+      (Array.isArray(requirement.features) &&
+        requirement.features.length > 0) ||
+      (Array.isArray(requirement.targetCustomers) &&
+        requirement.targetCustomers.length > 0) ||
+      (Array.isArray(requirement.preferredWards) &&
+        requirement.preferredWards.length > 0) ||
+      (Array.isArray(requirement.preferredStreets) &&
+        requirement.preferredStreets.length > 0) ||
       (Array.isArray(requirement.preferred_districts) &&
         requirement.preferred_districts.length > 0) ||
       (typeof requirement.preferred_districts === "string" &&
         requirement.preferred_districts.trim())
   );
+}
+
+function buildRequirementFromBody(body: Record<string, unknown>): LeadRequirement & {
+  keywordSearch?: string | null;
+} {
+  const rawText = String(
+    body.query ||
+      body.rawText ||
+      body.requirementText ||
+      body.search ||
+      body.note ||
+      body.keywordSearch ||
+      ""
+  );
+  const parsed = parseVietnameseRequirement(rawText);
+  const preferredDistricts = normalizePreferredDistricts(body.preferred_districts).length > 0
+    ? normalizePreferredDistricts(body.preferred_districts)
+    : normalizeStringList(body.preferredDistricts).length > 0
+      ? normalizeStringList(body.preferredDistricts)
+      : parsed.preferred_districts;
+  const preferredWards = normalizeStringList(body.preferredWards).length > 0
+    ? normalizeStringList(body.preferredWards)
+    : normalizeStringList(body.preferred_wards).length > 0
+      ? normalizeStringList(body.preferred_wards)
+      : parsed.preferredWards;
+  const preferredStreets = normalizeStringList(body.preferredStreets).length > 0
+    ? normalizeStringList(body.preferredStreets)
+    : normalizeStringList(body.preferred_streets).length > 0
+      ? normalizeStringList(body.preferred_streets)
+      : parsed.preferredStreets;
+  const businessTypes = normalizeStringList(body.businessTypes).length > 0
+    ? normalizeStringList(body.businessTypes)
+    : parsed.businessTypes;
+  const concepts = normalizeStringList(body.concepts).length > 0
+    ? normalizeStringList(body.concepts)
+    : parsed.concepts;
+  const features = normalizeStringList(body.features).length > 0
+    ? normalizeStringList(body.features)
+    : parsed.features;
+  const targetCustomers = normalizeStringList(body.targetCustomers).length > 0
+    ? normalizeStringList(body.targetCustomers)
+    : parsed.targetCustomers;
+  const note = String(firstDefined(body.note, parsed.note, "") || "").trim();
+  const requirement: LeadRequirement & { keywordSearch?: string | null } = {
+    rawText: rawText || parsed.rawText,
+    min_price: firstScalar(body.min_price, body.minPrice, parsed.min_price),
+    max_price: firstScalar(body.max_price, body.maxPrice, parsed.max_price),
+    minPrice: firstScalar(body.minPrice, body.min_price, parsed.minPrice),
+    maxPrice: firstScalar(body.maxPrice, body.max_price, parsed.maxPrice),
+    min_area: firstScalar(body.min_area, body.minArea, parsed.min_area),
+    max_area: firstScalar(body.max_area, body.maxArea, parsed.max_area),
+    minArea: firstScalar(body.minArea, body.min_area, parsed.minArea),
+    maxArea: firstScalar(body.maxArea, body.max_area, parsed.maxArea),
+    preferred_districts: preferredDistricts,
+    preferredDistricts,
+    preferred_wards: preferredWards,
+    preferredWards,
+    preferred_streets: preferredStreets,
+    preferredStreets,
+    bedrooms: firstScalar(body.bedrooms),
+    note: note || null,
+    businessTypes,
+    concepts,
+    features,
+    targetCustomers,
+    purpose: String(firstDefined(body.purpose, parsed.purpose, "") || "").trim() || null,
+    keywordSearch: String(firstDefined(body.keywordSearch, parsed.keywordSearch, "") || "").trim() || null,
+  };
+
+  return requirement;
+}
+
+function buildNormalizedRequirementResponse(requirement: LeadRequirement & {
+  keywordSearch?: string | null;
+}) {
+  const normalized = normalizeLeadRequirement(requirement);
+
+  return {
+    rawText: requirement.rawText || "",
+    businessTypes: normalized.businessTypes,
+    concepts: normalized.concepts,
+    preferredDistricts: normalizeStringList(requirement.preferredDistricts).length > 0
+      ? normalizeStringList(requirement.preferredDistricts)
+      : normalizeStringList(requirement.preferred_districts),
+    preferredWards: normalizeStringList(requirement.preferredWards),
+    preferredStreets: normalizeStringList(requirement.preferredStreets),
+    minArea: normalized.min_area ?? undefined,
+    maxArea: normalized.max_area ?? undefined,
+    minPrice: normalized.min_price ?? undefined,
+    maxPrice: normalized.max_price ?? undefined,
+    features: normalized.features,
+    targetCustomers: normalized.targetCustomers,
+    purpose: requirement.purpose || undefined,
+    preferred_districts: normalizeStringList(requirement.preferred_districts),
+    min_price: normalized.min_price,
+    max_price: normalized.max_price,
+    min_area: normalized.min_area,
+    max_area: normalized.max_area,
+    keywordSearch: requirement.keywordSearch || null,
+    note: requirement.note || "",
+  };
 }
 
 export async function POST(req: Request) {
@@ -240,38 +398,37 @@ export async function POST(req: Request) {
     console.log("lead-match-debug mode:", mode);
     console.log("lead-match-debug preferred_districts:", preferred_districts);
 
+    const requestRequirement = buildRequirementFromBody(body);
+    const normalizedRequirement =
+      buildNormalizedRequirementResponse(requestRequirement);
+
     if (mode === "match") {
       const { data: listings } = await supabase
         .from("listings")
         .select("*");
 
-      const requirement: LeadRequirement = {
-        min_price,
-        max_price,
-        preferred_districts,
-        min_area,
-        bedrooms,
-        note,
-      };
+      const requirement: LeadRequirement = requestRequirement;
       const hasStructuredFilters = hasStructuredRequirement(requirement);
       const { listingsForScoring, fallbackWarning } = getSearchFilteredListings(
         listings || [],
-        preferred_districts,
-        keywordSearch
+        requestRequirement.preferred_districts,
+        hasStructuredFilters ? null : requestRequirement.keywordSearch
       );
       const scoringRequirement: LeadRequirement = requirement;
 
       const matches: MatchResult[] = [];
       const minimumScore = MIN_MATCH_SCORE;
-      const hasSearchFilter =
-        normalizePreferredDistricts(preferred_districts).length > 0 ||
-        Boolean(normalizeKeywordText(keywordSearch));
+      const hasDistrictFilter =
+        normalizePreferredDistricts(requestRequirement.preferred_districts).length > 0;
 
       for (const listing of listingsForScoring) {
         const match = scoreListingForLead(listing, scoringRequirement);
-        const keywordScore = scoreListingKeyword(listing, keywordSearch);
+        const keywordScore = scoreListingKeyword(
+          listing,
+          requestRequirement.keywordSearch
+        );
 
-        if (match && (hasSearchFilter || match.score >= minimumScore)) {
+        if (match && (hasDistrictFilter || match.score + keywordScore >= minimumScore)) {
           if (keywordScore > 0) {
             match.score += keywordScore;
             match.breakdown.total_score += keywordScore;
@@ -282,7 +439,7 @@ export async function POST(req: Request) {
           continue;
         }
 
-        if (hasSearchFilter && isSearchableListing(listing)) {
+        if (keywordScore >= minimumScore && isSearchableListing(listing)) {
           matches.push(
             createSearchMatch(
               listing,
@@ -308,6 +465,7 @@ export async function POST(req: Request) {
               reasons: ["Keyword matches title/address/content"],
             },
             reasons: ["Keyword matches title/address/content"],
+            warnings: [],
             listing,
           });
         }
@@ -317,6 +475,7 @@ export async function POST(req: Request) {
 
       return NextResponse.json({
         success: true,
+        normalizedRequirement,
         matches,
         fallbackWarning,
       });
@@ -326,23 +485,29 @@ export async function POST(req: Request) {
     // 🟢 MODE 1: LEAD + MATCHING (giữ logic cũ)
     // =================================================
     if (!mode || mode === "lead") {
+      const leadPreferredDistricts =
+        normalizeStringList(requestRequirement.preferred_districts);
+      const leadMinPrice = requestRequirement.min_price ?? null;
+      const leadMaxPrice = requestRequirement.max_price ?? null;
+      const leadMinArea = requestRequirement.min_area ?? null;
+      const leadNote = requestRequirement.note || note || null;
       const leadScoring = calculateLeadScoring({
         phone,
-        max_price,
-        min_price,
-        preferred_districts,
-        note,
+        max_price: leadMaxPrice,
+        min_price: leadMinPrice,
+        preferred_districts: leadPreferredDistricts,
+        note: leadNote,
         detected_intent,
       });
       const leadPayload = {
         fullname,
         phone,
-        min_price,
-        max_price,
-        preferred_districts,
-        min_area,
+        min_price: leadMinPrice,
+        max_price: leadMaxPrice,
+        preferred_districts: leadPreferredDistricts,
+        min_area: leadMinArea,
         bedrooms,
-        note,
+        note: leadNote,
       };
       let { data: lead, error: leadError } = await supabase
         .from("leads")
@@ -376,14 +541,7 @@ export async function POST(req: Request) {
         .from("listings")
         .select("*");
 
-      const requirement: LeadRequirement = {
-        min_price,
-        max_price,
-        preferred_districts,
-        min_area,
-        bedrooms,
-        note,
-      };
+      const requirement: LeadRequirement = requestRequirement;
 
       console.log(
         "lead-match-debug normalized requirement:",
@@ -395,21 +553,30 @@ export async function POST(req: Request) {
       );
       const { listingsForScoring, fallbackWarning } = getSearchFilteredListings(
         listings || [],
-        preferred_districts,
-        keywordSearch
+        requestRequirement.preferred_districts,
+        hasStructuredRequirement(requirement) ? null : requestRequirement.keywordSearch
       );
       const scoringRequirement: LeadRequirement = requirement;
 
       const matches: MatchWithLead[] = [];
       const minimumScore = MIN_MATCH_SCORE;
-      const hasSearchFilter =
-        normalizePreferredDistricts(preferred_districts).length > 0 ||
-        Boolean(normalizeKeywordText(keywordSearch));
+      const hasDistrictFilter =
+        normalizePreferredDistricts(requestRequirement.preferred_districts).length > 0;
 
       for (const listing of listingsForScoring) {
         const match = scoreListingForLead(listing, scoringRequirement);
+        const keywordScore = scoreListingKeyword(
+          listing,
+          requestRequirement.keywordSearch
+        );
 
-        if (match && (hasSearchFilter || match.score >= minimumScore)) {
+        if (match && (hasDistrictFilter || match.score + keywordScore >= minimumScore)) {
+          if (keywordScore > 0) {
+            match.score += keywordScore;
+            match.breakdown.total_score += keywordScore;
+            match.breakdown.reasons.push("Keyword matches title/address/content");
+            match.reasons = getMatchReasons(match.breakdown);
+          }
           matches.push({
             ...match,
             lead_id: lead.id,
@@ -417,9 +584,9 @@ export async function POST(req: Request) {
           continue;
         }
 
-        if (hasSearchFilter && isSearchableListing(listing)) {
+        if (keywordScore >= minimumScore && isSearchableListing(listing)) {
           matches.push({
-            ...createSearchMatch(listing),
+            ...createSearchMatch(listing, keywordScore, "Search text matches listing"),
             lead_id: lead.id,
           });
         }
@@ -445,6 +612,7 @@ export async function POST(req: Request) {
       return NextResponse.json({
         success: true,
         lead,
+        normalizedRequirement,
         matches,
         fallbackWarning,
       });
@@ -459,32 +627,55 @@ export async function POST(req: Request) {
         .select("*");
 
       const district = getDistrictLabel(query);
-      const hardDistricts = district ? [district] : [];
-      const keyword = normalizeKeywordText(query);
+      const hardDistricts =
+        normalizeStringList(requestRequirement.preferred_districts).length > 0
+          ? normalizeStringList(requestRequirement.preferred_districts)
+          : district
+            ? [district]
+            : [];
+      const keyword = requestRequirement.keywordSearch || normalizeKeywordText(query);
+      const searchRequirement: LeadRequirement = {
+        ...requestRequirement,
+        preferred_districts: hardDistricts,
+        preferredDistricts: hardDistricts,
+      };
+      const hasStructuredFilters = hasStructuredRequirement(searchRequirement);
       const { listingsForScoring, fallbackWarning } = getSearchFilteredListings(
         listings || [],
         hardDistricts,
-        district ? null : keyword
+        hasStructuredFilters ? null : keyword
       );
 
-      const scored = listingsForScoring.map((item) => {
-        let score = 0;
-        const bedrooms = Number(item.bedrooms || 0);
+      const matches: MatchResult[] = [];
 
-        if (hardDistricts.length > 0 && listingMatchesDistrict(item, hardDistricts)) score += 40;
-        if (keyword && getListingKeywordText(item).includes(keyword)) score += KEYWORD_MATCH_SCORE;
-        if (keyword.includes("phong") && bedrooms >= 1) score += 20;
-        if ((keyword.includes("ty") || keyword.includes("ti")) && item.price) score += 20;
+      for (const listing of listingsForScoring) {
+        const match = scoreListingForLead(listing, searchRequirement);
+        const keywordScore = scoreListingKeyword(listing, keyword);
 
-        return { ...item, score };
-      });
+        if (match && match.score + keywordScore >= MIN_MATCH_SCORE) {
+          if (keywordScore > 0) {
+            match.score += keywordScore;
+            match.breakdown.total_score += keywordScore;
+            match.breakdown.reasons.push("Keyword matches title/address/content");
+            match.reasons = getMatchReasons(match.breakdown);
+          }
 
-      const matches = scored
-        .filter((item) => item.score >= MIN_MATCH_SCORE)
-        .sort((a, b) => b.score - a.score);
+          matches.push(match);
+          continue;
+        }
+
+        if (keywordScore >= MIN_MATCH_SCORE && isSearchableListing(listing)) {
+          matches.push(
+            createSearchMatch(listing, keywordScore, "Search text matches listing")
+          );
+        }
+      }
+
+      matches.sort(compareMatchResults);
 
       return NextResponse.json({
         success: true,
+        normalizedRequirement,
         matches,
         fallbackWarning,
       });

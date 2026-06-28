@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import SiteNavbar from "@/app/components/site-navbar";
 import RoleGate from "@/app/components/role-gate";
+import { parseZaloListingText } from "@/lib/zaloListingParser";
 
 function DraggableImage({
   img,
@@ -509,200 +510,23 @@ const autoFillFromZalo = () => {
   const text = (zaloText || "").trim();
   if (!text) return;
 
-  const priceMatch = text.match(
-  /(?:^|\s)(\d+(?:\.\d+)?)\s*tr\b/i
-);
+  const parsed = parseZaloListingText(text);
+  console.log("ZALO_PARSE_RESULT", parsed);
 
-const priceValue = priceMatch
-  ? Math.round(
-      parseFloat(priceMatch[1]) *
-        1000000
-    )
-  : 0;
+  setTitle(parsed.title);
+  setPrice(parsed.price ? String(parsed.price) : "");
+  setDistrict(parsed.district);
+  setAddress(parsed.address);
+  setArea(parsed.area !== null ? String(parsed.area) : "");
+  setWidth(parsed.width !== null ? String(parsed.width) : "");
+  setLength(parsed.length !== null ? String(parsed.length) : "");
+  setFloors(String(parsed.floors));
+  setContactPhone(parsed.phone);
+  setFurniture(parsed.furnishing);
+  setDescription(parsed.description);
 
-console.log("PRICE VALUE:", priceValue);
-
-console.log(
-  "PRICE MATCH =",
-  priceMatch
-);
-
-  
-  console.log("ZALO TEXT:", text);
-  
-  const lines = text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
-
-  const firstLine = lines[0] || "";
-
-  // ======================
-  // HELPERS
-  // ======================
-  const parsePrice = (t: string) => {
-  const cleaned = t
-    .toLowerCase()
-    .replace(/,/g, " ");
-
-  const m = cleaned.match(/(\d+(?:\.\d+)?)\s*tr\b/);
-
-  if (!m) return 0;
-
-  const value = parseFloat(m[1]);
-
-  // chặn trường hợp rác bất thường
-  if (value > 10000) return 0;
-
-  return Math.round(value * 1000000);
-};
-
-  const parsePhone = (t: string) => {
-    const m = t.match(/0\d{9}/);
-    return m ? m[0] : "";
-  };
-
-  const normalizeDistrict = (t: string) => {
-    const m = t.match(/q\.?\s*(\d+)/i);
-    if (m) return `Quận ${m[1]}`;
-
-    if (/thủ\s*đức/i.test(t)) return "Quận Thủ Đức";
-    if (/bình\s*thạnh/i.test(t)) return "Quận Bình Thạnh";
-    if (/gò\s*vấp/i.test(t)) return "Quận Gò Vấp";
-    if (/tân\s*bình/i.test(t)) return "Quận Tân Bình";
-    if (/q\.?\s*phú\s*nhuận/i.test(t) ||/phú\s*nhuận/i.test(t)) return "Quận Phú Nhuận";
-    if (/tân\s*phú/i.test(t)) return "Quận Tân Phú";
-    if (/bình\s*chánh/i.test(t)) return "Quận Bình Chánh";
-    return "";
-  };
-
-  const detectPrefix = (line: string, t: string) => {
-    if (/hxh/i.test(t)) return "HXH";
-    if (/hxt/i.test(t)) return "HXT";
-    if (/\//.test(line)) return "Hẻm";
-    return "MT";
-  };
-
-  const parseSize = (t: string) => {
-    const m = t.match(/(\d+)\s*[x×]\s*(\d+)/i);
-    if (!m) return { w: 0, l: 0 };
-    return { w: Number(m[1]), l: Number(m[2]) };
-  };
-
-  const parseWC = (t: string) => {
-    const m = t.match(/(\d+)\s*wc/i);
-    return m ? Number(m[1]) : 0;
-  };
-
-  const parseBedrooms = (t: string) => {
-    const m = t.match(/(\d+)\s*pn/i);
-    return m ? Number(m[1]) : 0;
-  };
-
-  const parseStructure = (t: string) => {
-    let basement = (t.match(/hầm/gi) || []).length ? 1 : 0;
-    let terrace = /st/i.test(t) ? 1 : 0;
-
-    let floorsCount = 0;
-
-    const tMatch = t.match(/(\d*)t\s*\+?\s*(\d+)l/i);
-    if (tMatch) {
-      floorsCount = Number(tMatch[2]);
-      return { basement, floorsCount, terrace };
-    }
-
-    const htMatch = t.match(/h\s*\+\s*t\s*\+\s*(\d+)l/i);
-    if (htMatch) {
-      floorsCount = Number(htMatch[1]);
-      basement = 1;
-      return { basement, floorsCount, terrace };
-    }
-
-    const lMatch = t.match(/(\d+)\s*l/i);
-    if (lMatch) floorsCount = Number(lMatch[1]);
-
-    return { basement, floorsCount, terrace };
-  };
-
-  // ======================
-  // PRICE
-  // ======================
-  setPrice(String(priceValue));
-console.log("SET PRICE:", String(priceValue));
-
-  // ======================
-  // PHONE
-  // ======================
-  const phone = parsePhone(text);
-  if (phone) setContactPhone(phone);
-
-  // ======================
-  // DISTRICT
-  // ======================
-  const district = normalizeDistrict(text);
-  if (district) setDistrict(district);
-
-  // ======================
-  // ADDRESS
-  // ======================
-  setAddress(firstLine);
-
-  // ======================
-  // TITLE
-  // ======================
-  const prefix = detectPrefix(firstLine, text);
-  const addressNoNumber = firstLine.replace(/^\d+[\-\/]?\d*\s*/, "");
-  setTitle(`${prefix} ${addressNoNumber}`);
-
-  // ======================
-  // SIZE
-  // ======================
-  const { w, l } = parseSize(text);
-  if (w) setWidth(String(w));
-  if (l) setLength(String(l));
-
-  const baseArea = w && l ? w * l : 0;
-
-  // ======================
-  // WC + PN
-  // ======================
-  const wc = parseWC(text);
-  const pn = parseBedrooms(text);
-
-  if (wc) setBathrooms(String(wc));
-  if (pn) setBedrooms(String(pn));
-
-  // ======================
-  // FLOORS
-  // ======================
-  const { basement, floorsCount, terrace } = parseStructure(text);
-
-  const totalFloors = floorsCount + terrace;
-  if (totalFloors) setFloors(String(totalFloors));
-
-  // ======================
-  // AREA
-  // ======================
-  let area = 0;
-
-  const dtsd = text.match(/dtsd\s*(\d+)/i);
-  const cn = text.match(/cn\s*(\d+)/i);
-
-  if (dtsd) {
-    area = Number(dtsd[1]);
-  } else if (cn) {
-    area = Number(cn[1]);
-  } else if (baseArea) {
-    const multiplier = basement + 1 + floorsCount + terrace;
-    area = baseArea * multiplier;
-  }
-
-  if (area) setArea(String(area));
-
-  // ======================
-  // DESCRIPTION
-  // ======================
-  setDescription(lines.slice(1).join(" "));
+  if (parsed.bedrooms !== null) setBedrooms(String(parsed.bedrooms));
+  if (parsed.bathrooms !== null) setBathrooms(String(parsed.bathrooms));
 
   alert("Đã tự điền xong");
 };
