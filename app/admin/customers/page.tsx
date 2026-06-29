@@ -3,7 +3,7 @@
 import SiteNavbar from "@/app/components/site-navbar";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import {
   calculateLeadScoring,
   getLeadTemperatureLabel,
@@ -86,6 +86,25 @@ type SalesAssistantResult = {
   objection: string | null;
   suggested_replies: string[];
   next_best_question: string;
+};
+
+type CustomersSearchParams = Promise<{
+  filter?: string | string[];
+  temperature?: string | string[];
+  status?: string | string[];
+  max_price?: string | string[];
+}>;
+
+type CustomerFilterState = {
+  active: boolean;
+  title: string;
+  badge: string;
+  filter: string | null;
+  temperature: string | null;
+  status: string | null;
+  maxPrice: number | null;
+  note?: string;
+  emptyMessage?: string;
 };
 
 const SALES_REQUIREMENT_LABELS: Record<string, string> = {

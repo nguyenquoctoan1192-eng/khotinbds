@@ -272,10 +272,18 @@ function hasStructuredRequirement(requirement: LeadRequirement) {
       requirement.minPrice ||
       requirement.max_price ||
       requirement.maxPrice ||
+      requirement.target_price ||
+      requirement.targetPrice ||
       requirement.min_area ||
       requirement.minArea ||
       requirement.max_area ||
       requirement.maxArea ||
+      requirement.target_area ||
+      requirement.targetArea ||
+      requirement.target_width ||
+      requirement.targetWidth ||
+      requirement.target_floors ||
+      requirement.targetFloors ||
       requirement.bedrooms ||
       requirement.min_bedrooms ||
       requirement.minBedrooms ||
@@ -353,12 +361,28 @@ function buildRequirementFromBody(body: Record<string, unknown>): LeadRequiremen
     rawText: rawText || parsed.rawText,
     min_price: firstScalar(body.min_price, body.minPrice, parsed.min_price),
     max_price: firstScalar(body.max_price, body.maxPrice, parsed.max_price),
+    target_price: firstScalar(body.target_price, body.targetPrice, parsed.target_price),
     minPrice: firstScalar(body.minPrice, body.min_price, parsed.minPrice),
     maxPrice: firstScalar(body.maxPrice, body.max_price, parsed.maxPrice),
+    targetPrice: firstScalar(body.targetPrice, body.target_price, parsed.targetPrice),
+    priceMode: String(firstDefined(body.priceMode, body.price_mode, parsed.priceMode, "") || "").trim() || null,
+    price_mode: String(firstDefined(body.price_mode, body.priceMode, parsed.priceMode, "") || "").trim() || null,
     min_area: firstScalar(body.min_area, body.minArea, parsed.min_area),
     max_area: firstScalar(body.max_area, body.maxArea, parsed.max_area),
+    target_area: firstScalar(body.target_area, body.targetArea, parsed.target_area),
+    target_width: firstScalar(body.target_width, body.targetWidth, parsed.target_width),
     minArea: firstScalar(body.minArea, body.min_area, parsed.minArea),
     maxArea: firstScalar(body.maxArea, body.max_area, parsed.maxArea),
+    targetArea: firstScalar(body.targetArea, body.target_area, parsed.targetArea),
+    targetWidth: firstScalar(body.targetWidth, body.target_width, parsed.targetWidth),
+    target_floors: firstScalar(body.target_floors, body.targetFloors, parsed.target_floors),
+    min_floors: firstScalar(body.min_floors, body.minFloors, parsed.min_floors),
+    targetFloors: firstScalar(body.targetFloors, body.target_floors, parsed.targetFloors),
+    minFloors: firstScalar(body.minFloors, body.min_floors, parsed.minFloors),
+    has_rooftop: firstDefined(body.has_rooftop, body.hasRooftop, parsed.has_rooftop) as boolean,
+    has_mezzanine: firstDefined(body.has_mezzanine, body.hasMezzanine, parsed.has_mezzanine) as boolean,
+    hasRooftop: firstDefined(body.hasRooftop, body.has_rooftop, parsed.hasRooftop) as boolean,
+    hasMezzanine: firstDefined(body.hasMezzanine, body.has_mezzanine, parsed.hasMezzanine) as boolean,
     preferred_districts: preferredDistricts,
     preferredDistricts,
     preferred_wards: preferredWards,
@@ -411,8 +435,16 @@ function buildNormalizedRequirementResponse(requirement: LeadRequirement & {
     preferredStreets: normalizeStringList(requirement.preferredStreets),
     minArea: normalized.min_area ?? undefined,
     maxArea: normalized.max_area ?? undefined,
+    targetArea: normalized.target_area ?? undefined,
+    targetWidth: normalized.target_width ?? undefined,
     minPrice: normalized.min_price ?? undefined,
     maxPrice: normalized.max_price ?? undefined,
+    targetPrice: normalized.target_price ?? undefined,
+    priceMode: normalized.price_mode ?? undefined,
+    targetFloors: normalized.target_floors ?? undefined,
+    minFloors: normalized.min_floors ?? undefined,
+    hasRooftop: normalized.has_rooftop,
+    hasMezzanine: normalized.has_mezzanine,
     bedrooms: normalized.bedrooms ?? undefined,
     minBedrooms: normalized.min_bedrooms ?? undefined,
     maxBedrooms: normalized.max_bedrooms ?? undefined,
@@ -424,8 +456,16 @@ function buildNormalizedRequirementResponse(requirement: LeadRequirement & {
     allow_nearby_districts: normalized.allow_nearby_districts,
     min_price: normalized.min_price,
     max_price: normalized.max_price,
+    target_price: normalized.target_price,
+    price_mode: normalized.price_mode,
     min_area: normalized.min_area,
     max_area: normalized.max_area,
+    target_area: normalized.target_area,
+    target_width: normalized.target_width,
+    target_floors: normalized.target_floors,
+    min_floors: normalized.min_floors,
+    has_rooftop: normalized.has_rooftop,
+    has_mezzanine: normalized.has_mezzanine,
     min_bedrooms: normalized.min_bedrooms,
     max_bedrooms: normalized.max_bedrooms,
     property_types: normalized.propertyTypes,

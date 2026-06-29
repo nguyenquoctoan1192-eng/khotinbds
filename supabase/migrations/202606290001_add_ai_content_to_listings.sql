@@ -1,6 +1,6 @@
-alter table public.listings
-  add column if not exists primary_content text null,
-  add column if not exists chotot_title text null,
-  add column if not exists facebook_title text null,
-  add column if not exists short_description text null,
-  add column if not exists seo_description text null;
+ALTER TABLE listings
+ADD COLUMN IF NOT EXISTS primary_content text,
+ADD COLUMN IF NOT EXISTS chotot_title text,
+ADD COLUMN IF NOT EXISTS facebook_title text,
+ADD COLUMN IF NOT EXISTS short_description text,
+ADD COLUMN IF NOT EXISTS seo_description text;

@@ -9,6 +9,9 @@ export type ListingMatchCandidate = {
   street?: string | null;
   location?: string | null;
   area?: number | string | null;
+  width?: number | string | null;
+  length?: number | string | null;
+  floors?: number | string | null;
   bedrooms?: number | string | null;
   status?: string | null;
   updated_at?: string | null;
@@ -30,8 +33,12 @@ export type LeadRequirement = {
   rawText?: string | null;
   min_price?: number | string | null;
   max_price?: number | string | null;
+  target_price?: number | string | null;
   minPrice?: number | string | null;
   maxPrice?: number | string | null;
+  targetPrice?: number | string | null;
+  priceMode?: "target" | "max" | "range" | string | null;
+  price_mode?: "target" | "max" | "range" | string | null;
   preferred_districts?: string[] | string | null;
   preferredDistricts?: string[] | string | null;
   allow_nearby_districts?: boolean | string | null;
@@ -43,8 +50,20 @@ export type LeadRequirement = {
   district?: string | null;
   min_area?: number | string | null;
   max_area?: number | string | null;
+  target_area?: number | string | null;
+  target_width?: number | string | null;
   minArea?: number | string | null;
   maxArea?: number | string | null;
+  targetArea?: number | string | null;
+  targetWidth?: number | string | null;
+  target_floors?: number | string | null;
+  min_floors?: number | string | null;
+  targetFloors?: number | string | null;
+  minFloors?: number | string | null;
+  has_rooftop?: boolean | string | null;
+  has_mezzanine?: boolean | string | null;
+  hasRooftop?: boolean | string | null;
+  hasMezzanine?: boolean | string | null;
   bedrooms?: number | string | null;
   min_bedrooms?: number | string | null;
   max_bedrooms?: number | string | null;
@@ -67,6 +86,8 @@ export type ScoreBreakdown = {
   street_score?: number;
   price_score: number;
   area_score: number;
+  width_score?: number;
+  structure_score?: number;
   bedroom_score: number;
   property_type_score?: number;
   freshness_score?: number;
@@ -77,6 +98,9 @@ export type ScoreBreakdown = {
   customer_score?: number;
   contract_score?: number;
   data_quality_penalty: number;
+  priceDistance?: number | null;
+  areaDistance?: number | null;
+  widthDistance?: number | null;
   total_score: number;
   reasons: string[];
 };
@@ -93,12 +117,20 @@ export type MatchResult = {
 type NormalizedLeadRequirement = {
   min_price: number | null;
   max_price: number | null;
+  target_price: number | null;
+  price_mode: "target" | "max" | "range" | null;
   preferred_districts: string[];
   allow_nearby_districts: boolean;
   preferred_wards: string[];
   preferred_streets: string[];
   min_area: number | null;
   max_area: number | null;
+  target_area: number | null;
+  target_width: number | null;
+  target_floors: number | null;
+  min_floors: number | null;
+  has_rooftop: boolean;
+  has_mezzanine: boolean;
   bedrooms: number | null;
   min_bedrooms: number | null;
   max_bedrooms: number | null;
@@ -228,6 +260,11 @@ function normalizeBoolean(value: unknown) {
   }
 
   return false;
+}
+
+function normalizePriceMode(value: unknown): NormalizedLeadRequirement["price_mode"] {
+  if (value === "target" || value === "max" || value === "range") return value;
+  return null;
 }
 
 function normalizePropertyType(value: string) {
@@ -430,6 +467,140 @@ function scoreRange(
   return 0;
 }
 
+function scorePriceNearTarget(
+  value: number | null,
+  target: number | null,
+  reasons: string[],
+  warnings: string[]
+) {
+  if (target === null) return 0;
+
+  if (value === null || value <= 0) {
+    warnings.push("Missing price data");
+    return 0;
+  }
+
+  const variance = Math.abs(value - target) / target;
+
+  if (value < target * 0.7) {
+    warnings.push("Giá thấp hơn nhiều so với ngân sách, có thể chất lượng/vị trí không đúng kỳ vọng");
+  }
+
+  if (variance === 0) {
+    reasons.push("Giá gần ngân sách khách yêu cầu");
+    return 35;
+  }
+  if (variance <= 0.05) {
+    reasons.push("Giá gần ngân sách khách yêu cầu");
+    return 32;
+  }
+  if (variance <= 0.1) {
+    reasons.push("Giá gần ngân sách khách yêu cầu");
+    return 28;
+  }
+  if (variance <= 0.2) {
+    reasons.push("Giá gần ngân sách khách yêu cầu");
+    return 20;
+  }
+  if (variance <= 0.3) return 10;
+
+  return 0;
+}
+
+function scoreAreaNearTarget(
+  value: number | null,
+  target: number | null,
+  reasons: string[],
+  warnings: string[]
+) {
+  if (target === null) return 0;
+
+  if (value === null || value <= 0) {
+    warnings.push("Missing area data");
+    return 0;
+  }
+
+  const variance = Math.abs(value - target) / target;
+
+  if (variance === 0) {
+    reasons.push("Diện tích gần nhu cầu");
+    return 20;
+  }
+  if (variance <= 0.1) {
+    reasons.push("Diện tích gần nhu cầu");
+    return 16;
+  }
+  if (variance <= 0.2) {
+    reasons.push("Diện tích gần nhu cầu");
+    return 10;
+  }
+
+  return 0;
+}
+
+function scoreWidthNearTarget(
+  value: number | null,
+  target: number | null,
+  reasons: string[],
+  warnings: string[]
+) {
+  if (target === null) return 0;
+
+  if (value === null || value <= 0) {
+    warnings.push("Missing width data");
+    return 0;
+  }
+
+  const distance = Math.abs(value - target);
+
+  if (distance === 0) {
+    reasons.push(`Ngang gần ${target}m theo yêu cầu`);
+    return 20;
+  }
+  if (distance <= 0.5) {
+    reasons.push(`Ngang gần ${target}m theo yêu cầu`);
+    return 16;
+  }
+  if (distance <= 1) {
+    reasons.push(`Ngang gần ${target}m theo yêu cầu`);
+    return 10;
+  }
+
+  return 0;
+}
+
+function scoreFloorsNearTarget(
+  value: number | null,
+  target: number | null,
+  reasons: string[],
+  warnings: string[]
+) {
+  if (target === null) return 0;
+
+  if (value === null || value < 0) {
+    warnings.push("Missing floor data");
+    return 0;
+  }
+
+  const distance = Math.abs(value - target);
+
+  if (distance === 0) {
+    reasons.push("Kết cấu gần nhu cầu");
+    return 15;
+  }
+  if (distance <= 1) {
+    reasons.push("Kết cấu gần nhu cầu");
+    return 8;
+  }
+
+  return 0;
+}
+
+function finiteDistance(value: number | null, target: number | null) {
+  if (value === null || target === null) return null;
+  return Math.abs(value - target);
+}
+
 function scoreBusinessSuitability(
   listing: ListingMatchCandidate,
   requirement: NormalizedLeadRequirement,
@@ -536,6 +707,8 @@ export function normalizeLeadRequirement(requirement: LeadRequirement): Normaliz
   return {
     min_price: toNumber(requirement.min_price ?? requirement.minPrice),
     max_price: toNumber(requirement.max_price ?? requirement.maxPrice),
+    target_price: toNumber(requirement.target_price ?? requirement.targetPrice),
+    price_mode: normalizePriceMode(requirement.price_mode ?? requirement.priceMode),
     preferred_districts: normalizeDistricts(
       requirement.preferred_districts,
       requirement.district,
@@ -548,6 +721,12 @@ export function normalizeLeadRequirement(requirement: LeadRequirement): Normaliz
     preferred_streets: normalizeList(requirement.preferred_streets ?? requirement.preferredStreets).map(normalizeText),
     min_area: toNumber(requirement.min_area ?? requirement.minArea),
     max_area: toNumber(requirement.max_area ?? requirement.maxArea),
+    target_area: toNumber(requirement.target_area ?? requirement.targetArea),
+    target_width: toNumber(requirement.target_width ?? requirement.targetWidth),
+    target_floors: toNumber(requirement.target_floors ?? requirement.targetFloors),
+    min_floors: toNumber(requirement.min_floors ?? requirement.minFloors),
+    has_rooftop: normalizeBoolean(requirement.has_rooftop ?? requirement.hasRooftop),
+    has_mezzanine: normalizeBoolean(requirement.has_mezzanine ?? requirement.hasMezzanine),
     bedrooms: toNumber(requirement.bedrooms),
     min_bedrooms: toNumber(requirement.min_bedrooms ?? requirement.minBedrooms),
     max_bedrooms: toNumber(requirement.max_bedrooms ?? requirement.maxBedrooms),
@@ -567,9 +746,27 @@ export function compareMatchResults(a: MatchResult, b: MatchResult) {
   const rawAreaB = toNumber(b.listing.area) || 0;
   const areaA = rawAreaA > 0 && rawAreaA <= 1000 ? rawAreaA : 0;
   const areaB = rawAreaB > 0 && rawAreaB <= 1000 ? rawAreaB : 0;
+  const compareDistance = (
+    aDistance: number | null | undefined,
+    bDistance: number | null | undefined
+  ) => {
+    const normalizedA =
+      typeof aDistance === "number" && Number.isFinite(aDistance)
+        ? aDistance
+        : Number.POSITIVE_INFINITY;
+    const normalizedB =
+      typeof bDistance === "number" && Number.isFinite(bDistance)
+        ? bDistance
+        : Number.POSITIVE_INFINITY;
+
+    return normalizedA - normalizedB;
+  };
 
   return (
     b.score - a.score ||
+    compareDistance(a.breakdown.priceDistance, b.breakdown.priceDistance) ||
+    compareDistance(a.breakdown.areaDistance, b.breakdown.areaDistance) ||
+    compareDistance(a.breakdown.widthDistance, b.breakdown.widthDistance) ||
     getCreatedAtTime(b) - getCreatedAtTime(a) ||
     b.breakdown.business_score - a.breakdown.business_score ||
     (b.breakdown.street_score || 0) - (a.breakdown.street_score || 0) ||
@@ -593,6 +790,8 @@ export function scoreListingForLead(
   const listingPrice = toNumber(listing.price);
   const listingDistrict = normalizeDistrictName(listing.district);
   const listingArea = toNumber(listing.area);
+  const listingWidth = toNumber(listing.width);
+  const listingFloors = toNumber(listing.floors);
   const listingBedrooms = toNumber(listing.bedrooms);
   const text = listingSearchText(listing);
   const reasons: string[] = [];
@@ -602,11 +801,7 @@ export function scoreListingForLead(
     return null;
   }
 
-  if (
-    normalized.max_price !== null &&
-    listingPrice !== null &&
-    listingPrice > normalized.max_price * 1.05
-  ) {
+  if (!listingPassesHardFilters(listing, requirement)) {
     return null;
   }
 
@@ -647,6 +842,9 @@ export function scoreListingForLead(
     customer_score: 0,
     contract_score: 0,
     data_quality_penalty: 0,
+    priceDistance: null,
+    areaDistance: null,
+    widthDistance: null,
     total_score: 0,
     reasons,
   };
@@ -683,22 +881,45 @@ export function scoreListingForLead(
     }
   }
 
-  breakdown.price_score = scoreRange(
-    listingPrice,
-    normalized.min_price,
-    normalized.max_price,
-    20,
-    "Gia",
+  breakdown.priceDistance = finiteDistance(listingPrice, normalized.target_price);
+  breakdown.price_score =
+    normalized.target_price !== null
+      ? scorePriceNearTarget(listingPrice, normalized.target_price, reasons, warnings)
+      : scoreRange(
+          listingPrice,
+          normalized.min_price,
+          normalized.max_price,
+          20,
+          "Gia",
+          reasons,
+          warnings
+        );
+
+  breakdown.areaDistance = finiteDistance(listingArea, normalized.target_area);
+  breakdown.area_score =
+    normalized.target_area !== null
+      ? scoreAreaNearTarget(listingArea, normalized.target_area, reasons, warnings)
+      : scoreRange(
+          listingArea,
+          normalized.min_area,
+          normalized.max_area,
+          16,
+          "Area",
+          reasons,
+          warnings
+        );
+
+  breakdown.widthDistance = finiteDistance(listingWidth, normalized.target_width);
+  breakdown.width_score = scoreWidthNearTarget(
+    listingWidth,
+    normalized.target_width,
     reasons,
     warnings
   );
 
-  breakdown.area_score = scoreRange(
-    listingArea,
-    normalized.min_area,
-    normalized.max_area,
-    16,
-    "Area",
+  breakdown.structure_score = scoreFloorsNearTarget(
+    listingFloors,
+    normalized.target_floors,
     reasons,
     warnings
   );
@@ -819,6 +1040,8 @@ export function scoreListingForLead(
     (breakdown.street_score || 0) +
     breakdown.price_score +
     breakdown.area_score +
+    (breakdown.width_score || 0) +
+    (breakdown.structure_score || 0) +
     breakdown.bedroom_score +
     (breakdown.property_type_score || 0) +
     breakdown.business_score +
@@ -829,6 +1052,9 @@ export function scoreListingForLead(
 
   breakdown.matching_score = Math.max(0, Math.min(100, Math.round(rawTotal)));
   breakdown.freshness_score = getFreshnessScore(listing.created_at);
+  if (breakdown.freshness_score > 0) {
+    reasons.push("Tin mới đăng");
+  }
   breakdown.final_score = breakdown.matching_score + breakdown.freshness_score;
   breakdown.total_score = breakdown.final_score;
 
@@ -854,9 +1080,29 @@ export function listingPassesHardFilters(
   const listingPrice = toNumber(listing.price);
 
   if (
+    (normalized.price_mode === "max" ||
+      (normalized.price_mode === null && normalized.target_price === null)) &&
     normalized.max_price !== null &&
     listingPrice !== null &&
     listingPrice > normalized.max_price * 1.05
+  ) {
+    return false;
+  }
+
+  if (
+    normalized.price_mode === "range" &&
+    normalized.max_price !== null &&
+    listingPrice !== null &&
+    listingPrice > normalized.max_price * 1.05
+  ) {
+    return false;
+  }
+
+  if (
+    normalized.price_mode === "target" &&
+    normalized.target_price !== null &&
+    listingPrice !== null &&
+    listingPrice > normalized.target_price * 1.5
   ) {
     return false;
   }
