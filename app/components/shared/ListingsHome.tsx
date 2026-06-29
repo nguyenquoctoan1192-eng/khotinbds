@@ -438,8 +438,13 @@ return labels;
           mode: "match",
           note: parsed.note || null,
           preferred_districts: parsed.preferred_districts,
+          allow_nearby_districts: parsed.allowNearbyDistricts,
           max_price: parsed.max_price,
           min_area: parsed.min_area,
+          bedrooms: parsed.bedrooms,
+          min_bedrooms: parsed.min_bedrooms,
+          max_bedrooms: parsed.max_bedrooms,
+          property_types: parsed.property_types,
           keywordSearch: parsed.keywordSearch,
         }),
       });
@@ -578,8 +583,13 @@ return labels;
         preferred_districts: saveDistrict.trim()
           ? [saveDistrict.trim()]
           : filters.preferred_districts,
+        allow_nearby_districts: filters.allowNearbyDistricts,
         max_price: parseBudgetValue(saveBudget) ?? filters.max_price,
         min_area: filters.min_area,
+        bedrooms: filters.bedrooms,
+        min_bedrooms: filters.min_bedrooms,
+        max_bedrooms: filters.max_bedrooms,
+        property_types: filters.property_types,
         existing_matches: getExistingMatches(),
       }),
     });

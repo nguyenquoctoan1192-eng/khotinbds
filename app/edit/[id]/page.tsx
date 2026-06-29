@@ -16,6 +16,7 @@ import {
 } from "next/navigation";
 import { useUserRole } from "@/lib/userRole";
 import RoleGate from "@/app/components/role-gate";
+import type { ListingContentResult } from "@/lib/listingContent";
 
 const supabase = createClient(
   process.env
@@ -42,6 +43,8 @@ type ImageEnhanceState = {
 };
 
 type ListingStatus = "available" | "rented";
+
+type AiListingContent = ListingContentResult;
 
 const defaultEnhanceOptions = (): ImageEnhanceOptions => ({
   removeLogo: false,
@@ -148,6 +151,15 @@ const [amenities, setAmenities] =
   const [imageEnhance, setImageEnhance] =
     useState<ImageEnhanceState | null>(null);
 
+  const [aiContentLoading, setAiContentLoading] =
+    useState(false);
+
+  const [aiContentMessage, setAiContentMessage] =
+    useState("");
+
+  const [aiContent, setAiContent] =
+    useState<AiListingContent | null>(null);
+
   // LOAD DATA
  useEffect(() => {
   if (!id || roleLoading || role !== "admin") return;
@@ -184,6 +196,25 @@ const [amenities, setAmenities] =
   setDescription(data.description || "");
   setImages(data.images || []);
   setStatus(data.status === "rented" ? "rented" : "available");
+
+  if (
+    data.primary_content ||
+    data.chotot_title ||
+    data.cho_tot_title ||
+    data.facebook_title ||
+    data.short_description ||
+    data.seo_description
+  ) {
+    setAiContent({
+      primary_content: data.primary_content || "",
+      cho_tot_title: data.chotot_title || data.cho_tot_title || "",
+      facebook_title: data.facebook_title || "",
+      short_description: data.short_description || "",
+      seo_description: data.seo_description || "",
+    });
+  } else {
+    setAiContent(null);
+  }
 };
 
   // UPLOAD IMAGES
@@ -371,6 +402,58 @@ const [amenities, setAmenities] =
     setImageEnhance(null);
   };
 
+  const copyAiContent = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setAiContentMessage("Đã copy nội dung.");
+    } catch (error) {
+      console.error(error);
+      setAiContentMessage("Chưa copy được nội dung, bạn copy thủ công nhé.");
+    }
+  };
+
+  const generateAiContent = async () => {
+    setAiContentMessage("");
+    setAiContentLoading(true);
+
+    try {
+      const res = await fetch("/api/listing-content", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title,
+          price,
+          district,
+          area,
+          width,
+          length,
+          floors,
+          bedrooms,
+          bathrooms,
+          wc: bathrooms,
+          furnishing: furniture,
+          phone: contactPhone,
+          description,
+        }),
+      });
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Không tạo được nội dung AI");
+      }
+
+      setAiContent(json.content);
+      setAiContentMessage("Đã tạo nội dung AI.");
+    } catch (error) {
+      console.error(error);
+      setAiContentMessage("Chưa tạo được nội dung AI, bạn thử lại sau nhé.");
+    } finally {
+      setAiContentLoading(false);
+    }
+  };
+
   const toggleListingStatus = async () => {
     if (!id || statusLoading) return;
 
@@ -427,6 +510,12 @@ const updatePost = async () => {
     description,
     images,
     status,
+
+    primary_content: aiContent?.primary_content || null,
+    chotot_title: aiContent?.cho_tot_title || null,
+    facebook_title: aiContent?.facebook_title || null,
+    short_description: aiContent?.short_description || null,
+    seo_description: aiContent?.seo_description || null,
   };
 
   console.log("ID =", id);
@@ -452,6 +541,31 @@ const updatePost = async () => {
 
   router.replace(getAfterUpdateUrl());
 };
+
+  const aiContentSections = aiContent
+    ? [
+        {
+          label: "Nội dung chia sẻ",
+          value: aiContent.primary_content,
+        },
+        {
+          label: "Tiêu đề Chợ Tốt",
+          value: aiContent.cho_tot_title,
+        },
+        {
+          label: "Tiêu đề Facebook",
+          value: aiContent.facebook_title,
+        },
+        {
+          label: "Mô tả ngắn",
+          value: aiContent.short_description,
+        },
+        {
+          label: "Mô tả SEO",
+          value: aiContent.seo_description,
+        },
+      ]
+    : [];
 
   if (roleLoading) {
     return <div style={{ padding: 20 }}>Đang kiểm tra quyền truy cập...</div>;
@@ -637,6 +751,42 @@ const updatePost = async () => {
             }
             style={styles.textarea}
           />
+
+          <button
+            type="button"
+            onClick={generateAiContent}
+            disabled={aiContentLoading}
+            style={{
+              ...styles.aiButton,
+              ...(aiContentLoading ? styles.aiButtonDisabled : {}),
+            }}
+          >
+            {aiContentLoading ? "Đang tạo nội dung..." : "Tạo nội dung AI"}
+          </button>
+
+          {aiContentMessage && (
+            <div style={styles.aiMessage}>{aiContentMessage}</div>
+          )}
+
+          {aiContent && (
+            <div style={styles.aiPanel}>
+              {aiContentSections.map((item) => (
+                <div key={item.label} style={styles.aiSection}>
+                  <div style={styles.aiSectionHeader}>
+                    <strong>{item.label}</strong>
+                    <button
+                      type="button"
+                      onClick={() => copyAiContent(item.value)}
+                      style={styles.copyButton}
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <div style={styles.aiOutput}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* UPLOAD */}
           <div>
@@ -868,7 +1018,7 @@ const updatePost = async () => {
             >
               {loading
                 ? "Đang cập nhật..."
-                : "Cập nhật tin"}
+                : "Lưu thay đổi"}
             </button>
           </div>
         </div>
@@ -940,6 +1090,73 @@ const styles: any = {
     minHeight: 120,
     outline: "none",
     fontSize: 15,
+  },
+
+  aiButton: {
+    width: "100%",
+    padding: 12,
+    background: "#7c3aed",
+    color: "white",
+    border: "none",
+    borderRadius: 8,
+    cursor: "pointer",
+    fontWeight: "bold",
+  },
+
+  aiButtonDisabled: {
+    background: "#94a3b8",
+    cursor: "not-allowed",
+  },
+
+  aiMessage: {
+    background: "#f5f3ff",
+    color: "#5b21b6",
+    border: "1px solid #ddd6fe",
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 14,
+  },
+
+  aiPanel: {
+    border: "1px solid #ddd6fe",
+    background: "#faf5ff",
+    borderRadius: 10,
+    padding: 14,
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  },
+
+  aiSection: {
+    background: "white",
+    border: "1px solid #e5e7eb",
+    borderRadius: 8,
+    padding: 12,
+  },
+
+  aiSectionHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 10,
+    alignItems: "center",
+    marginBottom: 8,
+  },
+
+  copyButton: {
+    border: "none",
+    borderRadius: 8,
+    background: "#111827",
+    color: "white",
+    cursor: "pointer",
+    padding: "6px 10px",
+    fontWeight: 700,
+  },
+
+  aiOutput: {
+    whiteSpace: "pre-wrap",
+    color: "#111827",
+    lineHeight: 1.5,
+    fontSize: 14,
   },
 
   gallery: {

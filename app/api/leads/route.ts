@@ -6,6 +6,7 @@ import {
   MatchResult,
   compareMatchResults,
   getMatchReasons,
+  listingPassesHardFilters,
   normalizeLeadRequirement,
   scoreListingForLead,
 } from "@/lib/matching";
@@ -18,6 +19,7 @@ import {
   normalizedDistrictNames,
   normalizeSearchText,
 } from "@/lib/searchNormalization";
+import { districtIsNearby } from "@/lib/nearbyDistricts";
 
 type MatchWithLead = MatchResult & { lead_id: string };
 
@@ -77,6 +79,15 @@ function firstScalar(...values: unknown[]): string | number | null {
   return null;
 }
 
+function normalizeBoolean(value: unknown) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    return /^(true|1|yes|co|có)$/i.test(value.trim());
+  }
+
+  return false;
+}
+
 function getHardFilterDistricts(value: unknown) {
   const preferred = normalizePreferredDistricts(value);
   const allowed = new Map(
@@ -125,11 +136,20 @@ function listingMatchesDistrict(listing: Record<string, unknown>, districts: str
   );
 }
 
+function listingMatchesNearbyDistrict(
+  listing: Record<string, unknown>,
+  districts: string[]
+) {
+  return districts.some((district) => districtIsNearby(district, listing.district));
+}
+
 function getDistrictFilteredListings(
   listings: ListingMatchCandidate[],
-  preferredDistricts: unknown
+  preferredDistricts: unknown,
+  allowNearbyDistricts: unknown
 ) {
   const districts = getHardFilterDistricts(preferredDistricts);
+  const allowNearby = normalizeBoolean(allowNearbyDistricts);
 
   if (districts.length === 0) {
     return {
@@ -140,7 +160,8 @@ function getDistrictFilteredListings(
   }
 
   const filteredListings = listings.filter((listing) =>
-    listingMatchesDistrict(listing, districts)
+    listingMatchesDistrict(listing, districts) ||
+    (allowNearby && listingMatchesNearbyDistrict(listing, districts))
   );
 
   if (filteredListings.length > 0) {
@@ -207,9 +228,14 @@ function getListingKeywordText(listing: Record<string, unknown>) {
 function getSearchFilteredListings(
   listings: ListingMatchCandidate[],
   preferredDistricts: unknown,
+  allowNearbyDistricts: unknown,
   keywordSearch: unknown
 ) {
-  const districtResult = getDistrictFilteredListings(listings, preferredDistricts);
+  const districtResult = getDistrictFilteredListings(
+    listings,
+    preferredDistricts,
+    allowNearbyDistricts
+  );
 
   if (districtResult.districts.length > 0) {
     return districtResult;
@@ -251,7 +277,13 @@ function hasStructuredRequirement(requirement: LeadRequirement) {
       requirement.max_area ||
       requirement.maxArea ||
       requirement.bedrooms ||
+      requirement.min_bedrooms ||
+      requirement.minBedrooms ||
+      requirement.max_bedrooms ||
+      requirement.maxBedrooms ||
       requirement.note ||
+      normalizeStringList(requirement.property_types).length > 0 ||
+      normalizeStringList(requirement.propertyTypes).length > 0 ||
       (Array.isArray(requirement.businessTypes) &&
         requirement.businessTypes.length > 0) ||
       (Array.isArray(requirement.concepts) &&
@@ -311,6 +343,11 @@ function buildRequirementFromBody(body: Record<string, unknown>): LeadRequiremen
   const targetCustomers = normalizeStringList(body.targetCustomers).length > 0
     ? normalizeStringList(body.targetCustomers)
     : parsed.targetCustomers;
+  const propertyTypes = normalizeStringList(body.propertyTypes).length > 0
+    ? normalizeStringList(body.propertyTypes)
+    : normalizeStringList(body.property_types).length > 0
+      ? normalizeStringList(body.property_types)
+      : parsed.propertyTypes;
   const note = String(firstDefined(body.note, parsed.note, "") || "").trim();
   const requirement: LeadRequirement & { keywordSearch?: string | null } = {
     rawText: rawText || parsed.rawText,
@@ -328,10 +365,26 @@ function buildRequirementFromBody(body: Record<string, unknown>): LeadRequiremen
     preferredWards,
     preferred_streets: preferredStreets,
     preferredStreets,
-    bedrooms: firstScalar(body.bedrooms),
+    allow_nearby_districts: firstDefined(
+      body.allow_nearby_districts,
+      body.allowNearbyDistricts,
+      parsed.allowNearbyDistricts
+    ) as boolean,
+    allowNearbyDistricts: firstDefined(
+      body.allowNearbyDistricts,
+      body.allow_nearby_districts,
+      parsed.allowNearbyDistricts
+    ) as boolean,
+    bedrooms: firstScalar(body.bedrooms, parsed.bedrooms),
+    min_bedrooms: firstScalar(body.min_bedrooms, body.minBedrooms, parsed.min_bedrooms),
+    max_bedrooms: firstScalar(body.max_bedrooms, body.maxBedrooms, parsed.max_bedrooms),
+    minBedrooms: firstScalar(body.minBedrooms, body.min_bedrooms, parsed.minBedrooms),
+    maxBedrooms: firstScalar(body.maxBedrooms, body.max_bedrooms, parsed.maxBedrooms),
     note: note || null,
     businessTypes,
     concepts,
+    property_types: propertyTypes,
+    propertyTypes,
     features,
     targetCustomers,
     purpose: String(firstDefined(body.purpose, parsed.purpose, "") || "").trim() || null,
@@ -353,20 +406,29 @@ function buildNormalizedRequirementResponse(requirement: LeadRequirement & {
     preferredDistricts: normalizeStringList(requirement.preferredDistricts).length > 0
       ? normalizeStringList(requirement.preferredDistricts)
       : normalizeStringList(requirement.preferred_districts),
+    allowNearbyDistricts: normalized.allow_nearby_districts,
     preferredWards: normalizeStringList(requirement.preferredWards),
     preferredStreets: normalizeStringList(requirement.preferredStreets),
     minArea: normalized.min_area ?? undefined,
     maxArea: normalized.max_area ?? undefined,
     minPrice: normalized.min_price ?? undefined,
     maxPrice: normalized.max_price ?? undefined,
+    bedrooms: normalized.bedrooms ?? undefined,
+    minBedrooms: normalized.min_bedrooms ?? undefined,
+    maxBedrooms: normalized.max_bedrooms ?? undefined,
+    propertyTypes: normalized.propertyTypes,
     features: normalized.features,
     targetCustomers: normalized.targetCustomers,
     purpose: requirement.purpose || undefined,
     preferred_districts: normalizeStringList(requirement.preferred_districts),
+    allow_nearby_districts: normalized.allow_nearby_districts,
     min_price: normalized.min_price,
     max_price: normalized.max_price,
     min_area: normalized.min_area,
     max_area: normalized.max_area,
+    min_bedrooms: normalized.min_bedrooms,
+    max_bedrooms: normalized.max_bedrooms,
+    property_types: normalized.propertyTypes,
     keywordSearch: requirement.keywordSearch || null,
     note: requirement.note || "",
   };
@@ -412,6 +474,7 @@ export async function POST(req: Request) {
       const { listingsForScoring, fallbackWarning } = getSearchFilteredListings(
         listings || [],
         requestRequirement.preferred_districts,
+        requestRequirement.allowNearbyDistricts,
         hasStructuredFilters ? null : requestRequirement.keywordSearch
       );
       const scoringRequirement: LeadRequirement = requirement;
@@ -432,10 +495,20 @@ export async function POST(req: Request) {
           if (keywordScore > 0) {
             match.score += keywordScore;
             match.breakdown.total_score += keywordScore;
+            match.breakdown.matching_score =
+              (match.breakdown.matching_score || match.breakdown.total_score) +
+              keywordScore;
+            match.breakdown.final_score =
+              (match.breakdown.final_score || match.breakdown.total_score) +
+              keywordScore;
             match.breakdown.reasons.push("Keyword matches title/address/content");
             match.reasons = getMatchReasons(match.breakdown);
           }
           matches.push(match);
+          continue;
+        }
+
+        if (!listingPassesHardFilters(listing, scoringRequirement)) {
           continue;
         }
 
@@ -554,6 +627,7 @@ export async function POST(req: Request) {
       const { listingsForScoring, fallbackWarning } = getSearchFilteredListings(
         listings || [],
         requestRequirement.preferred_districts,
+        requestRequirement.allowNearbyDistricts,
         hasStructuredRequirement(requirement) ? null : requestRequirement.keywordSearch
       );
       const scoringRequirement: LeadRequirement = requirement;
@@ -574,6 +648,12 @@ export async function POST(req: Request) {
           if (keywordScore > 0) {
             match.score += keywordScore;
             match.breakdown.total_score += keywordScore;
+            match.breakdown.matching_score =
+              (match.breakdown.matching_score || match.breakdown.total_score) +
+              keywordScore;
+            match.breakdown.final_score =
+              (match.breakdown.final_score || match.breakdown.total_score) +
+              keywordScore;
             match.breakdown.reasons.push("Keyword matches title/address/content");
             match.reasons = getMatchReasons(match.breakdown);
           }
@@ -581,6 +661,10 @@ export async function POST(req: Request) {
             ...match,
             lead_id: lead.id,
           });
+          continue;
+        }
+
+        if (!listingPassesHardFilters(listing, scoringRequirement)) {
           continue;
         }
 
@@ -643,6 +727,7 @@ export async function POST(req: Request) {
       const { listingsForScoring, fallbackWarning } = getSearchFilteredListings(
         listings || [],
         hardDistricts,
+        searchRequirement.allowNearbyDistricts,
         hasStructuredFilters ? null : keyword
       );
 
@@ -656,11 +741,21 @@ export async function POST(req: Request) {
           if (keywordScore > 0) {
             match.score += keywordScore;
             match.breakdown.total_score += keywordScore;
+            match.breakdown.matching_score =
+              (match.breakdown.matching_score || match.breakdown.total_score) +
+              keywordScore;
+            match.breakdown.final_score =
+              (match.breakdown.final_score || match.breakdown.total_score) +
+              keywordScore;
             match.breakdown.reasons.push("Keyword matches title/address/content");
             match.reasons = getMatchReasons(match.breakdown);
           }
 
           matches.push(match);
+          continue;
+        }
+
+        if (!listingPassesHardFilters(listing, searchRequirement)) {
           continue;
         }
 

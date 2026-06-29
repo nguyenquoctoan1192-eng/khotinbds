@@ -1,14 +1,19 @@
 export type ListingContentInput = {
   title?: string | null;
-  address?: string | null;
-  district?: string | null;
   price?: string | number | null;
-  description?: string | null;
-  dimensions?: string | null;
-  structure?: string | null;
+  district?: string | null;
+  area?: string | number | null;
+  width?: string | number | null;
+  length?: string | number | null;
+  floors?: string | number | null;
   bedrooms?: string | number | null;
+  bathrooms?: string | number | null;
   wc?: string | number | null;
+  furnishing?: string | null;
+  furniture?: string | null;
+  phone?: string | null;
   contact_phone?: string | null;
+  description?: string | null;
 };
 
 export type ListingContentResult = {
@@ -17,22 +22,6 @@ export type ListingContentResult = {
   facebook_title: string;
   short_description: string;
   seo_description: string;
-};
-
-type ParsedListingFacts = {
-  location: string;
-  street: string;
-  ward: string;
-  district: string;
-  districtShort: string;
-  dimensions: string;
-  area: number | null;
-  structureParts: string[];
-  priceLong: string;
-  priceShort: string;
-  access: string;
-  businesses: string[];
-  rawText: string;
 };
 
 const compactText = (value: unknown) =>
@@ -48,51 +37,21 @@ const normalizeText = (value: unknown) =>
     .replace(/\s+/g, " ")
     .trim();
 
-const titleCase = (value: string) =>
-  value
-    .replace(/\s+/g, " ")
-    .trim()
-    .split(" ")
-    .map((word) => {
-      if (/^q\.?\d+$/i.test(word)) return word.toUpperCase().replace(".", "");
-      if (/^p\.?$/i.test(word)) return "P.";
-      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
-    })
-    .join(" ");
+const toNumber = (value: unknown) => {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
 
-const namedDistricts = [
-  ["phu nhuan", "Phú Nhuận"],
-  ["binh thanh", "Bình Thạnh"],
-  ["go vap", "Gò Vấp"],
-  ["tan binh", "Tân Bình"],
-  ["tan phu", "Tân Phú"],
-  ["thu duc", "Thủ Đức"],
-  ["binh tan", "Bình Tân"],
-] as const;
+  const raw = String(value || "").trim();
+  if (!raw) return null;
 
-export const cleanDistrictName = (value: unknown) => {
-  const raw = compactText(value);
-  const withoutPrefix = raw
-    .replace(/^quận\b\s*/i, "")
-    .replace(/^quan\b\s*/i, "")
-    .replace(/^q\.\s*/i, "")
-    .replace(/^q\s+/i, "")
-    .replace(/^q(?=\d)/i, "")
-    .trim();
-  const normalized = normalizeText(withoutPrefix);
-  const numericMatch = normalized.match(/^(\d{1,2})$/);
-
-  if (numericMatch) return String(Number(numericMatch[1]));
-
-  const named = namedDistricts.find(([key]) => normalized === key);
-  if (named) return named[1];
-
-  return withoutPrefix ? titleCase(withoutPrefix) : "";
+  const numeric = Number(raw.replace(",", ".").replace(/[^\d.]/g, ""));
+  return Number.isFinite(numeric) ? numeric : null;
 };
+
+const formatNumber = (value: number) =>
+  Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, "");
 
 const trimWords = (value: string, maxLength: number) => {
   const normalized = value.replace(/\s+/g, " ").trim();
-
   if (normalized.length <= maxLength) return normalized;
 
   const sliced = normalized.slice(0, maxLength + 1);
@@ -101,387 +60,256 @@ const trimWords = (value: string, maxLength: number) => {
   return (lastSpace > 0 ? sliced.slice(0, lastSpace) : sliced.slice(0, maxLength)).trim();
 };
 
-const fitSeoLength = (value: string) => {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  const extended =
-    normalized.length >= 140
-      ? normalized
-      : `${normalized} Liên hệ xem nhà thực tế, hỗ trợ kiểm tra hiện trạng và thương lượng thuê.`;
+const fitSeoLength = (value: string) =>
+  value.replace(/\s+/g, " ").trim().replace(/[,\s]+$/, ".");
 
-  return trimWords(extended, 160).replace(/[,\s]+$/, ".");
-};
+const sanitizePublicText = (value: string) =>
+  value
+    .replace(/\bhh\s*trao\s*đổi\b/giu, "")
+    .replace(/\bhoa\s*hồng\b/giu, "")
+    .replace(/\bhh\s*1\/2\b/giu, "")
+    .replace(/\bhh\s*2n1t?\b/giu, "")
+    .replace(/\bhhtt\b/giu, "")
+    .replace(/\bhh\b/giu, "")
+    .replace(/\bNĐ\b/gu, "")
+    .replace(/\bnhận\s*đủ\b/giu, "")
+    .replace(/[ \t]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 
-const formatNumber = (value: number) =>
-  Number.isInteger(value) ? String(value) : value.toFixed(1);
-
-const parsePriceValue = (value: unknown) => {
-  const raw = String(value || "").trim();
-  if (!raw) return null;
-
+const formatListingPriceLabel = (price: ListingContentInput["price"]) => {
+  const raw = compactText(price);
   const normalized = normalizeText(raw);
-  const millionMatch = normalized.match(/(\d+(?:[.,]\d+)?)\s*(?:tr\b|trieu\b)/);
+  const millionMatch = normalized.match(/(\d+(?:[.,]\d+)?)\s*(?:tr|trieu)\b/);
+  const amount =
+    millionMatch?.[1] !== undefined
+      ? Number(millionMatch[1].replace(",", "."))
+      : toNumber(price);
 
-  if (millionMatch) {
-    const amount = Number(millionMatch[1].replace(",", "."));
-    return Number.isFinite(amount) && amount > 0 ? amount : null;
-  }
+  if (!amount || amount <= 0) return "";
 
-  const numeric = Number(raw.replace(/[^\d]/g, ""));
-  if (!Number.isFinite(numeric) || numeric <= 0) return null;
-
-  return numeric >= 1000000 ? numeric / 1000000 : numeric;
+  const millions = amount >= 1000000 ? amount / 1000000 : amount;
+  return `${formatNumber(millions)} triệu/tháng`;
 };
 
-export const formatListingPriceLabel = (price: ListingContentInput["price"]) => {
-  const amount = parsePriceValue(price);
-  return amount ? `${formatNumber(amount)} triệu/tháng` : compactText(price);
+const getCleanTitle = (input: ListingContentInput) => {
+  const title = sanitizePublicText(compactText(input.title));
+  return title || "Nhà cho thuê";
 };
 
-const formatShortPrice = (price: string) => {
-  const amount = parsePriceValue(price);
-  return amount ? `${formatNumber(amount)}tr/tháng` : price;
-};
+const getHeadlineTitle = (title: string) =>
+  title.replace(/\s*,\s*/g, " - ").toUpperCase();
 
-const extractDistrict = (input: ListingContentInput, rawText: string) => {
+const getDistrictLabel = (input: ListingContentInput, title: string) => {
   const explicitDistrict = compactText(input.district);
-  if (explicitDistrict) return cleanDistrictName(explicitDistrict);
+  if (explicitDistrict) return explicitDistrict;
 
-  const districtMatch =
-    rawText.match(/\bQ\.?\s*(\d{1,2})\b/i) ||
-    rawText.match(/\bQuận\s*(\d{1,2})\b/i);
+  const titleDistrict = title.match(/,\s*(Quận\s+[^,]+)\s*$/iu);
+  return titleDistrict ? titleDistrict[1].trim() : "";
+};
 
-  if (districtMatch) return String(Number(districtMatch[1]));
+const buildAreaLine = (input: ListingContentInput) => {
+  const width = toNumber(input.width);
+  const length = toNumber(input.length);
+  const area = toNumber(input.area);
 
-  const normalized = normalizeText(rawText);
-  const qNamedMatch = normalized.match(/\bq\.?\s*([a-z]+(?:\s+[a-z]+){0,2})\b/);
-  if (qNamedMatch) {
-    const district = cleanDistrictName(qNamedMatch[1]);
-    if (district) return district;
+  if (width && length && area) {
+    return `📐 ${formatNumber(width)} x ${formatNumber(length)}m, diện tích sử dụng khoảng ${formatNumber(area)}m²`;
   }
 
-  return namedDistricts.find(([key]) => normalized.includes(key))?.[1] || "";
-};
-
-const getDistrictShort = (district: string) => {
-  return /^\d{1,2}$/.test(district) ? `Q${Number(district)}` : district;
-};
-
-const getDisplayDistrict = (district: string) =>
-  district ? `Quận ${cleanDistrictName(district)}` : "";
-
-const extractWard = (rawText: string) => {
-  const wardMatch =
-    rawText.match(/\bP\.\s*([^,\n]+?)(?=\s+Q\.?\s*\d|\s+Quận|\n|$)/i) ||
-    rawText.match(/\bPhường\s+([^,\n]+?)(?=\s+Q\.?\s*\d|\s+Quận|\n|$)/i);
-
-  return wardMatch ? `P.${titleCase(wardMatch[1])}` : "";
-};
-
-const extractDimensions = (input: ListingContentInput, rawText: string) => {
-  const explicit = compactText(input.dimensions);
-  const match =
-    explicit.match(/(\d+(?:[.,]\d+)?)\s*x\s*(\d+(?:[.,]\d+)?)/i) ||
-    rawText.match(/(\d+(?:[.,]\d+)?)\s*x\s*(\d+(?:[.,]\d+)?)/i);
-
-  if (!match) return { dimensions: explicit, area: null as number | null };
-
-  const width = Number(match[1].replace(",", "."));
-  const length = Number(match[2].replace(",", "."));
-  const area =
-    Number.isFinite(width) && Number.isFinite(length)
-      ? Math.round(width * length * 10) / 10
-      : null;
-
-  return {
-    dimensions: `${formatNumber(width)}x${formatNumber(length)}m`,
-    area,
-  };
-};
-
-const extractStructureParts = (input: ListingContentInput, rawText: string) => {
-  const normalized = normalizeText(`${input.structure || ""} ${rawText}`);
-  const parts: string[] = [];
-
-  if (/\btret\b/.test(normalized)) parts.push("Trệt");
-  if (/\blung\b/.test(normalized)) parts.push("lửng");
-
-  const floorMatch = normalized.match(/\b([1-9]\d*)\s*lau\b/);
-  if (floorMatch) {
-    const suffix = /\bsuot\b/.test(normalized) ? " suốt" : "";
-    parts.push(`${Number(floorMatch[1])} lầu${suffix}`);
-  } else if (compactText(input.structure)) {
-    parts.push(compactText(input.structure));
+  if (area) {
+    return `📐 Diện tích sử dụng khoảng ${formatNumber(area)}m²`;
   }
 
-  return Array.from(new Set(parts));
+  return "";
 };
 
-const extractAccess = (rawText: string, street: string) => {
-  const normalized = normalizeText(rawText);
-
-  if (/\b(?:mat tien|mt)\b/.test(normalized)) return "Mặt tiền";
-  if (/\b(?:hxt|hem xe tai)\b/.test(normalized)) return "Hẻm xe tải";
-  if (/\b(?:hxh|hem xe hoi)\b/.test(normalized)) return "Hẻm xe hơi";
-
-  return street ? "Mặt tiền" : "";
+const getAreaLabel = (input: ListingContentInput) => {
+  const area = toNumber(input.area);
+  return area ? `${formatNumber(area)}m²` : "";
 };
 
-const extractStreet = (
-  input: ListingContentInput,
-  rawText: string
-) => {
-  const source =
-    compactText(input.address) ||
-    compactText(input.title) ||
-    rawText.split(/\n+/).map((line) => line.trim()).find(Boolean) ||
-    "";
-  const cleaned = source
-    .replace(/\bP\.\s*[^,\n]+?(?=\s+Q\.?\s*\d|\s+Quận|\n|$)/i, " ")
-    .replace(/\bPhường\s+[^,\n]+?(?=\s+Q\.?\s*\d|\s+Quận|\n|$)/i, " ")
-    .replace(/\bQ\.?\s*\d{1,2}\b/gi, " ")
-    .replace(/\bQ\.?\s*(?:Phú\s+Nhuận|Bình\s+Thạnh|Gò\s+Vấp|Tân\s+Bình|Tân\s+Phú|Thủ\s+Đức|Bình\s+Tân)\b/gi, " ")
-    .replace(/\bQuận\s+(?:Phú\s+Nhuận|Bình\s+Thạnh|Gò\s+Vấp|Tân\s+Bình|Tân\s+Phú|Thủ\s+Đức|Bình\s+Tân)\b/gi, " ")
-    .replace(/\bQuận\s*\d{1,2}\b/gi, " ")
-    .replace(/\b\d+(?:[.,]\d+)?\s*x\s*\d+(?:[.,]\d+)?\b/gi, " ")
-    .replace(/\b\d+(?:[.,]\d+)?\s*(?:tr|triệu)\b/gi, " ")
-    .replace(/\b(?:trệt|lửng|lầu|suốt|hhtt|tm|hxt|hxh|mt|mặt tiền)\b/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+const buildBuildingLine = (input: ListingContentInput) => {
+  const floors = toNumber(input.floors);
 
-  return titleCase(cleaned).replace(/^\d+[A-Za-z]?\s*/, "").trim();
+  if (floors === null) return "";
+  if (floors <= 0) return "Trệt";
+
+  return `Trệt, ${formatNumber(floors)} lầu`;
 };
 
-const parseListingFacts = (input: ListingContentInput): ParsedListingFacts => {
-  const rawText = [
-    input.title,
-    input.address,
-    input.district,
-    input.price,
-    input.dimensions,
-    input.structure,
-    input.description,
-  ]
-    .filter(Boolean)
-    .join("\n");
-  const district = extractDistrict(input, rawText);
-  const districtShort = getDistrictShort(district);
-  const ward = extractWard(rawText);
-  const street = extractStreet(input, rawText);
-  const { dimensions, area } = extractDimensions(input, rawText);
-  const structureParts = extractStructureParts(input, rawText);
-  const normalized = normalizeText(rawText);
-  const rawPrice = normalized.match(/(\d+(?:[.,]\d+)?)\s*(?:tr\b|trieu\b)/)?.[0] || "";
-  const priceLong = formatListingPriceLabel(input.price) || formatListingPriceLabel(rawPrice);
-  const priceShort = formatShortPrice(priceLong);
-  const access = extractAccess(rawText, street);
-  const hasCommercialSignal =
-    /\b(?:tm|thuong mai|kinh doanh|mat bang|shop|spa|cafe|showroom)\b/.test(
-      normalized
-    );
-  const businesses = [
-    hasCommercialSignal || access === "Mặt tiền" ? "shop" : "",
-    "spa",
-    "showroom",
-    "văn phòng đại diện",
-    structureParts.some((part) => /\d+\s*lầu/.test(part)) ? "studio" : "",
+const buildRoomLine = (input: ListingContentInput) => {
+  const bedrooms = toNumber(input.bedrooms);
+  const wc = toNumber(input.bathrooms ?? input.wc);
+  const parts = [
+    bedrooms ? `${formatNumber(bedrooms)} phòng ngủ` : "",
+    wc ? `${formatNumber(wc)} WC` : "",
   ].filter(Boolean);
-  const location = [street, ward, getDisplayDistrict(district)].filter(Boolean).join(", ");
+
+  return parts.length ? `🛏 ${parts.join(", ")}` : "";
+};
+
+const buildFurnishingLine = (input: ListingContentInput) => {
+  const furnishing = compactText(input.furnishing || input.furniture);
+
+  if (/^cơ bản$/iu.test(furnishing)) return "🛋 Nội thất cơ bản";
+  if (/^đầy đủ$/iu.test(furnishing)) return "🛋 Full nội thất";
+
+  return "";
+};
+
+const isAlleyListing = (title: string) => /\bhẻm\b/iu.test(title);
+
+const isFrontOrLargeListing = (input: ListingContentInput, title: string) => {
+  const area = toNumber(input.area) || 0;
+  const normalized = normalizeText(`${title} ${input.description || ""}`);
+
+  return (
+    area >= 80 ||
+    /\bmat\s*tien\b|\bmt\b|\bmat\s*bang\b|\bkinh\s*doanh\b/.test(normalized)
+  );
+};
+
+const getSuitability = (input: ListingContentInput, title: string) => {
+  const price = toNumber(input.price) || 0;
+  const area = toNumber(input.area) || 0;
+  const smallAlley =
+    isAlleyListing(title) && (!price || price <= 15000000) && (!area || area <= 80);
+
+  if (smallAlley) {
+    return {
+      primary: "ở gia đình nhỏ, văn phòng online, studio nhỏ, kinh doanh online",
+      short: "ở, làm văn phòng online, studio nhỏ hoặc kinh doanh online",
+      seo: "ở gia đình, văn phòng online, studio nhỏ hoặc kinh doanh online",
+    };
+  }
+
+  if (isFrontOrLargeListing(input, title)) {
+    return {
+      primary: "shop, spa, showroom, văn phòng đại diện",
+      short: "shop, spa, showroom hoặc văn phòng đại diện",
+      seo: "kinh doanh, showroom, spa hoặc văn phòng đại diện",
+    };
+  }
 
   return {
-    location: location || "Nhà cho thuê",
-    street: street || "Nhà cho thuê",
-    ward,
-    district,
-    districtShort,
-    dimensions,
-    area,
-    structureParts,
-    priceLong,
-    priceShort,
-    access,
-    businesses: Array.from(new Set(businesses)),
-    rawText,
+    primary: "ở gia đình, văn phòng online, studio nhỏ, kinh doanh online",
+    short: "ở gia đình, làm văn phòng online, studio nhỏ hoặc kinh doanh online",
+    seo: "ở gia đình, văn phòng online, studio nhỏ hoặc kinh doanh online",
   };
 };
 
-const getStructureText = (facts: ParsedListingFacts) =>
-  facts.structureParts.join(", ");
+const getAdvantageLines = (input: ListingContentInput, title: string) => {
+  const district = getDistrictLabel(input, title);
 
-const getChoTotStructure = (facts: ParsedListingFacts) =>
-  getStructureText(facts)
-    .replace(/\s+suốt\b/i, "")
-    .replace(/,/g, "");
+  if (isFrontOrLargeListing(input, title)) {
+    return [
+      "Mặt tiền dễ nhận diện",
+      district ? `Khu trung tâm ${district}` : "",
+      "Mặt bằng dễ bố trí công năng",
+    ].filter(Boolean);
+  }
 
-const getFacebookStructure = (facts: ParsedListingFacts) => {
-  const floorPart = facts.structureParts.find((part) => /\d+\s*lầu/.test(part));
-  return floorPart || getStructureText(facts);
-};
+  const firstLine = isAlleyListing(title)
+    ? "Hẻm dễ đi, khu dân cư ổn định"
+    : "Khu dân cư ổn định, thuận tiện di chuyển";
 
-const getBenefitLines = (facts: ParsedListingFacts) => {
-  const lines = [
-    facts.access ? `${facts.access} dễ nhận diện` : "",
-    facts.district ? `Khu trung tâm ${getDisplayDistrict(facts.district)}` : "",
-    facts.structureParts.length ? "Mặt bằng dễ bố trí công năng" : "",
-  ];
-
-  return lines.filter(Boolean);
-};
-
-const getAreaText = (facts: ParsedListingFacts) => {
-  if (!facts.dimensions) return "";
-  return `${facts.dimensions}${facts.area ? `, khoảng ${facts.area}m2/sàn` : ""}`;
-};
-
-const buildFixedPrimaryContent = (
-  facts: ParsedListingFacts,
-  input: ListingContentInput
-) => {
-  const headlineAccess = facts.access === "Mặt tiền" ? "MẶT TIỀN" : facts.access.toUpperCase();
-  const headline = [
-    ["CHO THUÊ", headlineAccess, facts.street].filter(Boolean).join(" "),
-    getDisplayDistrict(facts.district),
-  ]
-    .filter(Boolean)
-    .join(" - ");
-  const contactPhone = compactText(input.contact_phone);
-  const lines = [
-    `🔥 ${headline.toUpperCase()} 🔥`,
-    "",
-    facts.dimensions ? `📐 ${getAreaText(facts)}` : "",
-    facts.structureParts.length ? `🏢 ${getStructureText(facts)}` : "",
-    facts.priceLong ? `💰 ${facts.priceLong}` : "",
-    "",
-    ...getBenefitLines(facts).slice(0, 3).map((line) => `✅ ${line}`),
-    facts.businesses.length ? `✅ Phù hợp: ${facts.businesses.join(", ")}` : "",
-    "",
-    contactPhone
-      ? `☎ Liên hệ: ${contactPhone} để xem nhà thực tế.`
-      : "☎ Liên hệ để xem nhà thực tế.",
-  ];
-
-  return lines
-    .filter((line, index, allLines) => line || allLines[index - 1])
-    .join("\n")
-    .trim();
+  return [firstLine, "Nhà dễ bố trí công năng"];
 };
 
 export const generateListingContentFallback = (
   input: ListingContentInput
 ): ListingContentResult => {
-  const facts = parseListingFacts(input);
-  const primaryContent = buildFixedPrimaryContent(facts, input);
+  const title = getCleanTitle(input);
+  const headlineTitle = getHeadlineTitle(title);
+  const areaLine = buildAreaLine(input);
+  const areaLabel = getAreaLabel(input);
+  const buildingLine = buildBuildingLine(input);
+  const roomLine = buildRoomLine(input);
+  const furnishingLine = buildFurnishingLine(input);
+  const priceLabel = formatListingPriceLabel(input.price);
+  const phone = compactText(input.phone || input.contact_phone);
+  const suitability = getSuitability(input, title);
+  const advantages = getAdvantageLines(input, title);
+
+  const detailLines = [
+    areaLine,
+    buildingLine ? `🏢 ${buildingLine}` : "",
+    roomLine,
+    furnishingLine,
+    priceLabel ? `💰 ${priceLabel}` : "",
+  ].filter(Boolean);
+  const benefitLines = [
+    ...advantages.map((line) => `✅ ${line}`),
+    `✅ Phù hợp: ${suitability.primary}`,
+  ];
+  const contactLine =
+    phone ? `☎ Liên hệ: ${phone} để xem nhà thực tế.` : "☎ Liên hệ để xem nhà thực tế.";
+
+  const primaryContent = [
+    `🔥 CHO THUÊ ${headlineTitle} 🔥`,
+    detailLines.join("\n"),
+    benefitLines.join("\n"),
+    contactLine,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   const choTotTitle = [
-    `Cho thuê ${facts.access === "Mặt tiền" ? "MT" : facts.access || "nhà"} ${facts.street} ${facts.districtShort}`.trim(),
-    facts.dimensions,
-    getChoTotStructure(facts).toLowerCase(),
-    facts.priceShort,
+    `Cho thuê ${title}`,
+    areaLabel,
+    priceLabel,
   ]
     .filter(Boolean)
     .join(", ");
   const facebookTitle = [
-    `🔥 ${facts.access === "Mặt tiền" ? "MT" : facts.access || "Nhà thuê"} ${facts.street} ${facts.districtShort}`.trim(),
-    facts.dimensions,
-    getFacebookStructure(facts),
-    facts.priceShort,
+    `🔥 ${title}`,
+    areaLabel,
+    priceLabel,
   ]
     .filter(Boolean)
     .join(" - ");
+  const detailParts = [
+    areaLabel ? `Diện tích sử dụng khoảng ${areaLabel}` : "",
+    buildingLine,
+    priceLabel ? `giá ${priceLabel}` : "",
+  ].filter(Boolean);
   const shortDescription = [
-    `Cho thuê ${facts.access.toLowerCase() || "nhà"} ${facts.location}.`,
-    [
-      facts.dimensions ? `Diện tích ${getAreaText(facts)}` : "",
-      facts.structureParts.length ? `kết cấu ${getStructureText(facts)}` : "",
-      facts.priceLong ? `giá ${facts.priceLong}` : "",
-    ]
-      .filter(Boolean)
-      .join(", ") + ".",
-    facts.businesses.length ? `Phù hợp ${facts.businesses.join(", ")}.` : "",
+    `Cho thuê ${title}.`,
+    detailParts.length ? `${detailParts.join(", ")}.` : "",
+    `Phù hợp ${suitability.short}.`,
   ]
     .filter(Boolean)
     .join(" ");
   const seoDescription = fitSeoLength(
-    `Cho thuê ${facts.access.toLowerCase() || "nhà"} ${facts.location}, ${
-      facts.dimensions ? `diện tích ${facts.dimensions}` : "vị trí dễ nhận diện"
-    }${facts.structureParts.length ? `, kết cấu ${getStructureText(facts)}` : ""}${
-      facts.priceLong ? `, giá ${facts.priceLong}` : ""
-    }. Phù hợp ${facts.businesses.join(", ")}.`
+    [
+      `Cho thuê ${title}`,
+      areaLabel ? `diện tích sử dụng khoảng ${areaLabel}` : "",
+      priceLabel ? `giá ${priceLabel}` : "",
+    ]
+      .filter(Boolean)
+      .join(", ") + `. Nhà phù hợp ${suitability.seo}.`
   );
 
   return {
-    primary_content: primaryContent,
-    cho_tot_title: trimWords(choTotTitle, 90),
-    facebook_title: trimWords(facebookTitle, 100),
-    short_description: shortDescription,
-    seo_description: seoDescription,
+    primary_content: sanitizePublicText(primaryContent),
+    cho_tot_title: sanitizePublicText(trimWords(choTotTitle, 90)),
+    facebook_title: sanitizePublicText(trimWords(facebookTitle, 100)),
+    short_description: sanitizePublicText(shortDescription),
+    seo_description: sanitizePublicText(seoDescription),
   };
 };
 
 export const buildListingContentPrompt = (input: ListingContentInput) => {
-  const facts = parseListingFacts(input);
+  const fallback = generateListingContentFallback(input);
 
-  return `
-Bạn là trợ lý viết bài đăng Facebook/Zalo cho môi giới cho thuê bất động sản.
-
-Trả về JSON thuần gồm:
-primary_content, cho_tot_title, facebook_title, short_description, seo_description.
-
-Phong cách bắt buộc:
-- primary_content phải dùng template cố định, không viết đoạn văn tự do:
-🔥 CHO THUÊ MẶT TIỀN {STREET} - {DISTRICT} 🔥
-
-📐 {SIZE_LABEL} ({AREA}m²)
-🏢 {STRUCTURE}
-💰 {PRICE}
-
-✅ {ADVANTAGE_1}
-✅ {ADVANTAGE_2}
-✅ {ADVANTAGE_3}
-✅ Phù hợp: {BUSINESS_TYPES}
-
-☎ Liên hệ: {PHONE} để xem nhà thực tế.
-- Không hiển thị dòng "Địa chỉ" trong primary_content.
-- Nếu thiếu dữ liệu thì bỏ dòng đó.
-- Không lặp lại cùng thông tin 2 lần trong một mục.
-- Tiêu đề Chợ Tốt ngắn theo mẫu: Cho thuê MT Phó Đức Chính Q1, 4x16m, trệt lửng 4 lầu, 72tr/tháng
-- Tiêu đề Facebook có hook theo mẫu: 🔥 MT Phó Đức Chính Q1 - 4x16m - 4 lầu suốt - 72tr/tháng
-- Mô tả ngắn 2-3 câu.
-- SEO description 140-160 ký tự, không cắt ngang chữ.
-- Nếu có MT/mặt tiền hoặc không thấy hẻm, ưu tiên gọi là mặt tiền.
-
-Dữ liệu đã parse:
-- Vị trí: ${facts.location}
-- Đường: ${facts.street}
-- Phường: ${facts.ward || "chưa có"}
-- Quận: ${facts.district || "chưa có"}
-- Quận ngắn: ${facts.districtShort || "chưa có"}
-- Diện tích: ${facts.dimensions || "chưa có"}
-- Diện tích/sàn: ${facts.area ? `${facts.area}m2` : "chưa có"}
-- Kết cấu: ${getStructureText(facts) || "chưa có"}
-- Giá thuê: ${facts.priceLong || "chưa có"}
-- Giá ngắn: ${facts.priceShort || "chưa có"}
-- Loại vị trí: ${facts.access || "chưa có"}
-- Ngành phù hợp: ${facts.businesses.join(", ") || "chưa có"}
-
-Dữ liệu gốc:
-${facts.rawText || "chưa có"}
-`;
+  return `Return this exact JSON object without changing any field:\n${JSON.stringify(
+    fallback
+  )}`;
 };
 
 export const sanitizeListingContent = (
-  value: Partial<ListingContentResult>,
+  _value: Partial<ListingContentResult>,
   input: ListingContentInput
-): ListingContentResult => {
-  const fallback = generateListingContentFallback(input);
-
-  return {
-    primary_content: fallback.primary_content,
-    cho_tot_title: compactText(value.cho_tot_title) || fallback.cho_tot_title,
-    facebook_title:
-      compactText(value.facebook_title) || fallback.facebook_title,
-    short_description:
-      compactText(value.short_description) || fallback.short_description,
-    seo_description:
-      compactText(value.seo_description) || fallback.seo_description,
-  };
-};
+): ListingContentResult => generateListingContentFallback(input);

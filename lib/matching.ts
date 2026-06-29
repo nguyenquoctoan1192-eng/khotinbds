@@ -1,4 +1,5 @@
 import { normalizeDistrictQuery } from "@/lib/searchNormalization";
+import { districtIsNearby } from "@/lib/nearbyDistricts";
 
 export type ListingMatchCandidate = {
   id: string | number;
@@ -33,6 +34,8 @@ export type LeadRequirement = {
   maxPrice?: number | string | null;
   preferred_districts?: string[] | string | null;
   preferredDistricts?: string[] | string | null;
+  allow_nearby_districts?: boolean | string | null;
+  allowNearbyDistricts?: boolean | string | null;
   preferred_wards?: string[] | string | null;
   preferredWards?: string[] | string | null;
   preferred_streets?: string[] | string | null;
@@ -43,6 +46,12 @@ export type LeadRequirement = {
   minArea?: number | string | null;
   maxArea?: number | string | null;
   bedrooms?: number | string | null;
+  min_bedrooms?: number | string | null;
+  max_bedrooms?: number | string | null;
+  minBedrooms?: number | string | null;
+  maxBedrooms?: number | string | null;
+  property_types?: string[] | string | null;
+  propertyTypes?: string[] | string | null;
   note?: string | null;
   businessTypes?: string[] | string | null;
   concepts?: string[] | string | null;
@@ -59,6 +68,10 @@ export type ScoreBreakdown = {
   price_score: number;
   area_score: number;
   bedroom_score: number;
+  property_type_score?: number;
+  freshness_score?: number;
+  matching_score?: number;
+  final_score?: number;
   business_score: number;
   feature_score?: number;
   customer_score?: number;
@@ -81,11 +94,15 @@ type NormalizedLeadRequirement = {
   min_price: number | null;
   max_price: number | null;
   preferred_districts: string[];
+  allow_nearby_districts: boolean;
   preferred_wards: string[];
   preferred_streets: string[];
   min_area: number | null;
   max_area: number | null;
   bedrooms: number | null;
+  min_bedrooms: number | null;
+  max_bedrooms: number | null;
+  propertyTypes: string[];
   note?: string | null;
   businessTypes: string[];
   concepts: string[];
@@ -204,6 +221,26 @@ function normalizeList(value: unknown): string[] {
     .filter(Boolean);
 }
 
+function normalizeBoolean(value: unknown) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    return /^(true|1|yes|co|có)$/i.test(value.trim());
+  }
+
+  return false;
+}
+
+function normalizePropertyType(value: string) {
+  const normalized = normalizeText(value);
+
+  if (/nguyen can|nha nguyen can/.test(normalized)) return "nguyen can";
+  if (/mat bang|\bmb\b/.test(normalized)) return "mat bang";
+  if (/can ho|chung cu|apartment/.test(normalized)) return "can ho";
+  if (/phong tro|phong cho thue/.test(normalized)) return "phong tro";
+
+  return normalized;
+}
+
 function normalizeDistricts(
   preferredDistricts: LeadRequirement["preferred_districts"],
   district?: string | null,
@@ -287,6 +324,26 @@ function listingSearchText(listing: ListingMatchCandidate) {
 
 function hasAny(text: string, patterns: RegExp[]) {
   return patterns.some((pattern) => pattern.test(text));
+}
+
+const propertyTypeKeywords: Record<string, RegExp[]> = {
+  "nguyen can": [/\bnguyen can\b/, /\bnha nguyen can\b/],
+  "mat bang": [/\bmat bang\b/, /\bmb\b/],
+  "can ho": [/\bcan ho\b/, /\bchung cu\b/, /\bapartment\b/],
+  "phong tro": [/\bphong tro\b/, /\bphong cho thue\b/],
+};
+
+const propertyTypeConflicts: Record<string, string[]> = {
+  "nguyen can": ["can ho", "phong tro"],
+  "mat bang": ["can ho", "phong tro"],
+  "can ho": ["nguyen can", "mat bang", "phong tro"],
+  "phong tro": ["nguyen can", "mat bang", "can ho"],
+};
+
+function detectListingPropertyTypes(text: string) {
+  return Object.entries(propertyTypeKeywords)
+    .filter(([, patterns]) => hasAny(text, patterns))
+    .map(([type]) => type);
 }
 
 function districtIsMentioned(text: string, district: string) {
@@ -441,6 +498,40 @@ function getUpdatedAtTime(match: MatchResult) {
   return Number.isFinite(time) ? time : 0;
 }
 
+function getCreatedAtTime(match: MatchResult) {
+  const value = match.listing.created_at;
+
+  if (!value) return 0;
+
+  const time = new Date(value).getTime();
+
+  return Number.isFinite(time) ? time : 0;
+}
+
+function getFreshnessScore(createdAt: unknown) {
+  if (!createdAt) return 0;
+
+  const created = new Date(String(createdAt));
+  const time = created.getTime();
+
+  if (!Number.isFinite(time)) return 0;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const createdDay = new Date(created);
+  createdDay.setHours(0, 0, 0, 0);
+
+  const days = Math.floor((today.getTime() - createdDay.getTime()) / 86400000);
+
+  if (days <= 0) return 10;
+  if (days <= 3) return 8;
+  if (days <= 7) return 6;
+  if (days <= 30) return 3;
+
+  return 0;
+}
+
 export function normalizeLeadRequirement(requirement: LeadRequirement): NormalizedLeadRequirement {
   return {
     min_price: toNumber(requirement.min_price ?? requirement.minPrice),
@@ -450,14 +541,20 @@ export function normalizeLeadRequirement(requirement: LeadRequirement): Normaliz
       requirement.district,
       requirement.preferredDistricts
     ),
+    allow_nearby_districts: normalizeBoolean(
+      requirement.allow_nearby_districts ?? requirement.allowNearbyDistricts
+    ),
     preferred_wards: normalizeList(requirement.preferred_wards ?? requirement.preferredWards).map(normalizeText),
     preferred_streets: normalizeList(requirement.preferred_streets ?? requirement.preferredStreets).map(normalizeText),
     min_area: toNumber(requirement.min_area ?? requirement.minArea),
     max_area: toNumber(requirement.max_area ?? requirement.maxArea),
     bedrooms: toNumber(requirement.bedrooms),
+    min_bedrooms: toNumber(requirement.min_bedrooms ?? requirement.minBedrooms),
+    max_bedrooms: toNumber(requirement.max_bedrooms ?? requirement.maxBedrooms),
     note: requirement.note,
     businessTypes: normalizeList(requirement.businessTypes).map(normalizeText),
     concepts: normalizeList(requirement.concepts).map(normalizeText),
+    propertyTypes: normalizeList(requirement.property_types ?? requirement.propertyTypes).map(normalizePropertyType),
     features: normalizeList(requirement.features).map(normalizeFeatureLabel),
     targetCustomers: normalizeList(requirement.targetCustomers).map(normalizeCustomerLabel),
     purpose: requirement.purpose,
@@ -473,6 +570,7 @@ export function compareMatchResults(a: MatchResult, b: MatchResult) {
 
   return (
     b.score - a.score ||
+    getCreatedAtTime(b) - getCreatedAtTime(a) ||
     b.breakdown.business_score - a.breakdown.business_score ||
     (b.breakdown.street_score || 0) - (a.breakdown.street_score || 0) ||
     (b.breakdown.ward_score || 0) - (a.breakdown.ward_score || 0) ||
@@ -504,13 +602,30 @@ export function scoreListingForLead(
     return null;
   }
 
-  const matchesRequestedDistrict =
-    normalized.preferred_districts.length === 0 ||
+  if (
+    normalized.max_price !== null &&
+    listingPrice !== null &&
+    listingPrice > normalized.max_price * 1.05
+  ) {
+    return null;
+  }
+
+  const hasPreferredDistricts = normalized.preferred_districts.length > 0;
+  const matchesExactDistrict =
+    !hasPreferredDistricts ||
     normalized.preferred_districts.some(
       (district) =>
         district === listingDistrict ||
         districtIsMentioned(text, district)
     );
+  const matchesNearbyDistrict =
+    hasPreferredDistricts &&
+    normalized.allow_nearby_districts &&
+    normalized.preferred_districts.some((district) =>
+      districtIsNearby(district, listingDistrict)
+    );
+  const matchesRequestedDistrict =
+    !hasPreferredDistricts || matchesExactDistrict || matchesNearbyDistrict;
 
   if (!matchesRequestedDistrict) {
     return null;
@@ -523,6 +638,10 @@ export function scoreListingForLead(
     price_score: 0,
     area_score: 0,
     bedroom_score: 0,
+    property_type_score: 0,
+    freshness_score: 0,
+    matching_score: 0,
+    final_score: 0,
     business_score: 0,
     feature_score: 0,
     customer_score: 0,
@@ -532,9 +651,14 @@ export function scoreListingForLead(
     reasons,
   };
 
-  if (normalized.preferred_districts.length > 0) {
-    breakdown.district_score = 22;
-    reasons.push("District matches preference");
+  if (hasPreferredDistricts) {
+    if (matchesExactDistrict) {
+      breakdown.district_score = 25;
+      reasons.push("District matches preference");
+    } else if (matchesNearbyDistrict) {
+      breakdown.district_score = 15;
+      reasons.push("Nearby district matches preference");
+    }
   }
 
   if (normalized.preferred_wards.length > 0) {
@@ -579,12 +703,57 @@ export function scoreListingForLead(
     warnings
   );
 
-  if (normalized.bedrooms !== null) {
-    if (listingBedrooms !== null && listingBedrooms >= normalized.bedrooms) {
-      breakdown.bedroom_score = 8;
-      reasons.push("Bedrooms meet requirement");
+  const requestedMinBedrooms = normalized.min_bedrooms ?? normalized.bedrooms;
+  const requestedMaxBedrooms = normalized.max_bedrooms ?? normalized.bedrooms;
+
+  if (requestedMinBedrooms !== null || requestedMaxBedrooms !== null) {
+    if (listingBedrooms === null) {
+      warnings.push("Missing bedroom data");
     } else {
-      warnings.push("So phong ngu chua dat yeu cau");
+      const minBedrooms = requestedMinBedrooms ?? requestedMaxBedrooms;
+      const maxBedrooms = requestedMaxBedrooms ?? requestedMinBedrooms;
+      const inRequestedRange =
+        (minBedrooms === null || listingBedrooms >= minBedrooms) &&
+        (maxBedrooms === null || listingBedrooms <= maxBedrooms);
+
+      if (inRequestedRange) {
+        breakdown.bedroom_score = 10;
+        reasons.push("Bedrooms match requirement");
+      } else {
+        const nearestBoundary =
+          minBedrooms !== null && listingBedrooms < minBedrooms
+            ? minBedrooms
+            : maxBedrooms;
+        const distance =
+          nearestBoundary !== null
+            ? Math.abs(listingBedrooms - nearestBoundary)
+            : Number.POSITIVE_INFINITY;
+
+        breakdown.bedroom_score = distance <= 1 ? -4 : -8;
+        warnings.push("So phong ngu khong dung nhu cau");
+      }
+    }
+  }
+
+  if (normalized.propertyTypes.length > 0) {
+    const listingPropertyTypes = detectListingPropertyTypes(text);
+    const propertyMatched = normalized.propertyTypes.some((type) =>
+      listingPropertyTypes.includes(type)
+    );
+    const propertyConflicted = normalized.propertyTypes.some((type) =>
+      (propertyTypeConflicts[type] || []).some((conflict) =>
+        listingPropertyTypes.includes(conflict)
+      )
+    );
+
+    if (propertyMatched) {
+      breakdown.property_type_score = 10;
+      reasons.push("Property type matches requirement");
+    } else if (propertyConflicted) {
+      breakdown.property_type_score = -12;
+      warnings.push("Loai nha khong dung nhu cau");
+    } else {
+      warnings.push("Listing chua neu ro loai nha");
     }
   }
 
@@ -651,24 +820,46 @@ export function scoreListingForLead(
     breakdown.price_score +
     breakdown.area_score +
     breakdown.bedroom_score +
+    (breakdown.property_type_score || 0) +
     breakdown.business_score +
     (breakdown.feature_score || 0) +
     (breakdown.customer_score || 0) +
     (breakdown.contract_score || 0) +
     breakdown.data_quality_penalty;
 
-  breakdown.total_score = Math.max(0, Math.min(100, Math.round(rawTotal)));
+  breakdown.matching_score = Math.max(0, Math.min(100, Math.round(rawTotal)));
+  breakdown.freshness_score = getFreshnessScore(listing.created_at);
+  breakdown.final_score = breakdown.matching_score + breakdown.freshness_score;
+  breakdown.total_score = breakdown.final_score;
 
-  if (breakdown.total_score <= 0) {
+  if (breakdown.matching_score <= 0) {
     return null;
   }
 
   return {
     listing_id: listing.id,
-    score: breakdown.total_score,
+    score: breakdown.final_score,
     breakdown,
     reasons: getMatchReasons(breakdown),
     warnings,
     listing,
   };
+}
+
+export function listingPassesHardFilters(
+  listing: ListingMatchCandidate,
+  requirement: LeadRequirement
+) {
+  const normalized = normalizeLeadRequirement(requirement);
+  const listingPrice = toNumber(listing.price);
+
+  if (
+    normalized.max_price !== null &&
+    listingPrice !== null &&
+    listingPrice > normalized.max_price * 1.05
+  ) {
+    return false;
+  }
+
+  return true;
 }

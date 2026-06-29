@@ -47,6 +47,12 @@ const trimExtraPunctuation = (value: string) =>
 const stripTrailingHouseTag = (value: string) =>
   value.replace(/\s+(?:hxh|hxt|h3g|mt)\s*$/iu, "").trim();
 
+const stripLeadingHouseNumber = (value: string) =>
+  value.replace(
+    /^\s*\d+[A-Za-zÀ-ỹ]?(?:\s*[-–]\s*\d+[A-Za-zÀ-ỹ]?)?(?:\/\d+[A-Za-zÀ-ỹ]?)*\s*,?\s*/u,
+    ""
+  );
+
 const roundArea = (value: number) => Math.round(value * 10) / 10;
 
 function parsePrice(text: string) {
@@ -115,10 +121,10 @@ function removeDistrictFromStreet(value: string) {
 
 function extractStreetName(addressLine: string) {
   const withoutTag = stripTrailingHouseTag(addressLine)
-    .replace(/^\s*(?:hxh|hxt|h3g|mt)\s+/iu, "")
-    .replace(/^\s*\d+[A-Za-zÀ-ỹ]?(?:\/\d+[A-Za-zÀ-ỹ]?)*\s+/u, "");
+    .replace(/^\s*(?:hxh|hxt|h3g|mt)\s+/iu, "");
+  const withoutHouseNumber = stripLeadingHouseNumber(withoutTag);
 
-  const withoutWard = withoutTag.replace(
+  const withoutWard = withoutHouseNumber.replace(
     /,\s*(?:p|phường|q|quận)\.?\s*[^,]+.*$/iu,
     ""
   );

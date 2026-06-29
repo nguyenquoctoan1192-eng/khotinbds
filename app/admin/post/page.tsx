@@ -535,8 +535,6 @@ const autoFillFromZalo = () => {
     setAiContentMessage("");
     setAiContent(null);
     setAiContentLoading(true);
-    const dimensions = getAiListingDimensions();
-    const structure = getAiListingStructure();
 
     try {
       const res = await fetch("/api/listing-content", {
@@ -546,14 +544,17 @@ const autoFillFromZalo = () => {
         },
         body: JSON.stringify({
           title,
-          address,
           price,
           district,
-          dimensions,
-          structure,
+          area,
+          width,
+          length,
+          floors,
           bedrooms,
+          bathrooms,
           wc: bathrooms,
-          contact_phone: contactPhone,
+          furnishing: furniture,
+          phone: contactPhone,
           description,
         }),
       });

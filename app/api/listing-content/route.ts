@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  buildListingContentPrompt,
   generateListingContentFallback,
-  sanitizeListingContent,
   type ListingContentInput,
 } from "@/lib/listingContent";
 import { authorizeRequest } from "@/lib/auth";
@@ -15,77 +13,11 @@ export async function POST(req: Request) {
     }
 
     const input = (await req.json()) as ListingContentInput;
-    const fallback = generateListingContentFallback(input);
-    const apiKey = process.env.OPENAI_API_KEY;
-
-    if (!apiKey) {
-      return NextResponse.json({
-        success: true,
-        content: fallback,
-        source: "fallback",
-      });
-    }
-
-    const res = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
-        input: buildListingContentPrompt(input),
-        text: {
-          format: {
-            type: "json_schema",
-            name: "listing_content_result",
-            strict: true,
-            schema: {
-              type: "object",
-              additionalProperties: false,
-              properties: {
-                primary_content: { type: "string" },
-                cho_tot_title: { type: "string" },
-                facebook_title: { type: "string" },
-                short_description: { type: "string" },
-                seo_description: { type: "string" },
-              },
-              required: [
-                "primary_content",
-                "cho_tot_title",
-                "facebook_title",
-                "short_description",
-                "seo_description",
-              ],
-            },
-          },
-        },
-      }),
-    });
-
-    const json = await res.json();
-
-    if (!res.ok) {
-      console.error("Listing content OpenAI error:", json);
-      return NextResponse.json({
-        success: true,
-        content: fallback,
-        source: "fallback",
-      });
-    }
-
-    const outputText =
-      json.output_text ||
-      json.output
-        ?.flatMap((item: any) => item.content || [])
-        ?.find((content: any) => content.type === "output_text")?.text ||
-      "";
-    const parsed = JSON.parse(outputText);
 
     return NextResponse.json({
       success: true,
-      content: sanitizeListingContent(parsed, input),
-      source: "openai",
+      content: generateListingContentFallback(input),
+      source: "template",
     });
   } catch (error) {
     console.error("Listing content generation failed:", error);

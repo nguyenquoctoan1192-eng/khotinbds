@@ -9,12 +9,17 @@ export type ParsedRequirement = {
   businessTypes: string[];
   concepts: string[];
   preferredDistricts: string[];
+  allowNearbyDistricts: boolean;
   preferredWards: string[];
   preferredStreets: string[];
   minArea?: number;
   maxArea?: number;
   minPrice?: number;
   maxPrice?: number;
+  bedrooms: number | null;
+  minBedrooms: number | null;
+  maxBedrooms: number | null;
+  propertyTypes: string[];
   features: string[];
   targetCustomers: string[];
   purpose?: string;
@@ -26,6 +31,9 @@ export type ParsedRequirementFilters = ParsedRequirement & {
   min_price: number | null;
   min_area: number | null;
   max_area: number | null;
+  min_bedrooms: number | null;
+  max_bedrooms: number | null;
+  property_types: string[];
   keywordSearch: string | null;
   note: string;
 };
@@ -182,6 +190,25 @@ const targetCustomerPatterns: PatternItem[] = [
   },
 ];
 
+const propertyTypePatterns: PatternItem[] = [
+  {
+    label: "nguyen can",
+    patterns: [/\bnguyen\s+can\b/i, /\bnha\s+nguyen\s+can\b/i],
+  },
+  {
+    label: "mat bang",
+    patterns: [/\bmat\s+bang\b/i, /\bmb\b/i],
+  },
+  {
+    label: "can ho",
+    patterns: [/\bcan\s+ho\b/i, /\bchung\s+cu\b/i, /\bapartment\b/i],
+  },
+  {
+    label: "phong tro",
+    patterns: [/\bphong\s+tro\b/i, /\bphong\s+cho\s+thue\b/i],
+  },
+];
+
 const cleanupPatterns = [
   /\b(?:quan|q)\s*\.?\s*(?:[1-9]|1[0-2])\b/gi,
   /\b(?:quan\s+)?(?:phu\s+nhuan|binh\s+thanh|go\s+vap|tan\s+binh|tan\s+phu|thu\s+duc|binh\s+tan)\b/gi,
@@ -190,6 +217,10 @@ const cleanupPatterns = [
   /\b\d+(?:[.,]\d+)?\s*(?:tr|trieu|ty|ti)\b/gi,
   /\b(?:tu\s+)?\d+(?:[.,]\d+)?\s*(?:m2|m²)?\s*(?:-|den|toi)\s*\d+(?:[.,]\d+)?\s*(?:m2|m²)\b/gi,
   /\b(?:dt|dien tich)\s*\d+(?:[.,]\d+)?/gi,
+  /\b\d+\s*-\s*\d+\s*pn\b/gi,
+  /\b\d+\s*pn\b/gi,
+  /\b(?:nguyen\s+can|nha\s+nguyen\s+can|mat\s+bang|can\s+ho|chung\s+cu|phong\s+tro|phong\s+cho\s+thue)\b/gi,
+  /\b(?:khu\s+vuc\s+ke\s+can|ke\s+can|lan\s+can|gan|quanh)\b/gi,
   /\b\d+(?:[.,]\d+)?\s*(?:m2|m²)\b/gi,
 ];
 
@@ -201,6 +232,8 @@ function normalizeForParsing(value: unknown) {
   return String(value || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "d")
     .replace(/đ/g, "d")
     .replace(/Đ/g, "d")
     .replace(/m²/g, "m2")
@@ -284,6 +317,39 @@ function parseArea(text: string) {
   };
 }
 
+function parseBedrooms(text: string) {
+  const range = text.match(/\b(\d+)\s*-\s*(\d+)\s*pn\b/i);
+
+  if (range) {
+    const min = normalizeNumber(range[1]);
+    const max = normalizeNumber(range[2]);
+
+    return {
+      bedrooms: min ?? undefined,
+      minBedrooms: min ?? undefined,
+      maxBedrooms: max ?? undefined,
+    };
+  }
+
+  const single =
+    text.match(/\b(\d+)\s*pn\b/i) ||
+    text.match(/\b(\d+)\s*phong\s+ngu\b/i);
+
+  if (!single) return {};
+
+  const value = normalizeNumber(single[1]);
+
+  return {
+    bedrooms: value ?? undefined,
+    minBedrooms: value ?? undefined,
+    maxBedrooms: value ?? undefined,
+  };
+}
+
+function parseAllowNearbyDistricts(text: string) {
+  return /\b(?:khu\s+vuc\s+ke\s+can|ke\s+can|lan\s+can|gan|quanh)\b/i.test(text);
+}
+
 function extractKeywordSearch(input: string) {
   const normalized = normalizeSearchText(input);
   const keyword = cleanupPatterns
@@ -314,8 +380,11 @@ export function parseVietnameseRequirement(input: string): ParsedRequirementFilt
   );
   const features = collectPatternLabels(featurePatterns, normalized);
   const targetCustomers = collectPatternLabels(targetCustomerPatterns, normalized);
+  const propertyTypes = collectPatternLabels(propertyTypePatterns, normalized);
   const price = parsePrice(normalized);
   const area = parseArea(normalized);
+  const bedroomFilters = parseBedrooms(normalized);
+  const allowNearbyDistricts = parseAllowNearbyDistricts(normalized);
   const businessTypes = unique(businessMatches.map((item) => item.type));
   const concepts = unique(businessMatches.map((item) => item.label));
   const inferredDistricts = [
@@ -344,12 +413,17 @@ export function parseVietnameseRequirement(input: string): ParsedRequirementFilt
     businessTypes,
     concepts,
     preferredDistricts,
+    allowNearbyDistricts,
     preferredWards,
     preferredStreets,
     minArea: area.minArea,
     maxArea: area.maxArea,
     minPrice: price.minPrice,
     maxPrice: price.maxPrice,
+    bedrooms: bedroomFilters.bedrooms ?? null,
+    minBedrooms: bedroomFilters.minBedrooms ?? null,
+    maxBedrooms: bedroomFilters.maxBedrooms ?? null,
+    propertyTypes,
     features,
     targetCustomers,
     purpose,
@@ -358,7 +432,10 @@ export function parseVietnameseRequirement(input: string): ParsedRequirementFilt
     max_price: price.maxPrice ?? null,
     min_area: area.minArea ?? null,
     max_area: area.maxArea ?? null,
+    min_bedrooms: bedroomFilters.minBedrooms ?? null,
+    max_bedrooms: bedroomFilters.maxBedrooms ?? null,
+    property_types: propertyTypes,
     keywordSearch: extractKeywordSearch(rawText),
-    note: noteParts.join(", "),
+    note: unique([...noteParts, ...propertyTypes]).join(", "),
   };
 }
