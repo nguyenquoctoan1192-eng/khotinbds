@@ -274,22 +274,25 @@ const toneMap = {
 };
 
 const mainMenuItems = [
-  { label: "Trang chủ Admin", icon: "🏠", href: "/admin" },
   { label: "Tổng quan", icon: "⌂", href: "/admin/dashboard", active: true },
+  { label: "CRM", icon: "☷", href: "/admin/customers" },
   { label: "Khách hàng", icon: "👥", href: "/admin/customers" },
-  { label: "Kho tin đăng", icon: "🏘️", href: "/admin/listing-library" },
-  { label: "Đăng tin", icon: "📝", href: "/admin/post" },
-  { label: "Quản lý môi giới", icon: "🤝", href: "/admin/agents" },
-  { label: "Báo cáo", icon: "📊", href: "/admin/dashboard" },
+  { label: "Lịch hẹn", icon: "□", href: "/admin/customers?filter=appointments_today" },
+  { label: "Công việc", icon: "✓", href: "/admin/customers?filter=today" },
+  { label: "Pipeline", icon: "▥", href: "/admin/customers?view=pipeline" },
+  { label: "Kho tin", icon: "⌂", href: "/admin/listing-library" },
+  { label: "Đăng tin", icon: "+", href: "/admin/post" },
+  { label: "Tìm nhà AI", icon: "✦", href: "/tim-nha" },
+  { label: "Báo cáo", icon: "◫", href: "/admin/dashboard" },
 ];
 
 const dataMenuItems = [
-  { label: "Lịch sử chăm sóc", icon: "↻", href: "/admin/customers" },
-  { label: "Tài liệu", icon: "📄", href: "/admin/dashboard" },
+  { label: "Soạn tin AI", icon: "✎", href: "/admin/customers" },
+  { label: "Trợ lý AI", icon: "✦", href: "/admin/dashboard" },
 ];
 
 const settingMenuItems = [
-  { label: "Cài đặt hệ thống", icon: "⚙️", href: "/account" },
+  { label: "Cài đặt", icon: "⚙", href: "/account" },
 ];
 
 const appointments = [
@@ -425,7 +428,7 @@ function LeadMiniCard({
   actionIcon: string;
 }) {
   return (
-    <Link href={`/admin/customers#lead-${item.lead.id}`} className="lead-mini-card">
+    <Link href={`/admin/customers/${item.lead.id}`} className="lead-mini-card">
       <div className="avatar">{formatShortName(item.lead).slice(0, 1).toUpperCase()}</div>
       <div className="lead-mini-body">
         <div className="lead-mini-top">

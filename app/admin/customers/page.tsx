@@ -1,29 +1,22 @@
 "use client";
 
-import SiteNavbar from "@/app/components/site-navbar";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { use, useEffect, useState } from "react";
-import {
-  calculateLeadScoring,
-  getLeadTemperatureLabel,
-  getLeadTemperatureRank,
-} from "@/lib/leadScoring";
-import {
-  calculateNextBestAction,
-  getNextActionLabel,
-} from "@/lib/nextBestAction";
-import {
-  calculateFollowUp,
-  type FollowUpEngineResult,
-} from "@/lib/followUpEngine";
+import { useEffect, useMemo, useState } from "react";
 import RoleGate from "@/app/components/role-gate";
+import { buildLeadAssignments, type LeadAssignmentResult } from "@/lib/leadAssignment";
+import { calculateLeadScoring } from "@/lib/leadScoring";
 import {
-  buildLeadAssignments,
-  type LeadAssignmentResult,
-} from "@/lib/leadAssignment";
+  formatCustomerBudget,
+  formatCustomerDistricts,
+  getCustomerAISummary,
+  getCustomerMainNeed,
+  getCustomerNeedTags,
+  getCustomerPriceValue,
+  getCustomerSource,
+  type CustomerDisplayLead,
+} from "@/lib/customerDisplay";
 
-type Lead = {
+type Lead = CustomerDisplayLead & {
   id: string;
   fullname: string | null;
   phone: string | null;
@@ -31,9 +24,10 @@ type Lead = {
   note: string | null;
   max_price: number | string | null;
   status: string | null;
-  lead_score: number | null;
-  lead_temperature: string | null;
+  lead_score?: number | null;
+  lead_temperature?: string | null;
   created_at: string | null;
+  assigned_to?: string | null;
 };
 
 type LeadActivity = {
@@ -44,90 +38,34 @@ type LeadActivity = {
   created_at: string | null;
 };
 
-type FollowUpStatus = "today" | "overdue" | "upcoming" | "none";
-
-type LeadWithFollowUp = {
+type CrmLead = {
   lead: Lead;
-  crmFields: CrmFields;
-  followUpDate: Date | null;
-  followUpText: string;
-  followUpStatus: FollowUpStatus;
-  followUpPlan: FollowUpEngineResult;
-  assignment: LeadAssignmentResult;
   activities: LeadActivity[];
+  assignment: LeadAssignmentResult;
+  temperature: "Hot" | "Warm" | "Cold";
+  stage: PipelineStage;
+  updatedAt: string | null;
 };
 
-type CrmFields = {
-  need: string;
-  rentalTime: string;
-  followUpDate: string;
-  note: string;
-};
+type PipelineStage =
+  | "Hot Lead"
+  | "Đang chăm sóc"
+  | "Đã gửi nhà"
+  | "Hẹn xem"
+  | "Đã chốt"
+  | "Không tiềm năng";
 
-type ComposeState = {
-  open: boolean;
-  message: string;
-  copyMessage: string;
-};
-
-type NoteModalState = {
-  open: boolean;
-  leadId: string;
-  type: string;
-  content: string;
-  saving: boolean;
-  error: string;
-};
-
-type SalesAssistantResult = {
-  known_requirements: Record<string, string | null>;
-  missing_requirements: string[];
-  customer_intent: string;
-  objection: string | null;
-  suggested_replies: string[];
-  next_best_question: string;
-};
-
-type CustomersSearchParams = Promise<{
-  filter?: string | string[];
-  temperature?: string | string[];
-  status?: string | string[];
-  max_price?: string | string[];
-}>;
-
-type CustomerFilterState = {
-  active: boolean;
-  title: string;
-  badge: string;
-  filter: string | null;
-  temperature: string | null;
-  status: string | null;
-  maxPrice: number | null;
-  note?: string;
-  emptyMessage?: string;
-};
-
-const SALES_REQUIREMENT_LABELS: Record<string, string> = {
-  business: "Business",
-  location: "Location",
-  budget: "Budget",
-  area: "Area",
-  structure: "Structure",
-  frontage: "Frontage",
-  move_in_time: "Move-in time",
-};
-
-const SALES_REQUIREMENT_ORDER = [
-  "business",
-  "location",
-  "budget",
-  "area",
-  "structure",
-  "frontage",
-  "move_in_time",
+const pipelineStages: PipelineStage[] = [
+  "Hot Lead",
+  "Đang chăm sóc",
+  "Đã gửi nhà",
+  "Hẹn xem",
+  "Đã chốt",
+  "Không tiềm năng",
 ];
 
-const LEAD_STATUSES = [
+const statusOptions = [
+  "Tất cả",
   "Khách mới",
   "Đang chăm sóc",
   "Đã gửi nhà",
@@ -137,53 +75,33 @@ const LEAD_STATUSES = [
   "Hủy",
 ];
 
-const ACTIVITY_TYPES = [
-  "Gọi điện",
-  "Đã gửi nhà",
-  "Đã đi xem",
-  "Ghi chú",
+const temperatureOptions = ["Tất cả", "Hot", "Warm", "Cold"];
+
+const menuItems = [
+  { label: "Tổng quan", icon: "⌂", href: "/admin/dashboard" },
+  { label: "CRM", icon: "☷", href: "/admin/customers", active: true },
+  { label: "Khách hàng", icon: "👥", href: "/admin/customers", active: true },
+  { label: "Lịch hẹn", icon: "□", href: "/admin/customers?filter=appointments_today" },
+  { label: "Công việc", icon: "✓", href: "/admin/customers?filter=today" },
+  { label: "Pipeline", icon: "▥", href: "/admin/customers?view=pipeline" },
+  { label: "Kho tin", icon: "⌂", href: "/admin/listing-library" },
+  { label: "Đăng tin", icon: "+", href: "/admin/post" },
+  { label: "Tìm nhà AI", icon: "✦", href: "/tim-nha" },
+  { label: "Báo cáo", icon: "◫", href: "/admin/dashboard" },
+  { label: "Cài đặt", icon: "⚙", href: "/account" },
 ];
 
-const formatDistricts = (districts: Lead["preferred_districts"]) => {
-  if (Array.isArray(districts)) {
-    return districts.filter(Boolean).map(String).join(", ");
-  }
+const normalizeText = (value: unknown) =>
+  String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\u0111/g, "d")
+    .replace(/\u0110/g, "D")
+    .toLowerCase();
 
-  if (typeof districts === "string") {
-    return districts;
-  }
-
-  if (districts && typeof districts === "object") {
-    return Object.values(districts)
-      .filter(Boolean)
-      .map(String)
-      .join(", ");
-  }
-
-  return "";
-};
-
-const getPriceValue = (price: Lead["max_price"]) => {
-  const value = Number(price || 0);
-
-  return Number.isFinite(value) ? value : 0;
-};
-
-const formatPrice = (price: Lead["max_price"]) => {
-  const value = getPriceValue(price);
-
-  if (value <= 0) {
-    return "Chưa có";
-  }
-
-  return `${value.toLocaleString("vi-VN")} VNĐ`;
-};
-
-const getLeadScore = (lead: Lead) => {
-  const storedScore = Number(lead.lead_score);
-
-  if (Number.isFinite(storedScore) && storedScore >= 0) {
-    return storedScore;
+const getLeadTemperature = (lead: Lead): CrmLead["temperature"] => {
+  if (lead.lead_temperature === "Hot" || lead.lead_temperature === "Warm") {
+    return lead.lead_temperature;
   }
 
   return calculateLeadScoring({
@@ -191,834 +109,188 @@ const getLeadScore = (lead: Lead) => {
     max_price: lead.max_price,
     preferred_districts: lead.preferred_districts,
     note: lead.note,
-  }).lead_score;
-};
-
-const getLeadTemperature = (lead: Lead) =>
-  lead.lead_temperature ||
-  calculateLeadScoring({
-    phone: lead.phone,
-    max_price: lead.max_price,
-    preferred_districts: lead.preferred_districts,
-    note: lead.note,
   }).lead_temperature;
-
-const compareLeadTemperature = (a: LeadWithFollowUp, b: LeadWithFollowUp) => {
-  const temperatureDiff =
-    getLeadTemperatureRank(getLeadTemperature(a.lead)) -
-    getLeadTemperatureRank(getLeadTemperature(b.lead));
-
-  if (temperatureDiff !== 0) {
-    return temperatureDiff;
-  }
-
-  return (
-    new Date(b.lead.created_at || 0).getTime() -
-    new Date(a.lead.created_at || 0).getTime()
-  );
 };
 
-const formatListingPrice = (price: unknown) => {
-  const value = Number(price || 0);
+const getPipelineStage = (lead: Lead, temperature: CrmLead["temperature"]): PipelineStage => {
+  const status = normalizeText(lead.status);
 
-  if (!Number.isFinite(value) || value <= 0) {
-    return "Liên hệ";
-  }
+  if (/chot/.test(status)) return "Đã chốt";
+  if (/huy|khong|khong tiem nang/.test(status)) return "Không tiềm năng";
+  if (/di xem|hen xem|lich hen/.test(status)) return "Hẹn xem";
+  if (/gui nha|da gui/.test(status)) return "Đã gửi nhà";
+  if (temperature === "Hot" || /khach moi|hot/.test(status)) return "Hot Lead";
 
-  return `${value.toLocaleString("vi-VN")} VNĐ`;
+  return "Đang chăm sóc";
 };
 
-const getReasonLabels = (item: any) => {
-  const breakdown = item.breakdown;
-  const reasons = item.reasons || breakdown?.reasons || [];
-  const labels: string[] = [];
+const getDateLabel = (value: string | null) => {
+  if (!value) return "Chưa có";
 
-  if (breakdown?.district_score > 0 || reasons.some((reason: string) => reason.includes("District"))) {
-    labels.push("Đúng quận");
-  }
-
-  if (breakdown?.price_score > 0 || reasons.some((reason: string) => reason.includes("Giá"))) {
-    labels.push("Giá gần ngân sách");
-  }
-
-  if (breakdown?.area_score > 0 || reasons.some((reason: string) => reason.includes("Area"))) {
-    labels.push("Diện tích phù hợp");
-  }
-
-  if (breakdown?.business_score > 0) {
-    const businessReason = reasons.find((reason: string) =>
-      /spa|cafe|office|restaurant|business|MT\/MB|VP|frontage|Premise/i.test(reason)
-    );
-    const businessType =
-      businessReason?.match(/spa|cafe|office|restaurant/i)?.[0] || "kinh doanh";
-
-    labels.push(`Phù hợp ${businessType}`);
-  }
-
-  return labels;
-};
-
-const normalizeText = (value: string) =>
-  value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\u0111/g, "d")
-    .replace(/\u0110/g, "D")
-    .toLowerCase();
-
-const stripKnownPrefix = (value: string) => {
-  const normalized = normalizeText(value);
-  const colonIndex = value.indexOf(":");
-
-  if (
-    colonIndex >= 0 &&
-    /^(nhu\s*cau|need|thoi\s*gian.*(?:thue|mua)|rental_time|hen\s*cham\s*soc\s*lai|follow_up_date|ghi\s*chu|note)\s*:/.test(normalized)
-  ) {
-    return value.slice(colonIndex + 1).trim();
-  }
-
-  return value.trim();
-};
-
-const parseCrmFields = (note: string | null): CrmFields => {
-  const fields: CrmFields = {
-    need: "",
-    rentalTime: "",
-    followUpDate: "",
-    note: "",
-  };
-
-  if (!note) {
-    return fields;
-  }
-
-  const unlabeledParts: string[] = [];
-  const parts = note
-    .split("|")
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  for (const part of parts) {
-    const keyValueMatch = part.match(/^\s*([a-z_]+)\s*=\s*(.+)\s*$/i);
-
-    if (keyValueMatch) {
-      const key = keyValueMatch[1].toLowerCase();
-      const value = stripKnownPrefix(keyValueMatch[2]);
-
-      if (key === "need") {
-        fields.need = value;
-      } else if (key === "rental_time") {
-        fields.rentalTime = value;
-      } else if (key === "follow_up_date") {
-        fields.followUpDate = value;
-      } else if (key === "note") {
-        fields.note = value;
-      }
-
-      continue;
-    }
-
-    const normalized = normalizeText(part);
-
-    if (/^nhu\s*cau\s*:/.test(normalized)) {
-      fields.need = stripKnownPrefix(part);
-    } else if (/^thoi\s*gian.*(?:thue|mua)\s*:/.test(normalized)) {
-      fields.rentalTime = stripKnownPrefix(part);
-    } else if (/^hen\s*cham\s*soc\s*lai\s*:/.test(normalized)) {
-      fields.followUpDate = stripKnownPrefix(part);
-    } else if (/^ghi\s*chu\s*:/.test(normalized)) {
-      fields.note = stripKnownPrefix(part);
-    } else {
-      unlabeledParts.push(stripKnownPrefix(part));
-    }
-  }
-
-  if (!fields.need && unlabeledParts.length > 0) {
-    fields.need = unlabeledParts.join(" | ");
-  } else if (unlabeledParts.length > 0) {
-    fields.note = [fields.note, ...unlabeledParts].filter(Boolean).join(" | ");
-  }
-
-  return fields;
-};
-
-const createLocalDate = (value: string) => {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-
-  if (!match) {
-    return null;
-  }
-
-  const year = Number(match[1]);
-  const monthIndex = Number(match[2]) - 1;
-  const day = Number(match[3]);
-  const date = new Date(year, monthIndex, day);
-
-  if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== monthIndex ||
-    date.getDate() !== day
-  ) {
-    return null;
-  }
-
-  return date;
-};
-
-const startOfLocalDay = (date: Date) =>
-  new Date(date.getFullYear(), date.getMonth(), date.getDate());
-
-const extractFollowUp = (note: string | null, crmFields?: CrmFields) => {
-  if (crmFields?.followUpDate) {
-    return createLocalDate(crmFields.followUpDate);
-  }
-
-  if (!note) {
-    return null;
-  }
-
-  const normalized = normalizeText(note);
-  const labelMatch = normalized.match(
-    /(?:hen|lich|ngay)?\s*(?:cham soc|goi|lien he|follow[\s-]?up)(?:\s*lai)?\s*:?\s*(\d{4}-\d{2}-\d{2})/
-  );
-  const fallbackMatch = normalized.match(/\b(\d{4}-\d{2}-\d{2})\b/);
-  const value = labelMatch?.[1] || fallbackMatch?.[1] || "";
-
-  return createLocalDate(value);
-};
-
-const formatFollowUpDate = (date: Date | null) => {
-  if (!date) {
-    return "Chưa có";
-  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Chưa có";
 
   return date.toLocaleDateString("vi-VN");
 };
 
-const getFollowUpStatus = (date: Date | null, today: Date): FollowUpStatus => {
-  if (!date) {
-    return "none";
-  }
+const getInitials = (lead: Lead) =>
+  (lead.fullname || "Khách")
+    .trim()
+    .slice(0, 1)
+    .toUpperCase();
 
-  const followUpDay = startOfLocalDay(date).getTime();
-  const todayDay = startOfLocalDay(today).getTime();
+const getLatestActivityDate = (lead: Lead, activities: LeadActivity[]) =>
+  activities[0]?.created_at || lead.created_at;
 
-  if (followUpDay < todayDay) {
-    return "overdue";
-  }
-
-  if (followUpDay === todayDay) {
-    return "today";
-  }
-
-  return "upcoming";
-};
-
-const getStatusLabel = (status: FollowUpStatus) => {
-  if (status === "today") {
-    return "Hôm nay";
-  }
-
-  if (status === "overdue") {
-    return "Quá hạn";
-  }
-
-  if (status === "upcoming") {
-    return "Sắp tới";
-  }
-
-  return "";
-};
-
-const getStatusStyle = (status: FollowUpStatus) => {
-  if (status === "overdue") {
-    return { background: "#fee2e2", color: "#991b1b" };
-  }
-
-  if (status === "today") {
-    return { background: "#dcfce7", color: "#166534" };
-  }
-
-  return { background: "#dbeafe", color: "#1e40af" };
-};
-
-const formatActivityDate = (value: string | null) => {
-  if (!value) {
-    return "";
-  }
-
-  return new Date(value).toLocaleString("vi-VN");
-};
-
-const getDaysSince = (value: string | null | undefined) => {
-  if (!value) {
-    return 0;
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return 0;
-  }
-
-  const diff = Date.now() - date.getTime();
-
-  return Math.max(0, Math.floor(diff / 86400000));
-};
-
-const buildRequirementQuery = (lead: Lead, crmFields: CrmFields) =>
-  [
-    formatDistricts(lead.preferred_districts),
-    crmFields.need,
-    getPriceValue(lead.max_price) > 0 ? `${getPriceValue(lead.max_price)}` : "",
-    crmFields.rentalTime,
-  ]
-    .filter(Boolean)
-    .join(" ");
-
-const buildNeedSummary = (lead: Lead, crmFields: CrmFields) => {
-  const parts = [
-    formatDistricts(lead.preferred_districts)
-      ? `khu vực ${formatDistricts(lead.preferred_districts)}`
-      : "",
-    crmFields.need ? `nhu cầu ${crmFields.need}` : "",
-    getPriceValue(lead.max_price) > 0
-      ? `ngân sách tối đa ${formatPrice(lead.max_price)}`
-      : "",
-    crmFields.rentalTime ? `thời gian thuê/mua ${crmFields.rentalTime}` : "",
-  ].filter(Boolean);
-
-  return parts.join(", ") || "nhu cầu đang tìm";
-};
-
-const buildCustomerShareMessage = (
-  item: LeadWithFollowUp,
-  matches: any[]
-) => {
-  const topMatches = matches.slice(0, 3);
-  const lines = [
-    `Em gửi anh/chị một số căn phù hợp với ${buildNeedSummary(item.lead, item.crmFields)}:`,
-    "",
-    ...topMatches.flatMap((match, index) => {
-      const listing = match.listing || match;
-      const reasons = getReasonLabels(match);
-      const location = [listing.district, listing.address].filter(Boolean).join(" - ");
-
-      return [
-        `${index + 1}. ${listing.title || "Bất động sản phù hợp"}`,
-        location ? `Khu vực: ${location}` : "",
-        `Giá: ${formatListingPrice(listing.price)}`,
-        listing.area ? `Diện tích: ${listing.area}m²` : "",
-        reasons.length > 0
-          ? `Lý do phù hợp: ${reasons.join(", ")}`
-          : "Lý do phù hợp: phù hợp với nhu cầu đã lưu",
-        "",
-      ].filter(Boolean);
-    }),
-    "Anh/chị xem qua, nếu ưng căn nào em gửi thêm hình ảnh và hẹn lịch xem nhà.",
-  ];
-
-  return lines.join("\n");
-};
-
-function CustomerCard({
-  item,
-  index,
-  composing,
-  onComposeMessage,
-  onFindMatches,
-  onOpenNote,
-  onStatusChange,
-  onAssistantProfileSaved,
-}: {
-  item: LeadWithFollowUp;
-  index: number;
-  composing: boolean;
-  onComposeMessage: (item: LeadWithFollowUp) => void;
-  onFindMatches: (item: LeadWithFollowUp, href: string) => void;
-  onOpenNote: (item: LeadWithFollowUp) => void;
-  onStatusChange: (item: LeadWithFollowUp, status: string) => void;
-  onAssistantProfileSaved: (
-    leadId: string,
-    updatedNote: string | null,
-    activity?: LeadActivity,
-    leadScoring?: { lead_score?: number; lead_temperature?: string }
-  ) => void;
-}) {
-  const lead = item.lead;
-  const crmFields = item.crmFields;
-  const id = lead.id || `lead-${index}`;
-  const districts = formatDistricts(lead.preferred_districts);
-  const requirementQuery = buildRequirementQuery(lead, crmFields);
-  const searchHref = requirementQuery
-    ? `/?q=${encodeURIComponent(requirementQuery)}`
-    : "/";
-  const statusLabel = getStatusLabel(item.followUpStatus);
-  const leadStatus = lead.status || LEAD_STATUSES[0];
-  const temperature = getLeadTemperature(lead);
-  const leadScore = getLeadScore(lead);
-  const latestActivity = item.activities[0] || null;
-  const nextBestAction = calculateNextBestAction({
-    lead_score: leadScore,
-    lead_temperature: temperature,
-    latest_activity: latestActivity,
-    days_since_last_activity: getDaysSince(latestActivity?.created_at || lead.created_at),
-    status: lead.status,
-    phone: lead.phone,
-  });
-  const followUpPlan = item.followUpPlan;
-  const [customerMessage, setCustomerMessage] = useState("");
-  const [assistantLoading, setAssistantLoading] = useState(false);
-  const [assistantError, setAssistantError] = useState("");
-  const [assistantResult, setAssistantResult] =
-    useState<SalesAssistantResult | null>(null);
-  const [copiedReplyIndex, setCopiedReplyIndex] = useState<number | null>(null);
-
-  const requestAssistant = async () => {
-    if (!customerMessage.trim()) {
-      setAssistantError("Nhập tin nhắn khách vừa gửi.");
-      return;
-    }
-
-    setAssistantLoading(true);
-    setAssistantError("");
-    setCopiedReplyIndex(null);
-
-    try {
-      const res = await fetch("/api/ai-sales-assistant", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          message: customerMessage,
-          lead,
-          history: item.activities.map((activity) => ({
-            type: activity.type,
-            content: activity.content,
-            created_at: activity.created_at,
-          })),
-        }),
-      });
-      const json = await res.json();
-
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || "Không tạo được gợi ý trả lời.");
-      }
-
-      setAssistantResult(json.assistant);
-
-      if (json.updated_note || json.activity || json.lead_scoring) {
-        onAssistantProfileSaved(lead.id, json.updated_note || lead.note, json.activity, json.lead_scoring);
-      }
-    } catch (err) {
-      setAssistantError(err instanceof Error ? err.message : "Không tạo được gợi ý trả lời.");
-    } finally {
-      setAssistantLoading(false);
-    }
-  };
-
-  const copySuggestedReply = async (reply: string, index: number) => {
-    await navigator.clipboard.writeText(reply);
-    setCopiedReplyIndex(index);
-  };
-
+function Sidebar() {
   return (
-    <article
-      id={`lead-${id}`}
-      style={{ background: "#fff", borderRadius: 8, padding: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 12 }}>
-        <strong style={{ fontSize: 18 }}>{lead.fullname || "Chưa có tên"}</strong>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <span
-            title={`Lead score: ${leadScore}`}
-            style={{
-              background: temperature === "Hot" ? "#fee2e2" : temperature === "Warm" ? "#fef3c7" : "#f3f4f6",
-              color: temperature === "Hot" ? "#991b1b" : temperature === "Warm" ? "#92400e" : "#374151",
-              borderRadius: 999,
-              padding: "5px 9px",
-              fontSize: 12,
-              fontWeight: 700,
-              whiteSpace: "nowrap",
-            }}
+    <aside className="admin-sidebar">
+      <div className="brand">
+        <span>⌂</span>
+        <strong>KhoTinBDS</strong>
+      </div>
+      <nav>
+        {menuItems.map((item) => (
+          <Link
+            key={`${item.label}-${item.href}`}
+            href={item.href}
+            className={item.active ? "nav-item active" : "nav-item"}
           >
-            {getLeadTemperatureLabel(temperature)}
-          </span>
-        {statusLabel && (
-          <span
-            style={{
-              ...getStatusStyle(item.followUpStatus),
-              borderRadius: 999,
-              padding: "5px 9px",
-              fontSize: 12,
-              fontWeight: 700,
-              whiteSpace: "nowrap",
-            }}
-          >
-            {statusLabel}
-          </span>
-        )}
-          <span
-            title={nextBestAction.reason}
-            style={{
-              background:
-                nextBestAction.priority === "High"
-                  ? "#fee2e2"
-                  : nextBestAction.priority === "Medium"
-                    ? "#dbeafe"
-                    : "#f3f4f6",
-              color:
-                nextBestAction.priority === "High"
-                  ? "#991b1b"
-                  : nextBestAction.priority === "Medium"
-                    ? "#1e40af"
-                    : "#374151",
-              borderRadius: 999,
-              padding: "5px 9px",
-              fontSize: 12,
-              fontWeight: 700,
-              whiteSpace: "nowrap",
-            }}
-          >
-            {getNextActionLabel(nextBestAction.next_action)}
-          </span>
-        </div>
-      </div>
-
-      <div
-        style={{
-          background: "#f9fafb",
-          border: "1px solid #e5e7eb",
-          borderRadius: 8,
-          padding: 10,
-          marginBottom: 12,
-        }}
-      >
-        <div style={{ color: "#6b7280", fontSize: 13, marginBottom: 4 }}>
-          next_action - {nextBestAction.priority}
-        </div>
-        <strong>{getNextActionLabel(nextBestAction.next_action)}</strong>
-        <div style={{ color: "#4b5563", marginTop: 4, lineHeight: 1.4 }}>
-          {nextBestAction.reason}
-        </div>
-      </div>
-
-      <div
-        style={{
-          background: "#f8fafc",
-          border: "1px solid #e2e8f0",
-          borderRadius: 8,
-          padding: 10,
-          marginBottom: 12,
-        }}
-      >
-        <div style={{ color: "#6b7280", fontSize: 13, marginBottom: 4 }}>
-          AI follow-up - {followUpPlan.priority}
-        </div>
-        <strong>
-          {followUpPlan.next_follow_up_date
-            ? `Chăm sóc: ${followUpPlan.next_follow_up_date}`
-            : "Chưa cần chăm sóc"}
-        </strong>
-        <div style={{ color: "#4b5563", marginTop: 4, lineHeight: 1.4 }}>
-          {followUpPlan.follow_up_reason}
-        </div>
-      </div>
-
-      <div
-        style={{
-          background: "#fff7ed",
-          border: "1px solid #fed7aa",
-          borderRadius: 8,
-          padding: 10,
-          marginBottom: 12,
-        }}
-      >
-        <div style={{ color: "#9a3412", fontSize: 13, marginBottom: 4 }}>
-          Phân công phụ trách
-        </div>
-        <strong>{item.assignment.assigned_to}</strong>
-        <div style={{ color: "#7c2d12", marginTop: 4, lineHeight: 1.4 }}>
-          {item.assignment.assignment_reason}
-        </div>
-      </div>
-
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
-        <label style={{ display: "grid", gap: 5, minWidth: 220 }}>
-          <span style={{ color: "#6b7280", fontSize: 13 }}>Trạng thái CRM</span>
-          <select
-            value={leadStatus}
-            onChange={(event) => onStatusChange(item, event.target.value)}
-            style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff" }}
-          >
-            {LEAD_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, alignItems: "start" }}>
-        <div>
-          <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>Tên</p>
-          <span>{lead.fullname || "Chưa có tên"}</span>
-        </div>
-        <div>
-          <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>SĐT</p>
-          <span>{lead.phone || "Chưa có"}</span>
-        </div>
-        <div>
-          <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>Khu vực</p>
-          <span>{districts || "Chưa có"}</span>
-        </div>
-        <div>
-          <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>Nhu cầu</p>
-          <span>{crmFields.need || "Chưa có"}</span>
-        </div>
-        <div>
-          <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>Thời gian thuê/mua</p>
-          <span>{crmFields.rentalTime || "Chưa có"}</span>
-        </div>
-        <div>
-          <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>Ngân sách</p>
-          <span>{formatPrice(lead.max_price)}</span>
-        </div>
-        <div>
-          <p style={{ margin: "0 0 4px", color: "#6b7280", fontSize: 13 }}>Ngày hẹn chăm sóc</p>
-          <span>{item.followUpText}</span>
-        </div>
-      </div>
-
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
-        {lead.phone && (
-          <a
-            href={`tel:${lead.phone}`}
-            style={{ background: "#16a34a", color: "#fff", textDecoration: "none", padding: "10px 12px", borderRadius: 8, fontWeight: 700 }}
-          >
-            Gọi điện
-          </a>
-        )}
-
-        <a
-          href={searchHref}
-          onClick={(event) => {
-            event.preventDefault();
-            onFindMatches(item, searchHref);
-          }}
-          style={{ background: "#2563eb", color: "#fff", textDecoration: "none", padding: "10px 12px", borderRadius: 8, fontWeight: 700 }}
-        >
-          Tìm nhà phù hợp
-        </a>
-
-        <button
-          type="button"
-          onClick={() => onComposeMessage(item)}
-          disabled={composing}
-          style={{ background: "#111827", color: "#fff", border: "none", padding: "10px 12px", borderRadius: 8, fontWeight: 700, cursor: composing ? "default" : "pointer", opacity: composing ? 0.7 : 1 }}
-        >
-          {composing ? "Đang soạn..." : "Soạn tin gửi khách"}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => onOpenNote(item)}
-          style={{ background: "#fff", color: "#111827", border: "1px solid #d1d5db", padding: "10px 12px", borderRadius: 8, fontWeight: 700, cursor: "pointer" }}
-        >
-          + Ghi chú chăm sóc
-        </button>
-      </div>
-
-      <div style={{ borderTop: "1px solid #e5e7eb", marginTop: 14, paddingTop: 12 }}>
-        <p style={{ margin: "0 0 8px", color: "#374151", fontWeight: 700 }}>Hoạt động gần nhất</p>
-        {item.activities.length > 0 ? (
-          <div style={{ display: "grid", gap: 8 }}>
-            {item.activities.slice(0, 3).map((activity) => (
-              <div key={activity.id} style={{ background: "#f9fafb", borderRadius: 8, padding: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
-                  <strong>{activity.type}</strong>
-                  <span style={{ color: "#6b7280", fontSize: 12 }}>
-                    {formatActivityDate(activity.created_at)}
-                  </span>
-                </div>
-                <div style={{ color: "#374151", lineHeight: 1.45 }}>{activity.content}</div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p style={{ margin: 0, color: "#6b7280" }}>Chưa có hoạt động.</p>
-        )}
-      </div>
-
-      <div style={{ borderTop: "1px solid #e5e7eb", marginTop: 14, paddingTop: 12 }}>
-        <p style={{ margin: "0 0 8px", color: "#374151", fontWeight: 700 }}>AI gợi ý trả lời</p>
-        <textarea
-          placeholder="Tin nhắn khách vừa gửi"
-          value={customerMessage}
-          onChange={(event) => {
-            setCustomerMessage(event.target.value);
-            setAssistantError("");
-          }}
-          style={{ width: "100%", boxSizing: "border-box", minHeight: 92, padding: 12, borderRadius: 8, border: "1px solid #d1d5db", lineHeight: 1.5, fontSize: 15 }}
-        />
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 10 }}>
-          <button
-            type="button"
-            onClick={requestAssistant}
-            disabled={assistantLoading}
-            style={{ background: "#7c3aed", color: "#fff", border: "none", padding: "10px 12px", borderRadius: 8, fontWeight: 700, cursor: assistantLoading ? "default" : "pointer", opacity: assistantLoading ? 0.7 : 1 }}
-          >
-            {assistantLoading ? "Đang gợi ý..." : "AI gợi ý trả lời"}
-          </button>
-          {assistantError && (
-            <span style={{ color: "#991b1b", fontWeight: 700 }}>{assistantError}</span>
-          )}
-        </div>
-
-        {assistantResult && (
-          <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
-            <div style={{ background: "#f9fafb", borderRadius: 8, padding: 10 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
-                <div>
-                  <strong>Ý định khách</strong>
-                  <p style={{ margin: "5px 0 0", color: "#374151" }}>{assistantResult.customer_intent || "Chưa rõ"}</p>
-                </div>
-                <div>
-                  <strong>Phản đối</strong>
-                  <p style={{ margin: "5px 0 0", color: "#374151" }}>{assistantResult.objection || "Không có"}</p>
-                </div>
-                <div>
-                  <strong>Câu hỏi nên hỏi tiếp</strong>
-                  <p style={{ margin: "5px 0 0", color: "#374151" }}>{assistantResult.next_best_question}</p>
-                </div>
-              </div>
-              <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-                <div>
-                  <strong>Known Requirements</strong>
-                  <div style={{ display: "grid", gap: 5, marginTop: 6 }}>
-                    {SALES_REQUIREMENT_ORDER.filter(
-                      (key) => assistantResult.known_requirements[key]
-                    ).map((key) => (
-                      <div key={key} style={{ color: "#374151" }}>
-                        {SALES_REQUIREMENT_LABELS[key]}: {assistantResult.known_requirements[key]}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <strong>Missing Requirements</strong>
-                  <div style={{ display: "grid", gap: 5, marginTop: 6, color: "#6b7280" }}>
-                    {assistantResult.missing_requirements.length > 0 ? (
-                      assistantResult.missing_requirements.map((requirement) => (
-                        <div key={requirement}>{requirement}</div>
-                      ))
-                    ) : (
-                      <div>Không còn thiếu thông tin chính.</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {assistantResult.suggested_replies.map((reply, replyIndex) => (
-              <div key={`${replyIndex}-${reply}`} style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: 10 }}>
-                <p style={{ marginTop: 0, lineHeight: 1.5 }}>{reply}</p>
-                <button
-                  type="button"
-                  onClick={() => copySuggestedReply(reply, replyIndex)}
-                  style={{ background: "#111827", color: "#fff", border: "none", padding: "8px 10px", borderRadius: 8, fontWeight: 700, cursor: "pointer" }}
-                >
-                  {copiedReplyIndex === replyIndex ? "Đã copy" : "Copy"}
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </article>
+            <span>{item.icon}</span>
+            {item.label}
+          </Link>
+        ))}
+      </nav>
+    </aside>
   );
 }
 
-function ReminderSection({
-  title,
-  items,
-  composingLeadId,
-  onComposeMessage,
-  onFindMatches,
-  onOpenNote,
-  onStatusChange,
-  onAssistantProfileSaved,
-}: {
-  title: string;
-  items: LeadWithFollowUp[];
-  composingLeadId: string;
-  onComposeMessage: (item: LeadWithFollowUp) => void;
-  onFindMatches: (item: LeadWithFollowUp, href: string) => void;
-  onOpenNote: (item: LeadWithFollowUp) => void;
-  onStatusChange: (item: LeadWithFollowUp, status: string) => void;
-  onAssistantProfileSaved: (
-    leadId: string,
-    updatedNote: string | null,
-    activity?: LeadActivity,
-    leadScoring?: { lead_score?: number; lead_temperature?: string }
-  ) => void;
-}) {
+function KpiCard({ label, value, sub }: { label: string; value: string | number; sub: string }) {
   return (
-    <section style={{ display: "grid", gap: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <h2 style={{ margin: 0, fontSize: 22 }}>{title}</h2>
-        <span style={{ background: "#e5e7eb", color: "#374151", borderRadius: 999, padding: "4px 9px", fontSize: 12, fontWeight: 700 }}>
-          {items.length}
-        </span>
-      </div>
+    <div className="kpi-card">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{sub}</small>
+    </div>
+  );
+}
 
-      {items.length > 0 ? (
-        <div style={{ display: "grid", gap: 12 }}>
-          {items.map((item, index) => (
-            <CustomerCard
-              key={item.lead.id || `${title}-${index}`}
-              item={item}
-              index={index}
-              composing={composingLeadId === item.lead.id}
-              onComposeMessage={onComposeMessage}
-              onFindMatches={onFindMatches}
-              onOpenNote={onOpenNote}
-              onStatusChange={onStatusChange}
-              onAssistantProfileSaved={onAssistantProfileSaved}
-            />
-          ))}
-        </div>
-      ) : (
-        <div style={{ background: "#fff", padding: 16, borderRadius: 8, color: "#6b7280" }}>
-          Không có khách trong nhóm này.
-        </div>
-      )}
+function PipelineCard({ stage, items }: { stage: PipelineStage; items: CrmLead[] }) {
+  return (
+    <section className="pipeline-col">
+      <div className="pipeline-head">
+        <strong>{stage}</strong>
+        <span>{items.length}</span>
+      </div>
+      <div className="pipeline-list">
+        {items.slice(0, 3).map((item) => (
+          <Link
+            className="pipeline-lead"
+            href={`/admin/customers/${item.lead.id}`}
+            key={`${stage}-${item.lead.id}`}
+          >
+            <div className="mini-avatar">{getInitials(item.lead)}</div>
+            <div>
+              <strong>{item.lead.fullname || "Khách chưa có tên"}</strong>
+              <p>{getCustomerMainNeed(item.lead)}</p>
+              <small>{getCustomerNeedTags(item.lead).slice(0, 2).join(" • ") || "Đang bổ sung nhu cầu"}</small>
+            </div>
+          </Link>
+        ))}
+        {items.length === 0 && <div className="empty-mini">Chưa có khách.</div>}
+      </div>
+      <Link className="view-all" href={`/admin/customers?stage=${encodeURIComponent(stage)}`}>
+        Xem tất cả
+      </Link>
     </section>
   );
 }
 
+function CustomerRow({ item }: { item: CrmLead }) {
+  const lead = item.lead;
+  const tags = getCustomerNeedTags(lead);
+
+  return (
+    <tr>
+      <td>
+        <Link className="customer-cell" href={`/admin/customers/${lead.id}`}>
+          <span className="avatar">{getInitials(lead)}</span>
+          <span>
+            <strong>{lead.fullname || "Khách chưa có tên"}</strong>
+            <small>{lead.phone || "Chưa có SĐT"}</small>
+          </span>
+        </Link>
+      </td>
+      <td>
+        <strong className="need-title">{getCustomerMainNeed(lead)}</strong>
+        <div className="tag-row">
+          {tags.slice(0, 3).map((tag) => (
+            <span key={`${lead.id}-${tag}`}>{tag}</span>
+          ))}
+        </div>
+      </td>
+      <td>{formatCustomerDistricts(lead.preferred_districts) || "Chưa rõ"}</td>
+      <td>{formatCustomerBudget(lead.max_price)}</td>
+      <td>
+        <span className={`temp ${item.temperature.toLowerCase()}`}>{item.temperature}</span>
+      </td>
+      <td>{lead.status || item.stage}</td>
+      <td>{item.assignment.assigned_to}</td>
+      <td>{getDateLabel(item.updatedAt)}</td>
+      <td>
+        <div className="actions">
+          <Link href={`/admin/customers/${lead.id}`}>Xem</Link>
+          {lead.phone && <a href={`tel:${lead.phone}`}>Gọi</a>}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function exportCsv(items: CrmLead[]) {
+  const rows = [
+    ["Khách hàng", "SĐT", "Nhu cầu", "Khu vực", "Ngân sách", "Mức độ", "Trạng thái"],
+    ...items.map((item) => [
+      item.lead.fullname || "",
+      item.lead.phone || "",
+      getCustomerMainNeed(item.lead),
+      formatCustomerDistricts(item.lead.preferred_districts),
+      formatCustomerBudget(item.lead.max_price),
+      item.temperature,
+      item.lead.status || item.stage,
+    ]),
+  ];
+  const csv = rows
+    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+    .join("\n");
+  const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = "crm-customers.csv";
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 function CustomersContent() {
-  const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [activities, setActivities] = useState<LeadActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [composeState, setComposeState] = useState<ComposeState>({
-    open: false,
-    message: "",
-    copyMessage: "",
-  });
-  const [composingLeadId, setComposingLeadId] = useState("");
-  const [noteModal, setNoteModal] = useState<NoteModalState>({
-    open: false,
-    leadId: "",
-    type: ACTIVITY_TYPES[0],
-    content: "",
-    saving: false,
-    error: "",
-  });
+  const [urlFilter, setUrlFilter] = useState("");
+  const [stageFilter, setStageFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("Tất cả");
+  const [temperature, setTemperature] = useState("Tất cả");
+  const [area, setArea] = useState("");
+  const [source, setSource] = useState("");
+  const [agent, setAgent] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setUrlFilter(params.get("filter") || "");
+    setStageFilter(params.get("stage") || "");
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -1026,27 +298,17 @@ function CustomersContent() {
     fetch("/api/leads/list")
       .then((res) => res.json())
       .then((json) => {
-        if (!mounted) {
-          return;
-        }
-
+        if (!mounted) return;
         setLeads(Array.isArray(json.leads) ? json.leads : []);
         setActivities(Array.isArray(json.activities) ? json.activities : []);
         setError(json.success ? "" : json.error || "Không tải được danh sách khách.");
       })
       .catch((err) => {
-        if (!mounted) {
-          return;
-        }
-
-        setLeads([]);
-        setActivities([]);
+        if (!mounted) return;
         setError(err instanceof Error ? err.message : "Không tải được danh sách khách.");
       })
       .finally(() => {
-        if (mounted) {
-          setLoading(false);
-        }
+        if (mounted) setLoading(false);
       });
 
     return () => {
@@ -1054,522 +316,245 @@ function CustomersContent() {
     };
   }, []);
 
-  const today = new Date();
-  const assignmentMap = buildLeadAssignments(
-    leads.map((lead) => ({
-      id: lead.id,
-      preferred_districts: lead.preferred_districts,
-      lead_temperature: getLeadTemperature(lead),
-      lead_score: getLeadScore(lead),
-    }))
-  );
-  const leadsWithFollowUp = leads.map((lead) => {
-    const crmFields = parseCrmFields(lead.note);
-    const followUpDate = extractFollowUp(lead.note, crmFields);
-    const followUpStatus = getFollowUpStatus(followUpDate, today);
-    const leadActivities = activities
-      .filter((activity) => activity.lead_id === lead.id)
-      .sort(
-        (a, b) =>
-          new Date(b.created_at || 0).getTime() -
-          new Date(a.created_at || 0).getTime()
-      );
-    const latestActivity = leadActivities[0] || null;
-    const followUpPlan = calculateFollowUp({
-      latest_activity: latestActivity,
-      days_since_last_activity: getDaysSince(latestActivity?.created_at || lead.created_at),
-      status: lead.status,
-    });
-
-    return {
-      lead,
-      crmFields,
-      followUpDate,
-      followUpText: formatFollowUpDate(followUpDate),
-      followUpStatus,
-      followUpPlan,
-      assignment: assignmentMap[lead.id] || {
-        assigned_to: "Chưa phân công",
-        assignment_reason: "Chưa đủ dữ liệu để phân công.",
-      },
-      activities: leadActivities,
-    };
-  });
-
-  const statusCounts = LEAD_STATUSES.map((status) => ({
-    status,
-    count: leads.filter((lead) => (lead.status || LEAD_STATUSES[0]) === status).length,
-  }));
-
-  const todayItems = leadsWithFollowUp
-    .filter((item) => item.followUpStatus === "today" || item.followUpStatus === "overdue")
-    .sort((a, b) => compareLeadTemperature(a, b) || (a.followUpDate?.getTime() || 0) - (b.followUpDate?.getTime() || 0));
-  const upcomingItems = leadsWithFollowUp
-    .filter((item) => item.followUpStatus === "upcoming")
-    .sort((a, b) => compareLeadTemperature(a, b) || (a.followUpDate?.getTime() || 0) - (b.followUpDate?.getTime() || 0));
-  const unscheduledItems = leadsWithFollowUp
-    .filter((item) => item.followUpStatus === "none")
-    .sort(compareLeadTemperature);
-  const followUpDueTodayCount = leadsWithFollowUp.filter(
-    (item) =>
-      item.followUpPlan.next_follow_up_date &&
-      createLocalDate(item.followUpPlan.next_follow_up_date) &&
-      startOfLocalDay(createLocalDate(item.followUpPlan.next_follow_up_date)!).getTime() <=
-        startOfLocalDay(today).getTime()
-  ).length;
-
-  const addActivity = async (leadId: string, type: string, content: string) => {
-    const res = await fetch("/api/lead-activities", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        lead_id: leadId,
-        type,
-        content,
-      }),
-    });
-    const json = await res.json();
-
-    if (!res.ok || !json.success) {
-      throw new Error(json.error || "Không lưu được hoạt động.");
-    }
-
-    if (json.activity) {
-      setActivities((current) => [json.activity, ...current]);
-    }
-
-    return json.activity as LeadActivity | undefined;
-  };
-
-  const updateLeadStatus = async (item: LeadWithFollowUp, status: string) => {
-    const lead = item.lead;
-
-    if (!lead.id || status === (lead.status || LEAD_STATUSES[0])) {
-      return;
-    }
-
-    try {
-      const res = await fetch("/api/leads/status", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          lead_id: lead.id,
-          status,
-        }),
-      });
-      const json = await res.json();
-
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || "Không cập nhật được trạng thái.");
-      }
-
-      setLeads((current) =>
-        current.map((currentLead) =>
-          currentLead.id === lead.id
-            ? {
-                ...currentLead,
-                status,
-                lead_score: json.lead?.lead_score ?? currentLead.lead_score,
-                lead_temperature: json.lead?.lead_temperature ?? currentLead.lead_temperature,
-              }
-            : currentLead
-        )
-      );
-
-      if (json.activity) {
-        setActivities((current) => [json.activity, ...current]);
-      }
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Không cập nhật được trạng thái.");
-    }
-  };
-
-  const openNoteModal = (item: LeadWithFollowUp) => {
-    setNoteModal({
-      open: true,
-      leadId: item.lead.id,
-      type: ACTIVITY_TYPES[0],
-      content: "",
-      saving: false,
-      error: "",
-    });
-  };
-
-  const saveNoteActivity = async () => {
-    if (!noteModal.content.trim()) {
-      setNoteModal((current) => ({
-        ...current,
-        error: "Nhập nội dung chăm sóc.",
-      }));
-      return;
-    }
-
-    setNoteModal((current) => ({
-      ...current,
-      saving: true,
-      error: "",
-    }));
-
-    try {
-      await addActivity(noteModal.leadId, noteModal.type, noteModal.content.trim());
-      setNoteModal({
-        open: false,
-        leadId: "",
-        type: ACTIVITY_TYPES[0],
-        content: "",
-        saving: false,
-        error: "",
-      });
-    } catch (err) {
-      setNoteModal((current) => ({
-        ...current,
-        saving: false,
-        error: err instanceof Error ? err.message : "Không lưu được ghi chú.",
-      }));
-    }
-  };
-
-  const findMatchesForLead = async (item: LeadWithFollowUp, href: string) => {
-    try {
-      await addActivity(item.lead.id, "Ghi chú", "Tìm nhà phù hợp");
-    } catch (err) {
-      console.error(err);
-    } finally {
-      router.push(href);
-    }
-  };
-
-  const updateAssistantProfileState = (
-    leadId: string,
-    updatedNote: string | null,
-    activity?: LeadActivity,
-    leadScoring?: { lead_score?: number; lead_temperature?: string }
-  ) => {
-    setLeads((current) =>
-      current.map((lead) =>
-        lead.id === leadId
-          ? {
-              ...lead,
-              note: updatedNote,
-              lead_score: leadScoring?.lead_score ?? lead.lead_score,
-              lead_temperature: leadScoring?.lead_temperature ?? lead.lead_temperature,
-            }
-          : lead
-      )
+  const crmLeads = useMemo(() => {
+    const assignmentMap = buildLeadAssignments(
+      leads.map((lead) => ({
+        id: lead.id,
+        preferred_districts: lead.preferred_districts,
+        lead_temperature: getLeadTemperature(lead),
+        lead_score: lead.lead_score || undefined,
+      }))
     );
 
-    if (activity) {
-      setActivities((current) => [activity, ...current]);
-    }
-  };
+    return leads.map((lead) => {
+      const leadActivities = activities
+        .filter((activity) => activity.lead_id === lead.id)
+        .sort(
+          (a, b) =>
+            new Date(b.created_at || 0).getTime() -
+            new Date(a.created_at || 0).getTime()
+        );
+      const leadTemperature = getLeadTemperature(lead);
 
-  const openCustomerMessage = async (item: LeadWithFollowUp) => {
-    const lead = item.lead;
-    const districts = formatDistricts(lead.preferred_districts)
-      .split(",")
-      .map((district) => district.trim())
-      .filter(Boolean);
-
-    setComposingLeadId(lead.id);
-
-    try {
-      try {
-        await addActivity(lead.id, "Đã gửi nhà", "Soạn tin gửi khách");
-      } catch (err) {
-        console.error(err);
-      }
-
-      const res = await fetch("/api/leads", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      return {
+        lead,
+        activities: leadActivities,
+        assignment: assignmentMap[lead.id] || {
+          assigned_to: "Chưa phân công",
+          assignment_reason: "Chưa đủ dữ liệu.",
         },
-        body: JSON.stringify({
-          mode: "match",
-          note: [item.crmFields.need, item.crmFields.rentalTime]
-            .filter(Boolean)
-            .join(" ") || null,
-          preferred_districts: districts,
-          max_price: getPriceValue(lead.max_price) > 0
-            ? getPriceValue(lead.max_price)
-            : null,
-        }),
-      });
-      const json = await res.json();
+        temperature: leadTemperature,
+        stage: getPipelineStage(lead, leadTemperature),
+        updatedAt: getLatestActivityDate(lead, leadActivities),
+      };
+    });
+  }, [activities, leads]);
 
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || "Không soạn được nội dung.");
-      }
+  const filteredLeads = crmLeads.filter((item) => {
+    const searchable = normalizeText([
+      item.lead.fullname,
+      item.lead.phone,
+      getCustomerMainNeed(item.lead),
+      getCustomerAISummary(item.lead).join(" "),
+      formatCustomerDistricts(item.lead.preferred_districts),
+    ].join(" "));
+    const matchesSearch = !search || searchable.includes(normalizeText(search));
+    const matchesStatus = status === "Tất cả" || (item.lead.status || item.stage) === status;
+    const matchesTemp = temperature === "Tất cả" || item.temperature === temperature;
+    const matchesArea = !area || normalizeText(formatCustomerDistricts(item.lead.preferred_districts)).includes(normalizeText(area));
+    const matchesSource = !source || normalizeText(getCustomerSource(item.lead)).includes(normalizeText(source));
+    const matchesAgent = !agent || normalizeText(item.assignment.assigned_to).includes(normalizeText(agent));
+    const matchesUrlStage = !stageFilter || item.stage === stageFilter;
 
-      setComposeState({
-        open: true,
-        message: buildCustomerShareMessage(item, json.matches || []),
-        copyMessage: "",
-      });
-    } catch (err) {
-      setComposeState({
-        open: true,
-        message: err instanceof Error ? err.message : "Không soạn được nội dung.",
-        copyMessage: "",
-      });
-    } finally {
-      setComposingLeadId("");
-    }
-  };
+    return matchesSearch && matchesStatus && matchesTemp && matchesArea && matchesSource && matchesAgent && matchesUrlStage;
+  });
 
-  const copyCustomerMessage = async () => {
-    await navigator.clipboard.writeText(composeState.message);
-    setComposeState((current) => ({
-      ...current,
-      copyMessage: "Đã copy nội dung",
-    }));
-  };
+  const hotCount = crmLeads.filter((item) => item.temperature === "Hot").length;
+  const nurturingCount = crmLeads.filter((item) => item.stage === "Đang chăm sóc").length;
+  const viewingCount = crmLeads.filter((item) => item.stage === "Hẹn xem").length;
+  const closedCount = crmLeads.filter((item) => item.stage === "Đã chốt").length;
+  const monthlyRevenue = closedCount > 0 ? `${closedCount * 35} triệu` : "0";
+
+  const pipelineGroups = pipelineStages.map((stage) => ({
+    stage,
+    items: filteredLeads
+      .filter((item) => item.stage === stage)
+      .sort((a, b) => {
+        const tempRank = { Hot: 0, Warm: 1, Cold: 2 };
+        return (
+          tempRank[a.temperature] - tempRank[b.temperature] ||
+          getCustomerPriceValue(b.lead.max_price) - getCustomerPriceValue(a.lead.max_price)
+        );
+      }),
+  }));
 
   return (
-  <div
-    style={{
-      fontFamily: "Arial",
-      minHeight: "100vh",
-      background: "#f3f4f6",
-    }}
-  >
-    <SiteNavbar />
+    <div className="crm-shell">
+      <Sidebar />
+      <main className="crm-main">
+        <header className="page-head">
+          <div>
+            <p>CRM</p>
+            <h1>Quản lý và chăm sóc khách hàng</h1>
+          </div>
+          <Link className="primary-action" href="/tim-nha">
+            Tìm nhà AI
+          </Link>
+        </header>
 
-    <main
-      style={{
-        maxWidth: 1180,
-        margin: "0 auto",
-        padding: 20,
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
-        <div>
-          <h1 style={{ marginBottom: 6 }}>Khách hàng</h1>
-          <p style={{ marginTop: 0, color: "#6b7280" }}>
-            Danh sách khách đã lưu từ form Lưu khách.
-          </p>
-        </div>
+        {urlFilter && (
+          <div className="filter-note">Đang xem bộ lọc: {urlFilter}</div>
+        )}
 
-        <Link
-          href="/admin/customers"
-          style={{ background: "#2563eb", color: "#fff", textDecoration: "none", padding: "11px 16px", borderRadius: 8, fontWeight: 700 }}
-        >
-          Thêm khách
-        </Link>
-      </div>
+        {error && <div className="error-box">{error}</div>}
 
-        {!loading && !error && leads.length > 0 && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10, marginBottom: 20 }}>
-            <div style={{ background: "#fff", borderRadius: 8, padding: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
-              <div style={{ color: "#6b7280", fontSize: 13, marginBottom: 6 }}>
-                Leads cần chăm sóc hôm nay
-              </div>
-              <strong style={{ fontSize: 24 }}>{followUpDueTodayCount}</strong>
-            </div>
-            {statusCounts.map((item) => (
-              <div key={item.status} style={{ background: "#fff", borderRadius: 8, padding: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
-                <div style={{ color: "#6b7280", fontSize: 13, marginBottom: 6 }}>{item.status}</div>
-                <strong style={{ fontSize: 24 }}>{item.count}</strong>
-              </div>
+        <section className="kpi-grid">
+          <KpiCard label="Tổng khách" value={crmLeads.length} sub="Tất cả lead đang quản lý" />
+          <KpiCard label="Hot lead" value={hotCount} sub="Cần ưu tiên hôm nay" />
+          <KpiCard label="Đang chăm sóc" value={nurturingCount} sub="Có tương tác mở" />
+          <KpiCard label="Hẹn xem" value={viewingCount} sub="Lịch hẹn/xem nhà" />
+          <KpiCard label="Đã chốt" value={closedCount} sub="Khách đã hoàn tất" />
+          <KpiCard label="Doanh số tháng" value={monthlyRevenue} sub="Tạm tính theo deal" />
+        </section>
+
+        <section className="filter-bar">
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search tên/SĐT/nhu cầu"
+          />
+          <select value={status} onChange={(event) => setStatus(event.target.value)}>
+            {statusOptions.map((item) => (
+              <option key={item}>{item}</option>
+            ))}
+          </select>
+          <select value={temperature} onChange={(event) => setTemperature(event.target.value)}>
+            {temperatureOptions.map((item) => (
+              <option key={item}>{item}</option>
+            ))}
+          </select>
+          <input value={area} onChange={(event) => setArea(event.target.value)} placeholder="Khu vực" />
+          <input value={source} onChange={(event) => setSource(event.target.value)} placeholder="Nguồn" />
+          <input value={agent} onChange={(event) => setAgent(event.target.value)} placeholder="Môi giới phụ trách" />
+          <button type="button">Bộ lọc</button>
+          <button type="button" onClick={() => exportCsv(filteredLeads)}>
+            Xuất Excel
+          </button>
+        </section>
+
+        <section className="pipeline-section">
+          <div className="section-title">
+            <h2>Pipeline khách hàng</h2>
+            <span>{filteredLeads.length} khách phù hợp bộ lọc</span>
+          </div>
+          <div className="pipeline-grid">
+            {pipelineGroups.map((group) => (
+              <PipelineCard key={group.stage} stage={group.stage} items={group.items} />
             ))}
           </div>
-        )}
+        </section>
 
-        {loading && (
-          <div style={{ background: "#fff", padding: 20, borderRadius: 10 }}>
-            Đang tải danh sách khách...
+        <section className="table-card">
+          <div className="section-title">
+            <h2>Bảng khách</h2>
+            {loading && <span>Đang tải dữ liệu...</span>}
           </div>
-        )}
-
-        {!loading && error && (
-          <div style={{ background: "#fee2e2", color: "#991b1b", padding: 14, borderRadius: 8, marginBottom: 16 }}>
-            Không tải được danh sách khách: {error}
-          </div>
-        )}
-
-        {!loading && !error && leads.length === 0 && (
-          <div style={{ background: "#fff", padding: 20, borderRadius: 10 }}>
-            Chưa có khách hàng nào được lưu.
-          </div>
-        )}
-
-        {!loading && !error && leads.length > 0 && (
-          <div style={{ display: "grid", gap: 24 }}>
-            <ReminderSection
-              title="Cần chăm sóc hôm nay"
-              items={todayItems}
-              composingLeadId={composingLeadId}
-              onComposeMessage={openCustomerMessage}
-              onFindMatches={findMatchesForLead}
-              onOpenNote={openNoteModal}
-              onStatusChange={updateLeadStatus}
-              onAssistantProfileSaved={updateAssistantProfileState}
-            />
-            <ReminderSection
-              title="Sắp tới"
-              items={upcomingItems}
-              composingLeadId={composingLeadId}
-              onComposeMessage={openCustomerMessage}
-              onFindMatches={findMatchesForLead}
-              onOpenNote={openNoteModal}
-              onStatusChange={updateLeadStatus}
-              onAssistantProfileSaved={updateAssistantProfileState}
-            />
-            <ReminderSection
-              title="Chưa có lịch hẹn"
-              items={unscheduledItems}
-              composingLeadId={composingLeadId}
-              onComposeMessage={openCustomerMessage}
-              onFindMatches={findMatchesForLead}
-              onOpenNote={openNoteModal}
-              onStatusChange={updateLeadStatus}
-              onAssistantProfileSaved={updateAssistantProfileState}
-            />
-          </div>
-        )}
+          {!loading && filteredLeads.length === 0 ? (
+            <div className="empty-state">Chưa có khách phù hợp bộ lọc.</div>
+          ) : (
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Khách hàng</th>
+                    <th>Nhu cầu chính</th>
+                    <th>Khu vực</th>
+                    <th>Ngân sách</th>
+                    <th>Mức độ</th>
+                    <th>Trạng thái</th>
+                    <th>Môi giới</th>
+                    <th>Cập nhật cuối</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredLeads.map((item) => (
+                    <CustomerRow key={item.lead.id} item={item} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       </main>
 
-      {noteModal.open && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(17,24,39,0.55)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 16,
-            zIndex: 10000,
-          }}
-        >
-          <div style={{ background: "#fff", borderRadius: 12, padding: 18, width: "min(94vw, 520px)", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 12px 30px rgba(0,0,0,0.2)" }}>
-            <h3 style={{ marginTop: 0 }}>+ Ghi chú chăm sóc</h3>
-            <label style={{ display: "grid", gap: 6, marginBottom: 12 }}>
-              <span style={{ color: "#374151", fontWeight: 700 }}>Loại hoạt động</span>
-              <select
-                value={noteModal.type}
-                onChange={(event) =>
-                  setNoteModal((current) => ({
-                    ...current,
-                    type: event.target.value,
-                    error: "",
-                  }))
-                }
-                style={{ padding: 12, borderRadius: 8, border: "1px solid #d1d5db", background: "#fff" }}
-              >
-                {ACTIVITY_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label style={{ display: "grid", gap: 6 }}>
-              <span style={{ color: "#374151", fontWeight: 700 }}>Nội dung</span>
-              <textarea
-                value={noteModal.content}
-                onChange={(event) =>
-                  setNoteModal((current) => ({
-                    ...current,
-                    content: event.target.value,
-                    error: "",
-                  }))
-                }
-                style={{ width: "100%", boxSizing: "border-box", minHeight: 150, padding: 12, borderRadius: 8, border: "1px solid #d1d5db", lineHeight: 1.5, fontSize: 15 }}
-              />
-            </label>
-            {noteModal.error && (
-              <p style={{ color: "#991b1b", fontWeight: 700, marginBottom: 0 }}>
-                {noteModal.error}
-              </p>
-            )}
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 14 }}>
-              <button
-                onClick={() =>
-                  setNoteModal({
-                    open: false,
-                    leadId: "",
-                    type: ACTIVITY_TYPES[0],
-                    content: "",
-                    saving: false,
-                    error: "",
-                  })
-                }
-                disabled={noteModal.saving}
-                style={{ background: "#fff", color: "#111827", border: "1px solid #d1d5db", padding: "10px 14px", borderRadius: 8, cursor: noteModal.saving ? "default" : "pointer" }}
-              >
-                Hủy
-              </button>
-              <button
-                onClick={saveNoteActivity}
-                disabled={noteModal.saving}
-                style={{ background: "#2563eb", color: "#fff", border: "none", padding: "10px 14px", borderRadius: 8, cursor: noteModal.saving ? "default" : "pointer", fontWeight: 700, opacity: noteModal.saving ? 0.7 : 1 }}
-              >
-                {noteModal.saving ? "Đang lưu..." : "Lưu ghi chú"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {composeState.open && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(17,24,39,0.55)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 16,
-            zIndex: 10000,
-          }}
-        >
-          <div style={{ background: "#fff", borderRadius: 12, padding: 18, width: "min(94vw, 640px)", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 12px 30px rgba(0,0,0,0.2)" }}>
-            <h3 style={{ marginTop: 0 }}>Soạn tin gửi khách</h3>
-            <textarea
-              value={composeState.message}
-              onChange={(e) =>
-                setComposeState((current) => ({
-                  ...current,
-                  message: e.target.value,
-                  copyMessage: "",
-                }))
-              }
-              style={{ width: "100%", boxSizing: "border-box", minHeight: 300, padding: 12, borderRadius: 8, border: "1px solid #d1d5db", lineHeight: 1.5, fontSize: 15 }}
-            />
-            {composeState.copyMessage && (
-              <p style={{ color: "#15803d", fontWeight: 700, marginBottom: 0 }}>
-                {composeState.copyMessage}
-              </p>
-            )}
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 14 }}>
-              <button
-                onClick={copyCustomerMessage}
-                style={{ background: "#2563eb", color: "#fff", border: "none", padding: "10px 14px", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}
-              >
-                Copy nội dung
-              </button>
-              <button
-                onClick={() =>
-                  setComposeState({
-                    open: false,
-                    message: "",
-                    copyMessage: "",
-                  })
-                }
-                style={{ background: "#fff", color: "#111827", border: "1px solid #d1d5db", padding: "10px 14px", borderRadius: 8, cursor: "pointer" }}
-              >
-                Đóng
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <style>{`
+        * { box-sizing: border-box; }
+        .crm-shell { min-height: 100vh; background: #f4f7fb; display: flex; color: #0f172a; font-family: Arial, sans-serif; }
+        .admin-sidebar { width: 248px; flex: 0 0 248px; background: #0f172a; color: #cbd5e1; min-height: 100vh; padding: 22px 16px; position: sticky; top: 0; }
+        .brand { display: flex; align-items: center; gap: 10px; color: #fff; font-size: 20px; margin-bottom: 22px; }
+        .brand span { width: 36px; height: 36px; border-radius: 12px; background: #2563eb; display: grid; place-items: center; }
+        .admin-sidebar nav { display: grid; gap: 6px; }
+        .nav-item { color: #cbd5e1; text-decoration: none; display: flex; align-items: center; gap: 11px; padding: 11px 12px; border-radius: 12px; font-size: 14px; }
+        .nav-item:hover, .nav-item.active { background: #1e293b; color: #fff; }
+        .nav-item.active { box-shadow: inset 3px 0 0 #2563eb; }
+        .crm-main { flex: 1; min-width: 0; padding: 28px; }
+        .page-head, .section-title { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 18px; }
+        .page-head p { margin: 0 0 6px; color: #2563eb; font-weight: 800; }
+        h1, h2 { margin: 0; letter-spacing: 0; }
+        h1 { font-size: 28px; }
+        h2 { font-size: 20px; }
+        .primary-action, .actions a, .view-all { color: #2563eb; text-decoration: none; font-weight: 800; }
+        .primary-action { background: #2563eb; color: #fff; padding: 12px 16px; border-radius: 12px; }
+        .filter-note, .error-box { border-radius: 14px; padding: 12px 14px; margin-bottom: 16px; }
+        .filter-note { background: #eff6ff; color: #1d4ed8; }
+        .error-box { background: #fee2e2; color: #991b1b; }
+        .kpi-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+        .kpi-card, .pipeline-col, .table-card, .filter-bar { background: #fff; border: 1px solid #e8eef7; border-radius: 16px; box-shadow: 0 10px 28px rgba(15, 23, 42, .06); }
+        .kpi-card { padding: 18px; min-height: 124px; }
+        .kpi-card span, .kpi-card small, .section-title span { color: #64748b; font-size: 13px; }
+        .kpi-card strong { display: block; font-size: 28px; margin: 10px 0 12px; }
+        .filter-bar { padding: 14px; display: grid; grid-template-columns: 1.5fr repeat(5, minmax(120px, 1fr)) auto auto; gap: 10px; margin-bottom: 22px; }
+        input, select, button { height: 42px; border-radius: 10px; border: 1px solid #dbe3ef; background: #fff; color: #0f172a; padding: 0 12px; font-size: 14px; min-width: 0; }
+        button { cursor: pointer; font-weight: 800; }
+        button:last-child { background: #2563eb; color: #fff; border-color: #2563eb; }
+        .pipeline-section { margin-bottom: 22px; }
+        .pipeline-grid { display: grid; grid-template-columns: repeat(6, minmax(190px, 1fr)); gap: 12px; overflow-x: auto; padding-bottom: 4px; }
+        .pipeline-col { padding: 14px; min-height: 286px; display: flex; flex-direction: column; }
+        .pipeline-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .pipeline-head span { background: #eff6ff; color: #2563eb; border-radius: 999px; padding: 4px 9px; font-weight: 800; font-size: 12px; }
+        .pipeline-list { display: grid; gap: 10px; }
+        .pipeline-lead { border: 1px solid #edf2f7; border-radius: 12px; padding: 10px; color: inherit; text-decoration: none; display: flex; gap: 10px; min-height: 88px; }
+        .pipeline-lead strong, .need-title { display: block; font-size: 14px; }
+        .pipeline-lead p, .pipeline-lead small, .customer-cell small { margin: 4px 0 0; color: #64748b; font-size: 12px; display: block; }
+        .mini-avatar, .avatar { width: 34px; height: 34px; border-radius: 999px; background: #dbeafe; color: #1d4ed8; display: grid; place-items: center; font-weight: 900; flex: 0 0 auto; }
+        .view-all { display: block; text-align: center; margin-top: auto; padding-top: 12px; font-size: 13px; }
+        .empty-mini, .empty-state { color: #64748b; padding: 14px; }
+        .table-card { padding: 18px; }
+        .table-scroll { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; min-width: 1040px; }
+        th { text-align: left; color: #64748b; font-size: 12px; text-transform: uppercase; padding: 12px 10px; background: #f8fafc; }
+        td { border-top: 1px solid #eef2f7; padding: 14px 10px; vertical-align: top; font-size: 14px; }
+        .customer-cell { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
+        .tag-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 7px; }
+        .tag-row span { background: #eff6ff; color: #1d4ed8; border-radius: 999px; padding: 4px 8px; font-size: 12px; }
+        .temp { border-radius: 999px; padding: 5px 9px; font-weight: 800; font-size: 12px; }
+        .temp.hot { background: #fee2e2; color: #991b1b; }
+        .temp.warm { background: #fef3c7; color: #92400e; }
+        .temp.cold { background: #e2e8f0; color: #334155; }
+        .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+        @media (max-width: 1280px) {
+          .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+          .filter-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        }
+        @media (max-width: 860px) {
+          .crm-shell { display: block; }
+          .admin-sidebar { position: relative; width: 100%; min-height: auto; }
+          .crm-main { padding: 18px; }
+          .page-head { align-items: flex-start; flex-direction: column; }
+          .kpi-grid, .filter-bar { grid-template-columns: 1fr; }
+        }
+      `}</style>
     </div>
   );
 }
