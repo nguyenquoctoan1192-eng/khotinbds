@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import RoleGate from "@/app/components/role-gate";
 import { buildLeadAssignments, type LeadAssignmentResult } from "@/lib/leadAssignment";
@@ -263,6 +263,11 @@ function Timeline({ activities }: { activities: LeadActivity[] }) {
 }
 
 function Matches({ matches }: { matches: MatchItem[] }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const currentSearch = searchParams.toString();
+  const backUrl = `${pathname}${currentSearch ? `?${currentSearch}` : ""}`;
+
   return (
     <section className="card" id="matched-listings">
       <h2>Nhà phù hợp</h2>
@@ -271,6 +276,11 @@ function Matches({ matches }: { matches: MatchItem[] }) {
           const listing = match.listing || {};
           const image = getListingImage(match);
           const listingId = listing.id || match.listing_id;
+          const listingParams = new URLSearchParams({
+            view: "admin",
+            from: "admin",
+            back: backUrl,
+          });
 
           return (
             <article className="match-item" key={`${listingId}-${index}`}>
@@ -288,7 +298,7 @@ function Matches({ matches }: { matches: MatchItem[] }) {
               </div>
               <div className="listing-actions">
                 <button type="button">Gửi</button>
-                <Link href={`/listing/${listingId}?view=admin&from=admin`}>Xem</Link>
+                <Link href={`/listing/${listingId}?${listingParams.toString()}`}>Xem</Link>
               </div>
             </article>
           );

@@ -392,6 +392,10 @@ return labels;
 
     if (mode === "admin") {
       params.set("from", "admin");
+
+      if (typeof window !== "undefined") {
+        params.set("back", `${window.location.pathname}${window.location.search}`);
+      }
     }
 
     if (search.trim()) {
@@ -660,7 +664,7 @@ return labels;
         <p>Nhà đẹp - Giá tốt - Vị trí đẹp</p>
       </div>
 
-      {!roleLoading && !isAuthenticated && (
+      {mode !== "admin" && !roleLoading && !isAuthenticated && (
         <section
           role="link"
           tabIndex={0}
