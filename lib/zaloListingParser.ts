@@ -45,7 +45,7 @@ const trimExtraPunctuation = (value: string) =>
   value.replace(/\s+/g, " ").replace(/^[\s,.-]+|[\s,.-]+$/g, "").trim();
 
 const stripTrailingHouseTag = (value: string) =>
-  value.replace(/\s+(?:hxh|hxt|h3g|mt)\s*$/iu, "").trim();
+  value.replace(/\s+(?:hxh|hxt|h3g|mt|hxm|mb|2mt|2mb)\s*$/iu, "").trim();
 
 const stripLeadingHouseNumber = (value: string) =>
   value.replace(
@@ -92,15 +92,44 @@ function normalizeDistrict(text: string) {
   return "";
 }
 
-function detectHouseType(addressLine: string) {
-  if (/\bhxh\b/iu.test(addressLine)) return "Hẻm xe hơi";
-  if (/\bhxt\b/iu.test(addressLine)) return "Hẻm xe tải";
-  if (/\bh3g\b/iu.test(addressLine)) return "Hẻm 3 Gác";
-  if (/\bmt\b/iu.test(addressLine)) return "Mặt tiền";
+function detectHouseType(addressLine: string, text: string) {
+  if (/\b2mt\b/iu.test(text)) return "Hai Mặt Tiền";
+  if (/\bmt\b/iu.test(text)) return "Mặt Tiền";
+  if (/\b2mb\b/iu.test(text)) return "Hai Mặt Bằng";
+  if (/\bmb\b/iu.test(text)) return "Mặt Bằng";
+  if (/\bhxt\b/iu.test(text)) return "Hẻm Xe Tải";
+  if (/\bhxh\b/iu.test(text)) return "Hẻm Xe Hơi";
+  if (/\bhxm\b/iu.test(text)) return "Hẻm Xe Máy";
   if (/^\s*\d+[A-Za-zÀ-ỹ]?(?:\/\d+[A-Za-zÀ-ỹ]?)+/u.test(addressLine)) {
     return "Hẻm";
   }
-  return "Mặt tiền";
+  return "Mặt Tiền";
+}
+
+const stripHouseTypeTags = (value: string) =>
+  value.replace(/\b(?:2mt|2mb|hxt|hxh|hxm|mt|mb)\b\.?/giu, " ");
+
+const normalizeDistrictForTitle = (value: string) =>
+  value
+    .replace(/\bquận\.?\s*/giu, "Quận ")
+    .replace(/\bq(?:\.|\s+)?(?=\d)/giu, "Quận ")
+    .replace(/\bq(?:\.|\s+)(?=\p{L})/giu, "Quận ");
+
+function buildTitleAddress(addressLine: string) {
+  return trimExtraPunctuation(
+    normalizeDistrictForTitle(
+      stripLeadingHouseNumber(stripHouseTypeTags(stripTrailingHouseTag(addressLine)))
+    )
+  )
+    .replace(/\s+,/g, ",")
+    .replace(/,\s*/g, ", ")
+    .replace(/\s+/g, " ");
+}
+
+function buildTitle(addressLine: string, text: string) {
+  return [detectHouseType(addressLine, text), buildTitleAddress(addressLine)]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function removeDistrictFromStreet(value: string) {
@@ -204,8 +233,6 @@ export function parseZaloListingText(input: string): ParsedZaloListing {
   const firstLine = lines[0] || "";
   const address = stripTrailingHouseTag(firstLine);
   const district = normalizeDistrict(text);
-  const streetName = extractStreetName(firstLine);
-  const houseType = detectHouseType(firstLine);
   const price = parsePrice(text);
   const phone = parsePhone(text);
   const { width, length } = parseDimensions(text);
@@ -217,7 +244,7 @@ export function parseZaloListingText(input: string): ParsedZaloListing {
       : explicitArea;
 
   return {
-    title: [houseType, streetName].filter(Boolean).join(" ") + (district ? `, ${district}` : ""),
+    title: buildTitle(firstLine, text),
     price,
     district,
     address,
