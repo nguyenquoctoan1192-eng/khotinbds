@@ -18,6 +18,7 @@ const publicMenuItems: MenuItem[] = [
 const adminMenuItems: MenuItem[] = [
   { href: "/admin", label: "Trang chủ" },
   { href: "/admin/dashboard", label: "Dashboard" },
+  { href: "/admin/ai-consultant", label: "AI - Tư vấn AI" },
   { href: "/admin/post", label: "Đăng tin" },
   { href: "/admin/customers", label: "Khách hàng" },
   { href: "/admin/listing-library", label: "Kho tin đăng" },
