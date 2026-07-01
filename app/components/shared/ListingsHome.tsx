@@ -87,7 +87,13 @@ const emptyPublicChatProfile = (): PublicChatProfile => ({
 
 type AccessMode = "public" | "agent" | "admin";
 
-export default function ListingsHome({ mode }: { mode: AccessMode }) {
+export default function ListingsHome({
+  mode,
+  showNavbar = true,
+}: {
+  mode: AccessMode;
+  showNavbar?: boolean;
+}) {
   const router = useRouter();
   const { roleLoading, isAuthenticated } = useUserRole();
   const aiChatContainerRef = useRef<HTMLDivElement | null>(null);
@@ -646,7 +652,7 @@ return labels;
 
   return (
     <div style={{ fontFamily: "Arial", minHeight: "100vh", background: "#f3f4f6" }}>
-      <SiteNavbar />
+      {showNavbar && <SiteNavbar />}
 
       <div style={{ background: "linear-gradient(to right,#2563eb,#1d4ed8)", color: "#fff", padding: "60px 20px", textAlign: "center" }}>
         <h1>Tìm bất động sản nhanh chóng</h1>

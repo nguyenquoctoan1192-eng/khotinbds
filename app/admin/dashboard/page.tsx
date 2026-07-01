@@ -17,6 +17,11 @@ import {
   buildLeadAssignments,
   type LeadAssignmentResult,
 } from "@/lib/leadAssignment";
+import {
+  formatCustomerDistricts,
+  getCustomerMainNeed,
+  getCustomerNeedTags,
+} from "@/lib/customerDisplay";
 
 export const dynamic = "force-dynamic";
 
@@ -273,29 +278,8 @@ const toneMap = {
   red: { bg: "#fef2f2", text: "#dc2626", light: "#fee2e2" },
 };
 
-const mainMenuItems = [
-  { label: "Tổng quan", icon: "⌂", href: "/admin/dashboard", active: true },
-  { label: "CRM", icon: "☷", href: "/admin/customers" },
-  { label: "Khách hàng", icon: "👥", href: "/admin/customers" },
-  { label: "Lịch hẹn", icon: "□", href: "/admin/customers?filter=appointments_today" },
-  { label: "Công việc", icon: "✓", href: "/admin/customers?filter=today" },
-  { label: "Pipeline", icon: "▥", href: "/admin/customers?view=pipeline" },
-  { label: "Kho tin", icon: "⌂", href: "/admin/listing-library" },
-  { label: "Đăng tin", icon: "+", href: "/admin/post" },
-  { label: "Tìm nhà AI", icon: "✦", href: "/tim-nha" },
-  { label: "Báo cáo", icon: "◫", href: "/admin/dashboard" },
-];
-
-const dataMenuItems = [
-  { label: "Soạn tin AI", icon: "✎", href: "/admin/customers" },
-  { label: "Trợ lý AI", icon: "✦", href: "/admin/dashboard" },
-];
-
-const settingMenuItems = [
-  { label: "Cài đặt", icon: "⚙", href: "/account" },
-];
-
 const appointments = [
+  // TODO: connect real data from appointments/tasks once scheduling tables are available.
   { time: "09:00", title: "Xem nhà", name: "Nguyễn Văn A", place: "MT Lê Văn Sỹ, Q.3" },
   { time: "10:30", title: "Xem nhà", name: "Trần Thị Bích Ngọc", place: "Nhà HXH CMT8, Q.10" },
   { time: "14:00", title: "Ký gửi", name: "Lê Hoàng Nam", place: "Nhà nguyên căn Q.11" },
@@ -303,6 +287,7 @@ const appointments = [
 ];
 
 const funnelData = [
+  // TODO: connect real data from CRM funnel metrics.
   { label: "Khách mới", value: 200, width: "100%", color: "#60a5fa" },
   { label: "Đang tư vấn", value: 150, width: "82%", color: "#67e8f9" },
   { label: "Đã gửi nhà", value: 80, width: "66%", color: "#86efac" },
@@ -312,6 +297,7 @@ const funnelData = [
 ];
 
 const weeklyData = [
+  // TODO: connect real data from weekly sales performance.
   { day: "T2", new: 28, tour: 18, deal: 5 },
   { day: "T3", new: 38, tour: 16, deal: 6 },
   { day: "T4", new: 27, tour: 19, deal: 9 },
@@ -321,6 +307,7 @@ const weeklyData = [
 ];
 
 const sourceData = [
+  // TODO: connect real data from customer acquisition sources.
   { label: "Zalo", value: "40%", color: "#2563eb" },
   { label: "Facebook", value: "25%", color: "#10b981" },
   { label: "Website", value: "20%", color: "#f59e0b" },
@@ -338,63 +325,18 @@ const aiInsightLinks = [
 const formatShortName = (lead: Lead) => lead.fullname || "Khách AI Chat";
 
 const buildSubtitle = (item: LeadWithNextAction) => {
-  const need = parseNeed(item.lead.note);
-  const district = formatDistricts(item.lead.preferred_districts);
+  const need = getCustomerMainNeed(item.lead);
+  const tags = getCustomerNeedTags(item.lead);
+  const district = formatCustomerDistricts(item.lead.preferred_districts);
   const days = getDaysSince(item.latestActivity?.created_at || item.lead.created_at);
 
-  if (need) return need.length > 42 ? `${need.slice(0, 42)}...` : need;
+  if (need) {
+    const cleanNeed = [need, tags.slice(0, 2).join(", ")].filter(Boolean).join(" - ");
+    return cleanNeed.length > 58 ? `${cleanNeed.slice(0, 58)}...` : cleanNeed;
+  }
   if (district) return `Quan tâm ${district}`;
   return `${days} ngày chưa liên hệ`;
 };
-
-function Sidebar() {
-  return (
-    <aside className="crm-sidebar">
-      <div className="crm-logo">
-        <span className="crm-logo-icon">⌂</span>
-        <strong>KhoTinBDS</strong>
-      </div>
-
-      <nav className="crm-nav">
-  {mainMenuItems.map((item) => (
-    <Link
-      key={item.label}
-      href={item.href}
-      className={item.active ? "crm-nav-item active" : "crm-nav-item"}
-    >
-      <span>{item.icon}</span>
-      {item.label}
-    </Link>
-  ))}
-</nav>
-
-      <div className="crm-nav-section">DỮ LIỆU</div>
-      <nav className="crm-nav">
-  {dataMenuItems.map((item) => (
-    <Link key={item.label} href={item.href} className="crm-nav-item">
-      <span>{item.icon}</span>
-      {item.label}
-    </Link>
-  ))}
-</nav>
-
-      <div className="crm-nav-section">CÀI ĐẶT</div>
-      {settingMenuItems.map((item) => (
-  <Link key={item.label} href={item.href} className="crm-nav-item">
-    <span>{item.icon}</span>
-    {item.label}
-  </Link>
-))}
-
-      <div className="ai-card">
-        <div className="ai-icon">🤖</div>
-        <strong>AI Assistant</strong>
-        <p>Trợ lý AI luôn đồng hành cùng bạn 24/7</p>
-        <Link href="/admin/dashboard" className="ai-button">Chat với AI</Link>
-      </div>
-    </aside>
-  );
-}
 
 function KpiCards({ cards }: { cards: KpiCard[] }) {
   return (
@@ -722,10 +664,7 @@ export default async function DashboardPage() {
   ];
 
   return (
-    <div className="crm-shell">
-      <Sidebar />
-
-      <main className="crm-main">
+    <div className="dashboard-page">
         <header className="crm-header">
           <div>
             <h1>Xin chào, Toàn 👋</h1>
@@ -809,24 +748,10 @@ export default async function DashboardPage() {
             <Link href="/admin/dashboard">📊 Báo cáo nhanh</Link>
           </div>
         </section>
-      </main>
 
       <style>{`
         * { box-sizing: border-box; }
-        .crm-shell { min-height: 100vh; background: #f6f7fb; color: #0f172a; display: flex; font-family: Arial, sans-serif; }
-        .crm-sidebar { width: 240px; background: #fff; border-right: 1px solid #e5e7eb; padding: 22px 16px; position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 14px; }
-        .crm-logo { display: flex; align-items: center; gap: 10px; color: #2563eb; font-size: 21px; margin-bottom: 18px; }
-        .crm-logo-icon { background: #eff6ff; border-radius: 10px; padding: 8px 10px; }
-        .crm-nav { display: grid; gap: 6px; }
-        .crm-nav-item { display: flex; gap: 12px; align-items: center; padding: 11px 13px; border-radius: 10px; color: #475569; text-decoration: none; font-size: 14px; }
-        .crm-nav-item:hover { background: #f1f5f9; }
-        .crm-nav-item.active { background: #2563eb; color: #fff; font-weight: 700; box-shadow: 0 8px 18px rgba(37,99,235,.25); }
-        .crm-nav-section { color: #94a3b8; font-size: 12px; font-weight: 700; margin: 10px 8px 0; }
-        .ai-card { margin-top: auto; border: 1px solid #dbeafe; background: #f8fbff; border-radius: 14px; padding: 16px; }
-        .ai-icon { width: 42px; height: 42px; border-radius: 14px; background: #eef2ff; display: grid; place-items: center; margin-bottom: 10px; }
-        .ai-card p { color: #64748b; font-size: 13px; line-height: 1.5; }
-        .ai-button { display: block; text-align: center; background: #2563eb; color: #fff; padding: 11px; border-radius: 10px; text-decoration: none; font-weight: 700; }
-        .crm-main { flex: 1; padding: 24px 30px 34px; overflow: hidden; }
+        .dashboard-page { color: #0f172a; font-family: Arial, sans-serif; overflow: hidden; }
         .crm-header { display: flex; justify-content: space-between; gap: 18px; align-items: center; margin-bottom: 22px; }
         .crm-header h1 { margin: 0 0 6px; font-size: 25px; }
         .crm-header p { margin: 0; color: #64748b; }
@@ -922,9 +847,6 @@ export default async function DashboardPage() {
           .action-grid { grid-template-columns: repeat(2, 1fr); }
         }
         @media (max-width: 860px) {
-          .crm-shell { display: block; }
-          .crm-sidebar { position: relative; width: 100%; height: auto; }
-          .crm-main { padding: 18px; }
           .crm-header, .header-actions { display: grid; width: 100%; }
           .search-box { width: 100%; }
           .kpi-grid, .action-grid, .quick-actions { grid-template-columns: 1fr; }

@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import SiteNavbar from "@/app/components/site-navbar";
 import AgentsManager from "@/app/admin/agents/agents-manager";
 import { getServerProfile } from "@/lib/serverAuth";
 
@@ -12,8 +11,7 @@ export default async function AdminAgentsPage() {
 
   return (
     <div className="agents-page">
-      <SiteNavbar />
-      <main className="agents-page__main">
+      <div className="agents-page__main">
         <div className="agents-page__heading">
           <div>
             <h1>Quản lý môi giới</h1>
@@ -21,7 +19,7 @@ export default async function AdminAgentsPage() {
           </div>
         </div>
         <AgentsManager />
-      </main>
+      </div>
     </div>
   );
 }

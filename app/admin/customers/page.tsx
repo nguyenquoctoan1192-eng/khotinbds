@@ -77,20 +77,6 @@ const statusOptions = [
 
 const temperatureOptions = ["Tất cả", "Hot", "Warm", "Cold"];
 
-const menuItems = [
-  { label: "Tổng quan", icon: "⌂", href: "/admin/dashboard" },
-  { label: "CRM", icon: "☷", href: "/admin/customers", active: true },
-  { label: "Khách hàng", icon: "👥", href: "/admin/customers", active: true },
-  { label: "Lịch hẹn", icon: "□", href: "/admin/customers?filter=appointments_today" },
-  { label: "Công việc", icon: "✓", href: "/admin/customers?filter=today" },
-  { label: "Pipeline", icon: "▥", href: "/admin/customers?view=pipeline" },
-  { label: "Kho tin", icon: "⌂", href: "/admin/listing-library" },
-  { label: "Đăng tin", icon: "+", href: "/admin/post" },
-  { label: "Tìm nhà AI", icon: "✦", href: "/tim-nha" },
-  { label: "Báo cáo", icon: "◫", href: "/admin/dashboard" },
-  { label: "Cài đặt", icon: "⚙", href: "/account" },
-];
-
 const normalizeText = (value: unknown) =>
   String(value || "")
     .normalize("NFD")
@@ -141,29 +127,6 @@ const getInitials = (lead: Lead) =>
 
 const getLatestActivityDate = (lead: Lead, activities: LeadActivity[]) =>
   activities[0]?.created_at || lead.created_at;
-
-function Sidebar() {
-  return (
-    <aside className="admin-sidebar">
-      <div className="brand">
-        <span>⌂</span>
-        <strong>KhoTinBDS</strong>
-      </div>
-      <nav>
-        {menuItems.map((item) => (
-          <Link
-            key={`${item.label}-${item.href}`}
-            href={item.href}
-            className={item.active ? "nav-item active" : "nav-item"}
-          >
-            <span>{item.icon}</span>
-            {item.label}
-          </Link>
-        ))}
-      </nav>
-    </aside>
-  );
-}
 
 function KpiCard({ label, value, sub }: { label: string; value: string | number; sub: string }) {
   return (
@@ -389,9 +352,7 @@ function CustomersContent() {
   }));
 
   return (
-    <div className="crm-shell">
-      <Sidebar />
-      <main className="crm-main">
+    <div className="crm-page">
         <header className="page-head">
           <div>
             <p>CRM</p>
@@ -486,19 +447,10 @@ function CustomersContent() {
             </div>
           )}
         </section>
-      </main>
 
       <style>{`
         * { box-sizing: border-box; }
-        .crm-shell { min-height: 100vh; background: #f4f7fb; display: flex; color: #0f172a; font-family: Arial, sans-serif; }
-        .admin-sidebar { width: 248px; flex: 0 0 248px; background: #0f172a; color: #cbd5e1; min-height: 100vh; padding: 22px 16px; position: sticky; top: 0; }
-        .brand { display: flex; align-items: center; gap: 10px; color: #fff; font-size: 20px; margin-bottom: 22px; }
-        .brand span { width: 36px; height: 36px; border-radius: 12px; background: #2563eb; display: grid; place-items: center; }
-        .admin-sidebar nav { display: grid; gap: 6px; }
-        .nav-item { color: #cbd5e1; text-decoration: none; display: flex; align-items: center; gap: 11px; padding: 11px 12px; border-radius: 12px; font-size: 14px; }
-        .nav-item:hover, .nav-item.active { background: #1e293b; color: #fff; }
-        .nav-item.active { box-shadow: inset 3px 0 0 #2563eb; }
-        .crm-main { flex: 1; min-width: 0; padding: 28px; }
+        .crm-page { color: #0f172a; font-family: Arial, sans-serif; }
         .page-head, .section-title { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 18px; }
         .page-head p { margin: 0 0 6px; color: #2563eb; font-weight: 800; }
         h1, h2 { margin: 0; letter-spacing: 0; }
@@ -548,9 +500,6 @@ function CustomersContent() {
           .filter-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
         }
         @media (max-width: 860px) {
-          .crm-shell { display: block; }
-          .admin-sidebar { position: relative; width: 100%; min-height: auto; }
-          .crm-main { padding: 18px; }
           .page-head { align-items: flex-start; flex-direction: column; }
           .kpi-grid, .filter-bar { grid-template-columns: 1fr; }
         }

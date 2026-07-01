@@ -436,13 +436,18 @@ function CustomerDetailContent() {
   }
 
   return (
-    <main className="detail-shell">
-      <header className="breadcrumb">
-        <Link href="/admin/customers">CRM</Link>
-        <span>›</span>
-        <Link href="/admin/customers">Khách hàng</Link>
-        <span>›</span>
-        <strong>Hồ sơ khách hàng</strong>
+    <div className="detail-shell">
+      <header className="breadcrumb-row">
+        <Link className="back-link" href="/admin/customers">
+          ← Quay lại CRM
+        </Link>
+        <div className="breadcrumb" aria-label="Breadcrumb">
+          <Link href="/admin/customers">CRM</Link>
+          <span>&gt;</span>
+          <Link href="/admin/customers">Khách hàng</Link>
+          <span>&gt;</span>
+          <strong>Hồ sơ khách hàng</strong>
+        </div>
       </header>
 
       <div className="detail-grid">
@@ -488,10 +493,12 @@ function CustomerDetailContent() {
 
       <style>{`
         * { box-sizing: border-box; }
-        .detail-shell, .page-state { min-height: 100vh; background: #f4f7fb; color: #0f172a; font-family: Arial, sans-serif; padding: 28px; }
+        .detail-shell, .page-state { color: #0f172a; font-family: Arial, sans-serif; }
         .page-state { display: grid; place-items: center; align-content: center; gap: 12px; }
-        .page-state a, .breadcrumb a, .listing-actions a, .ai-actions a, .quick-actions a { color: #2563eb; text-decoration: none; font-weight: 800; }
-        .breadcrumb { display: flex; align-items: center; gap: 9px; color: #64748b; margin-bottom: 18px; }
+        .page-state a, .breadcrumb a, .listing-actions a, .ai-actions a, .quick-actions a, .back-link { color: #2563eb; text-decoration: none; font-weight: 800; }
+        .breadcrumb-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+        .back-link { background: #fff; border: 1px solid #dbeafe; border-radius: 12px; padding: 10px 13px; box-shadow: 0 8px 22px rgba(15, 23, 42, .05); }
+        .breadcrumb { display: flex; align-items: center; gap: 9px; color: #64748b; }
         .breadcrumb strong { color: #0f172a; }
         .detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) 430px; gap: 18px; align-items: start; }
         .left-col, .right-col { display: grid; gap: 18px; }
@@ -544,13 +551,15 @@ function CustomerDetailContent() {
           .profile-grid, .requirement-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
         @media (max-width: 760px) {
-          .detail-shell, .page-state { padding: 18px; }
+          .breadcrumb-row { align-items: stretch; flex-direction: column; }
+          .back-link { width: 100%; }
+          .breadcrumb { overflow-x: auto; white-space: nowrap; padding-bottom: 2px; }
           .quick-actions, .ai-actions, .profile-grid, .requirement-grid { grid-template-columns: 1fr; }
           .match-item { grid-template-columns: 1fr; }
           .listing-image { width: 100%; }
         }
       `}</style>
-    </main>
+    </div>
   );
 }
 

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
-import SiteNavbar from "@/app/components/site-navbar";
 import { useUserRole } from "@/lib/userRole";
 import RoleGate from "@/app/components/role-gate";
 
@@ -153,17 +152,12 @@ function ListingLibraryContent() {
 
   if (!canAccessLibrary) {
     return (
-      <>
-        <SiteNavbar />
-        <div style={{ padding: 20 }}>Kho tin đăng chỉ dành cho quản trị viên và môi giới.</div>
-      </>
+      <div style={{ padding: 20 }}>Kho tin đăng chỉ dành cho quản trị viên và môi giới.</div>
     );
   }
 
   return (
-    <>
-      <SiteNavbar />
-      <main style={styles.page}>
+    <div style={styles.page}>
       <section style={styles.header}>
         <div>
           <h1 style={styles.title}>Kho tin đăng</h1>
@@ -273,8 +267,7 @@ function ListingLibraryContent() {
           </section>
         </div>
       )}
-      </main>
-    </>
+      </div>
   );
 }
 

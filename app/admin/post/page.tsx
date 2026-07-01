@@ -3,7 +3,6 @@
 import { useState, type DragEvent } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
-import SiteNavbar from "@/app/components/site-navbar";
 import RoleGate from "@/app/components/role-gate";
 import { parseZaloListingText } from "@/lib/zaloListingParser";
 
@@ -680,7 +679,6 @@ console.log("ERROR =", error);
 
   return (
   <div style={{ width: "100%", overflowX: "hidden" }}>
-    <SiteNavbar />
     <div style={styles.page}>
 
       {/* FORM */}

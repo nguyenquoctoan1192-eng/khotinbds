@@ -120,7 +120,14 @@ const isRawMachineValue = (value: string) => {
   );
 };
 
-export const formatCustomerDistricts = (districts: unknown) => {
+export const formatCustomerDistricts = (input: unknown) => {
+  const districts =
+    input &&
+    typeof input === "object" &&
+    "preferred_districts" in input
+      ? (input as CustomerDisplayLead).preferred_districts
+      : input;
+
   if (Array.isArray(districts)) {
     return districts.map(cleanValue).filter(Boolean).join(", ");
   }
@@ -164,7 +171,11 @@ export const getCustomerPriceValue = (price: CustomerDisplayLead["max_price"]) =
   return /ty|ti/.test(amountMatch[2]) ? amount * 1_000_000_000 : amount * 1_000_000;
 };
 
-export const formatCustomerBudget = (value: unknown) => {
+export const formatCustomerBudget = (input: unknown) => {
+  const value =
+    input && typeof input === "object" && "max_price" in input
+      ? (input as CustomerDisplayLead).max_price
+      : input;
   const price = getCustomerPriceValue(value as CustomerDisplayLead["max_price"]);
 
   if (price <= 0) return cleanValue(value) || "Chưa rõ";
