@@ -72,17 +72,6 @@ function EditContent() {
     return "admin";
   };
 
-  const getAfterUpdateUrl = () => {
-  const view = getViewMode();
-
-  if (view === "agent") return "/agent/listing-library";
-
-  return "/admin/listing-library";
-};
-
-  
-  
-
   console.log("PARAMS =", params);
   console.log("ID =", id);
   
@@ -539,7 +528,7 @@ const updatePost = async () => {
 
   alert("Đã cập nhật");
 
-  router.replace(getAfterUpdateUrl());
+  router.replace("/admin");
 };
 
   const aiContentSections = aiContent

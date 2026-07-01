@@ -649,7 +649,7 @@ console.log("ERROR =", error);
 
     alert("Đăng tin thành công");
 
-   router.push("/admin/listing-library");
+   router.push("/admin");
   };
 
   const aiContentSections = aiContent

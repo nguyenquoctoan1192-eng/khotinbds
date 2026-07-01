@@ -650,7 +650,7 @@ console.log("ERROR =", error);
 
     alert("Đăng tin thành công");
 
-    router.push("/");
+    router.push("/admin");
   };
 
   const aiContentSections = aiContent
