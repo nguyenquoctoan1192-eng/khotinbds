@@ -288,7 +288,7 @@ function Matches({ matches }: { matches: MatchItem[] }) {
               </div>
               <div className="listing-actions">
                 <button type="button">Gửi</button>
-                <Link href={`/listing/${listingId}`}>Xem</Link>
+                <Link href={`/listing/${listingId}?view=admin&from=admin`}>Xem</Link>
               </div>
             </article>
           );

@@ -388,16 +388,17 @@ return labels;
   };
 
   const buildListingUrl = (listingId: string) => {
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ view: mode });
+
+    if (mode === "admin") {
+      params.set("from", "admin");
+    }
 
     if (search.trim()) {
       params.set("fromSearch", search.trim());
     }
 
-    const query = params.toString();
-    return query
-  ? `/listing/${listingId}?view=${mode}&${query}`
-  : `/listing/${listingId}?view=${mode}`;
+    return `/listing/${listingId}?${params.toString()}`;
   };
 
   const deleteListing = async (listing: Listing) => {

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import RentedStamp from "@/app/components/rented-stamp";
 import { formatPublicListing } from "@/lib/publicListingFormatter";
@@ -33,12 +34,22 @@ const homeHref =
     : "/";
  
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
+  const back = searchParams.get("back")?.trim() || "";
+  const safeBack = back.startsWith("/") && !back.startsWith("//") ? back : "";
+  const from = searchParams.get("from")?.trim() || "";
   const fromSearch = searchParams.get("fromSearch")?.trim() || "";
   const returnUrl = searchParams.get("returnUrl") || "";
-  const safeReturnUrl = returnUrl.startsWith("/") ? returnUrl : "";
-  const searchReturnUrl = fromSearch
+  const safeReturnUrl =
+    returnUrl.startsWith("/") && !returnUrl.startsWith("//") ? returnUrl : "";
+  const searchReturnUrl = safeBack
+    ? safeBack
+    : from === "admin"
+    ? "/admin"
+    : from === "search"
+    ? "/tim-nha"
+    : fromSearch
     ? `/?q=${encodeURIComponent(fromSearch)}`
-    : safeReturnUrl;
+    : safeReturnUrl || "/";
 
   const [showPhone, setShowPhone] = useState(false);
   const [listing, setListing] = useState<any>(null);
@@ -198,11 +209,11 @@ const homeHref =
         <h2 style={styles.logo}>🏠 BDS</h2>
         <div style={styles.navLinks}>
           {searchReturnUrl && (
-            <a href={searchReturnUrl} style={styles.backBtn}>
+            <Link href={searchReturnUrl} style={styles.backBtn}>
               Quay lại kết quả tìm kiếm
-            </a>
+            </Link>
           )}
-          <a href={homeHref} style={styles.backBtn}>← Trang chủ</a>
+          <Link href={homeHref} style={styles.backBtn}>← Trang chủ</Link>
         </div>
       </div>
 
