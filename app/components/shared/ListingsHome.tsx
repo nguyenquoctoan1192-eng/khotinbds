@@ -13,6 +13,7 @@ import SiteNavbar from "@/app/components/site-navbar";
 import ListingCard from "@/app/components/shared/ListingCard";
 import { formatPublicListing } from "@/lib/publicListingFormatter";
 import { useUserRole } from "@/lib/userRole";
+import type { RentalConsultationState } from "@/lib/rentalConsultation";
 import type { Listing } from "@/types/listing";
 
 const supabase = createClient(
@@ -38,22 +39,6 @@ type ListingResult = Listing & {
 
 
 
-type PublicChatProfile = {
-  name: string | null;
-  phone: string | null;
-  purpose: string | null;
-  business_type: string | null;
-  business: string | null;
-  location: string | null;
-  primary_location: string | null;
-  alternative_locations: string[];
-  budget: string | null;
-  area: string | null;
-  structure: string | null;
-  frontage: string | null;
-  move_in_time: string | null;
-};
-
 type PublicChatMessage = {
   role: "assistant" | "user";
   content: string;
@@ -68,22 +53,6 @@ type PropertySuggestion = {
   price_label: string;
   comment_label?: string;
 };
-
-const emptyPublicChatProfile = (): PublicChatProfile => ({
-  name: null,
-  phone: null,
-  purpose: null,
-  business_type: null,
-  business: null,
-  location: null,
-  primary_location: null,
-  alternative_locations: [],
-  budget: null,
-  area: null,
-  structure: null,
-  frontage: null,
-  move_in_time: null,
-});
 
 type AccessMode = "public" | "agent" | "admin";
 
@@ -127,17 +96,19 @@ export default function ListingsHome({
   const [aiChatMessages, setAiChatMessages] = useState<PublicChatMessage[]>([
     {
       role: "assistant",
-      content:
-        "Em chào anh/chị, em là trợ lý AI tư vấn nhà/mặt bằng. Mình đang cần tìm khu vực nào và dùng để ở hay kinh doanh ạ?",
+      content: "",
+      reply_parts: [
+        "Em chào anh/chị.",
+        "Em là Linh bên BDS.",
+        "Anh/chị đang cần thuê để ở hay kinh doanh ạ?",
+      ],
     },
   ]);
   const [aiChatInput, setAiChatInput] = useState("");
-  const [aiChatProfile, setAiChatProfile] = useState<PublicChatProfile>(
-    emptyPublicChatProfile()
-  );
+  const [rentalConsultState, setRentalConsultState] =
+    useState<RentalConsultationState | null>(null);
   const [aiChatLoading, setAiChatLoading] = useState(false);
   const [aiChatError, setAiChatError] = useState("");
-  const [aiChatLeadCreated, setAiChatLeadCreated] = useState(false);
   const aiPropertySuggestionsKey = aiChatMessages
     .map((message) => `${message.property_suggestions?.length || 0}:${message.suggestion_followup_parts?.length || 0}`)
     .join("|");
@@ -301,56 +272,43 @@ return labels;
     setAiChatError("");
 
     try {
-      const res = await fetch("/api/public-ai-chat", {
+      const res = await fetch("/api/rental-consultant", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           message,
-          history: nextMessages,
-          profile: aiChatProfile,
-          lead_created: aiChatLeadCreated,
+          state: rentalConsultState,
         }),
       });
       const json = await res.json();
       
 
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || "AI chưa phản hồi được.");
+      if (!res.ok) {
+        throw new Error(json.error || "Chưa phản hồi được.");
       }
 
-      setAiChatProfile(json.profile || emptyPublicChatProfile());
-      setAiChatLeadCreated((current) => current || Boolean(json.lead_created));
+      setRentalConsultState(json.state || null);
       setAiChatMessages((current) => [
         ...current,
         {
           role: "assistant",
-          content: json.reply,
-          reply_parts: Array.isArray(json.reply_parts)
-            ? json.reply_parts.filter(
-                (part: unknown): part is string => typeof part === "string" && Boolean(part.trim())
-              )
-            : undefined,
-          suggestion_followup_parts: Array.isArray(json.suggestion_followup_parts)
-            ? json.suggestion_followup_parts.filter(
-                (part: unknown): part is string => typeof part === "string" && Boolean(part.trim())
-              )
-            : undefined,
-          property_suggestions: Array.isArray(json.property_suggestions)
-            ? json.property_suggestions.slice(0, 3)
-            : [],
+          content:
+            typeof json.reply === "string" && json.reply.trim()
+              ? json.reply
+              : "Dạ em nhận được tin nhắn của anh/chị rồi ạ.",
         },
       ]);
     } catch (err) {
-      console.error("public AI chat request failed", err);
+      console.error("rental consultant chat request failed", err);
       setAiChatError("");
       setAiChatMessages((current) => [
         ...current,
         {
           role: "assistant",
           content:
-            "Dạ em nhận được tin nhắn của anh rồi. Em kiểm tra lại nhu cầu và gửi mình hướng phù hợp ngay nhé.",
+            "Dạ em nhận được tin nhắn của anh/chị rồi ạ.",
         },
       ]);
     } finally {
@@ -879,7 +837,7 @@ return labels;
             boxShadow: "0 8px 22px rgba(0,0,0,0.28)",
           }}
         >
-          💬 Tư vấn AI
+          💬 Tư vấn
         </button>
       )}
 
@@ -901,7 +859,7 @@ return labels;
           }}
         >
           <div style={{ background: "#111827", color: "#fff", padding: 14, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-            <strong>Tư vấn AI</strong>
+            <strong>Tư vấn</strong>
             <button
               type="button"
               onClick={() => setShowAiChat(false)}
