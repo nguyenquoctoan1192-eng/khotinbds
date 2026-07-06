@@ -1,0 +1,66 @@
+{
+  "_readme": "File cấu hình dữ liệu ngành nghề. Thêm ngành mới chỉ cần thêm 1 object vào mảng 'industries', không cần sửa system prompt. Dev tự quyết định cách nạp file này vào prompt (toàn bộ, hoặc chỉ phần match với business_type khách vừa nói để tiết kiệm token).",
+
+  "industries": [
+    {
+      "keywords": ["spa", "nail", "tiệm tóc", "salon", "làm đẹp"],
+      "business_type_label": "spa/nail/salon",
+      "business_category": "beauty",
+      "selling_points": [
+        "Ưu tiên mặt tiền dễ nhận diện",
+        "Có chỗ để xe cho khách",
+        "Hệ thống điện nước đủ tải để lắp đặt thiết bị"
+      ]
+    },
+    {
+      "keywords": ["cafe", "quán ăn", "nhà hàng", "quán bún", "quán phở", "trà sữa", "quán nhậu"],
+      "business_type_label": "cafe/nhà hàng",
+      "business_category": "f_and_b",
+      "selling_points": [
+        "Cần hệ thống hút mùi/thoát nước tốt",
+        "Thường ưu tiên vị trí đông người qua lại",
+        "Lưu ý thủ tục an toàn vệ sinh thực phẩm nếu mặt bằng mới"
+      ]
+    },
+    {
+      "keywords": ["shop", "showroom", "cửa hàng", "shop mỹ phẩm", "thời trang"],
+      "business_type_label": "shop/showroom",
+      "business_category": "retail",
+      "selling_points": [
+        "Ưu tiên mặt tiền rộng, dễ trưng bày",
+        "Gần khu mua sắm/đông dân cư"
+      ]
+    },
+    {
+      "keywords": ["văn phòng", "coworking", "office"],
+      "business_type_label": "văn phòng",
+      "business_category": "office",
+      "selling_points": [
+        "Thường cần thang máy nếu trên lầu cao",
+        "Chỗ để xe cho nhân viên"
+      ]
+    },
+    {
+      "keywords": ["kho", "xưởng", "nhà xưởng"],
+      "business_type_label": "kho/xưởng",
+      "business_category": "warehouse",
+      "selling_points": [
+        "Ưu tiên đường lớn dễ xe tải ra vào",
+        "Trần cao thoáng"
+      ]
+    },
+    {
+      "keywords": ["phòng khám", "nha khoa", "y tế"],
+      "business_type_label": "phòng khám",
+      "business_category": "clinic",
+      "selling_points": [
+        "Cần vị trí yên tĩnh, dễ tiếp cận",
+        "Lưu ý về giấy phép hoạt động ngành y tế"
+      ]
+    }
+  ],
+
+  "fallback": {
+    "note": "Nếu khách nói lĩnh vực không khớp keyword nào ở trên, giữ nguyên business_type theo đúng từ khách nói, business_category = 'khac', và KHÔNG tự bịa selling_points — chỉ phản hồi ghi nhận bình thường."
+  }
+}

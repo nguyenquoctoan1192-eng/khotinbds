@@ -38,6 +38,7 @@ export type ParsedRequirement = {
 
 export type ParsedRequirementFilters = ParsedRequirement & {
   preferred_districts: string[];
+  preferred_streets: string[];
   max_price: number | null;
   min_price: number | null;
   target_price: number | null;
@@ -93,6 +94,9 @@ const wardPatterns: PatternItem[] = [
 const streetPatterns: PatternItem[] = [
   { label: "Le Thanh Ton", district: "Quan 1", patterns: [/\ble\s+thanh\s+ton\b/i] },
   { label: "Thai Van Lung", district: "Quan 1", patterns: [/\bthai\s+van\s+lung\b/i] },
+  { label: "Nguyễn Trãi", patterns: [/\bnguyen\s+trai\b/i] },
+  { label: "Hải Bà Trưng", patterns: [/\bhai\s+ba\s+trung\b/i] },
+  { label: "Trần Hưng Đạo", patterns: [/\btran\s+hung\s+dao\b/i] },
 ];
 
 const businessPatternItems: Array<PatternItem & { type: string }> = [
@@ -407,6 +411,79 @@ function parseAllowNearbyDistricts(text: string) {
   return /\b(?:khu\s+vuc\s+ke\s+can|ke\s+can|lan\s+can|gan|quanh)\b/i.test(text);
 }
 
+function titleCaseStreet(value: string) {
+  return value
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .map((word) => {
+      if (/^[A-Z0-9]+$/.test(word) && word.length <= 4) return word;
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(" ");
+}
+
+function stripStreetNoise(value: string) {
+  let current = value
+    .replace(/\b(?:quận|quan|q)\s*\.?\s*(?:[1-9]|1[0-2])\b/giu, " ")
+    .replace(
+      /\b(?:quận|quan)?\s*(?:phú nhuận|phu nhuan|bình thạnh|binh thanh|gò vấp|go vap|tân bình|tan binh|tân phú|tan phu|thủ đức|thu duc|bình tân|binh tan)\b/giu,
+      " "
+    )
+    .replace(/[()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  let previous = "";
+  while (current && current !== previous) {
+    previous = current;
+    current = current
+      .replace(
+        /^\s*(?:anh|chị|chi|em|cần|can|tìm|tim|kiếm|kiem|nhà|nha|thuê|thue|mua|ở|o|tại|tai|trên|tren|khu\s*vực|khu\s*vuc)\b\s*/iu,
+        ""
+      )
+      .replace(
+        /^\s*(?:đường|duong|phố|pho|mặt\s*tiền|mat\s*tien|mt|hẻm\s*xe\s*hơi|hem\s*xe\s*hoi|hxh|hxt|hxm|hẻm|hem)\b\s*/iu,
+        ""
+      )
+      .replace(/^[\s:.-]+|[\s:.-]+$/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  return current;
+}
+
+function isStreetCandidate(value: string) {
+  const normalized = normalizeForParsing(value).replace(/\s+/g, " ").trim();
+
+  if (!normalized || normalized.length < 3) return false;
+  if (parseDistricts(normalized).length > 0) return false;
+  if (/\b(?:gia|ngan sach|dien tich|dt|phong ngu|pn|lau|tret)\b/.test(normalized)) return false;
+  if (/\b\d+(?:[.,]\d+)?\s*(?:tr|trieu|ty|ti|m2|m)\b/.test(normalized)) return false;
+  if (/\b\d+(?:[.,]\d+)?\s*(?:x|×|\*)\s*\d+(?:[.,]\d+)?\b/.test(normalized)) return false;
+  if (/\b(?:duoc|la|nhe|nha|voi|can|tim|thue|mua)\b/.test(normalized)) return false;
+  if (/^(?:can|tim|kiem|nha|thue|mua|o|tai|tren|khu vuc|duong|pho|mt|hxh|hxt|hxm|hem)+$/.test(normalized.replace(/\s+/g, ""))) {
+    return false;
+  }
+
+  const words = normalized.split(" ").filter(Boolean);
+  return words.length >= 2 && words.length <= 6;
+}
+
+function parseStreets(rawText: string, normalizedText: string) {
+  const explicitMatches = streetPatterns
+    .filter((item) => item.patterns.some((pattern) => pattern.test(normalizedText)))
+    .map((item) => item.label);
+  const segmentMatches = rawText
+    .split(/[,/|\n]+/g)
+    .map(stripStreetNoise)
+    .filter(isStreetCandidate)
+    .map(titleCaseStreet);
+
+  return unique([...explicitMatches, ...segmentMatches]);
+}
+
 function extractKeywordSearch(input: string) {
   const normalized = normalizeSearchText(input);
   const keyword = cleanupPatterns
@@ -429,9 +506,7 @@ export function parseVietnameseRequirement(input: string): ParsedRequirementFilt
   const wards = wardPatterns.filter((item) =>
     item.patterns.some((pattern) => pattern.test(normalized))
   );
-  const streets = streetPatterns.filter((item) =>
-    item.patterns.some((pattern) => pattern.test(normalized))
-  );
+  const streets = parseStreets(rawText, normalized);
   const businessMatches = businessPatternItems.filter((item) =>
     item.patterns.some((pattern) => pattern.test(normalized))
   );
@@ -449,11 +524,10 @@ export function parseVietnameseRequirement(input: string): ParsedRequirementFilt
   const inferredDistricts = [
     ...districts,
     ...wards.map((item) => item.district || ""),
-    ...streets.map((item) => item.district || ""),
   ];
   const preferredDistricts = unique(inferredDistricts).map(districtLabel);
   const preferredWards = unique(wards.map((item) => item.label));
-  const preferredStreets = unique(streets.map((item) => item.label));
+  const preferredStreets = unique(streets);
   const purpose =
     businessTypes.length > 0 || features.length > 0 || /kinh\s+doanh|mat\s+bang|cho\s+thue/i.test(normalized)
       ? "kinh doanh"
@@ -496,6 +570,7 @@ export function parseVietnameseRequirement(input: string): ParsedRequirementFilt
     targetCustomers,
     purpose,
     preferred_districts: preferredDistricts,
+    preferred_streets: preferredStreets,
     min_price: price.minPrice ?? null,
     max_price: price.maxPrice ?? null,
     target_price: price.targetPrice ?? null,

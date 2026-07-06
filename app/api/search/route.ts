@@ -36,6 +36,8 @@ export async function POST(req: Request) {
       rawText: rawQuery,
       preferred_districts: parsed.preferred_districts,
       preferredDistricts: parsed.preferredDistricts,
+      preferred_streets: parsed.preferred_streets,
+      preferredStreets: parsed.preferredStreets,
       allow_nearby_districts: parsed.allowNearbyDistricts,
       allowNearbyDistricts: parsed.allowNearbyDistricts,
       min_price: parsed.min_price,
@@ -97,6 +99,8 @@ export async function POST(req: Request) {
       query: rawQuery,
       normalizedRequirement: {
         preferredDistricts: parsed.preferredDistricts,
+        preferredStreets: parsed.preferredStreets,
+        preferred_streets: parsed.preferred_streets,
         allowNearbyDistricts: parsed.allowNearbyDistricts,
         maxPrice: parsed.maxPrice,
         targetPrice: parsed.targetPrice,

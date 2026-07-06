@@ -23,6 +23,7 @@ export default function FindHomePage() {
   const [parsedFilters, setParsedFilters] =
     useState<ParsedRequirementFilters | null>(null);
   const [results, setResults] = useState<any[]>([]);
+  const [fallbackWarning, setFallbackWarning] = useState("");
   const [showSaveForm, setShowSaveForm] = useState(false);
   const [saveFullname, setSaveFullname] = useState("");
   const [savePhone, setSavePhone] = useState("");
@@ -50,6 +51,10 @@ export default function FindHomePage() {
     const breakdown = item.breakdown;
     const reasons = item.reasons || breakdown?.reasons || [];
     const labels: string[] = [];
+
+    if (breakdown?.street_score > 0 || reasons.some((reason: string) => reason.includes("Street"))) {
+      labels.push("Đúng đường");
+    }
 
     if (breakdown?.district_score > 0 || reasons.some((reason: string) => reason.includes("District"))) {
       labels.push("Đúng quận");
@@ -94,6 +99,9 @@ export default function FindHomePage() {
         : district
           ? `khu vực ${district}`
           : "",
+      filters?.preferred_streets?.length
+        ? `đường ${filters.preferred_streets.join(", ")}`
+        : "",
       filters?.max_price
         ? `ngân sách tối đa ${filters.max_price.toLocaleString("vi-VN")} VNĐ`
         : maxPrice
@@ -195,8 +203,10 @@ export default function FindHomePage() {
         fullname,
         phone,
         mode: "lead",
+        rawText: filters.rawText,
         note: filters.note || null,
         preferred_districts: filters.preferred_districts,
+        preferred_streets: filters.preferred_streets,
         allow_nearby_districts: filters.allowNearbyDistricts,
         max_price: filters.max_price,
         min_area: filters.min_area,
@@ -215,6 +225,7 @@ export default function FindHomePage() {
     }
 
     setResults(json.matches || []);
+    setFallbackWarning(json.fallbackWarning || "");
     setSaveMessage("");
   };
 
@@ -245,8 +256,10 @@ export default function FindHomePage() {
         fullname: saveFullname,
         phone: savePhone,
         mode: "lead",
+        rawText: filters.rawText,
         note: buildCrmNote(saveNote || filters.note || ""),
         preferred_districts: filters.preferred_districts,
+        preferred_streets: filters.preferred_streets,
         allow_nearby_districts: filters.allowNearbyDistricts,
         max_price: filters.max_price,
         min_area: filters.min_area,
@@ -352,6 +365,18 @@ export default function FindHomePage() {
           <p>Diện tích tối thiểu: {parsedFilters.min_area || "Không có"}</p>
           <p>Nhu cầu: {parsedFilters.note || "Không có"}</p>
         </div>
+      )}
+
+      {parsedFilters && (
+        <p style={{ fontWeight: 700 }}>
+          Đường: {parsedFilters.preferred_streets.join(", ") || "Không có"}
+        </p>
+      )}
+
+      {fallbackWarning && (
+        <p style={{ color: "#b45309", fontWeight: 700, whiteSpace: "pre-line" }}>
+          {fallbackWarning}
+        </p>
       )}
 
       {results.length > 0 && (

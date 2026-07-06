@@ -253,6 +253,18 @@ function normalizeList(value: unknown): string[] {
     .filter(Boolean);
 }
 
+function normalizeStreetList(value: unknown): string[] {
+  const values = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(/[,/|\n]+/g)
+      : [];
+
+  return values
+    .map((item) => normalizeText(item))
+    .filter(Boolean);
+}
+
 function normalizeBoolean(value: unknown) {
   if (typeof value === "boolean") return value;
   if (typeof value === "string") {
@@ -357,6 +369,36 @@ function listingSearchText(listing: ListingMatchCandidate) {
   ];
 
   return normalizeText(fields.filter(Boolean).join(" "));
+}
+
+function listingStreetSearchText(listing: ListingMatchCandidate) {
+  return normalizeText(
+    [
+      listing.title,
+      listing.address,
+      listing.street,
+      listing.location,
+    ]
+      .filter(Boolean)
+      .join(" ")
+  );
+}
+
+function listingMatchesNormalizedStreet(
+  listing: ListingMatchCandidate,
+  normalizedStreets: string[]
+) {
+  if (normalizedStreets.length === 0) return true;
+
+  const text = listingStreetSearchText(listing);
+  return normalizedStreets.some((street) => text.includes(street));
+}
+
+export function listingMatchesPreferredStreet(
+  listing: ListingMatchCandidate,
+  preferredStreets: unknown
+) {
+  return listingMatchesNormalizedStreet(listing, normalizeStreetList(preferredStreets));
 }
 
 function hasAny(text: string, patterns: RegExp[]) {
@@ -488,21 +530,21 @@ function scorePriceNearTarget(
 
   if (variance === 0) {
     reasons.push("Giá gần ngân sách khách yêu cầu");
-    return 35;
+    return 20;
   }
   if (variance <= 0.05) {
     reasons.push("Giá gần ngân sách khách yêu cầu");
-    return 32;
+    return 19;
   }
   if (variance <= 0.1) {
     reasons.push("Giá gần ngân sách khách yêu cầu");
-    return 28;
+    return 17;
   }
   if (variance <= 0.2) {
     reasons.push("Giá gần ngân sách khách yêu cầu");
-    return 20;
+    return 14;
   }
-  if (variance <= 0.3) return 10;
+  if (variance <= 0.3) return 8;
 
   return 0;
 }
@@ -718,7 +760,7 @@ export function normalizeLeadRequirement(requirement: LeadRequirement): Normaliz
       requirement.allow_nearby_districts ?? requirement.allowNearbyDistricts
     ),
     preferred_wards: normalizeList(requirement.preferred_wards ?? requirement.preferredWards).map(normalizeText),
-    preferred_streets: normalizeList(requirement.preferred_streets ?? requirement.preferredStreets).map(normalizeText),
+    preferred_streets: normalizeStreetList(requirement.preferred_streets ?? requirement.preferredStreets),
     min_area: toNumber(requirement.min_area ?? requirement.minArea),
     max_area: toNumber(requirement.max_area ?? requirement.maxArea),
     target_area: toNumber(requirement.target_area ?? requirement.targetArea),
@@ -826,6 +868,15 @@ export function scoreListingForLead(
     return null;
   }
 
+  const hasPreferredStreets = normalized.preferred_streets.length > 0;
+  const matchesPreferredStreet =
+    !hasPreferredStreets ||
+    listingMatchesNormalizedStreet(listing, normalized.preferred_streets);
+
+  if (hasPreferredStreets && !matchesPreferredStreet) {
+    return null;
+  }
+
   const breakdown: ScoreBreakdown = {
     district_score: 0,
     ward_score: 0,
@@ -851,7 +902,7 @@ export function scoreListingForLead(
 
   if (hasPreferredDistricts) {
     if (matchesExactDistrict) {
-      breakdown.district_score = 25;
+      breakdown.district_score = 30;
       reasons.push("District matches preference");
     } else if (matchesNearbyDistrict) {
       breakdown.district_score = 15;
@@ -871,10 +922,8 @@ export function scoreListingForLead(
   }
 
   if (normalized.preferred_streets.length > 0) {
-    const streetMatched = normalized.preferred_streets.some((street) => text.includes(street));
-
-    if (streetMatched) {
-      breakdown.street_score = 14;
+    if (matchesPreferredStreet) {
+      breakdown.street_score = 80;
       reasons.push("Street matches preference");
     } else {
       warnings.push("Listing dung quan nhung chua thay dung duong uu tien");
@@ -903,7 +952,7 @@ export function scoreListingForLead(
           listingArea,
           normalized.min_area,
           normalized.max_area,
-          16,
+          20,
           "Area",
           reasons,
           warnings

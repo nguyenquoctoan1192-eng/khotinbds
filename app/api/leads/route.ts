@@ -6,6 +6,7 @@ import {
   MatchResult,
   compareMatchResults,
   getMatchReasons,
+  listingMatchesPreferredStreet,
   listingPassesHardFilters,
   normalizeLeadRequirement,
   scoreListingForLead,
@@ -57,12 +58,23 @@ function normalizeStringList(value: unknown) {
   const rawValues = Array.isArray(value)
     ? value
     : typeof value === "string"
-      ? value.split(",")
+      ? value.split(/[,/|\n]+/g)
       : [];
 
   return rawValues
     .map((item) => String(item || "").trim())
     .filter(Boolean);
+}
+
+function buildStreetFallbackWarning(streets: string[], districts: string[]) {
+  const streetText = streets.join(", ");
+  const districtText = districts.join(", ");
+
+  if (districtText) {
+    return `Không tìm thấy căn trên đường ${streetText}.\nĐang hiển thị các căn cùng ${districtText}.`;
+  }
+
+  return `Không tìm thấy căn trên đường ${streetText}.`;
 }
 
 function firstDefined<T>(...values: Array<T | null | undefined>) {
@@ -229,6 +241,7 @@ function getSearchFilteredListings(
   listings: ListingMatchCandidate[],
   preferredDistricts: unknown,
   allowNearbyDistricts: unknown,
+  preferredStreets: unknown,
   keywordSearch: unknown
 ) {
   const districtResult = getDistrictFilteredListings(
@@ -236,15 +249,53 @@ function getSearchFilteredListings(
     preferredDistricts,
     allowNearbyDistricts
   );
+  const streets = normalizeStringList(preferredStreets);
+
+  if (streets.length > 0) {
+    const streetMatches = districtResult.listingsForScoring.filter((listing) =>
+      listingMatchesPreferredStreet(listing, streets)
+    );
+
+    if (streetMatches.length > 0) {
+      return {
+        ...districtResult,
+        listingsForScoring: streetMatches,
+        streetFallback: false,
+      };
+    }
+
+    if (districtResult.districts.length > 0 && districtResult.listingsForScoring.length > 0) {
+      return {
+        ...districtResult,
+        fallbackWarning: buildStreetFallbackWarning(streets, districtResult.districts),
+        streetFallback: true,
+      };
+    }
+
+    return {
+      districts: districtResult.districts,
+      listingsForScoring: [] as ListingMatchCandidate[],
+      fallbackWarning:
+        districtResult.fallbackWarning ||
+        buildStreetFallbackWarning(streets, districtResult.districts),
+      streetFallback: false,
+    };
+  }
 
   if (districtResult.districts.length > 0) {
-    return districtResult;
+    return {
+      ...districtResult,
+      streetFallback: false,
+    };
   }
 
   const keyword = normalizeKeywordText(keywordSearch);
 
   if (!keyword) {
-    return districtResult;
+    return {
+      ...districtResult,
+      streetFallback: false,
+    };
   }
 
   const filteredListings = listings.filter((listing) =>
@@ -255,6 +306,7 @@ function getSearchFilteredListings(
     districts: [] as string[],
     listingsForScoring: filteredListings,
     fallbackWarning: filteredListings.length === 0 ? noSearchResultsMessage : null,
+    streetFallback: false,
   };
 }
 
@@ -304,6 +356,10 @@ function hasStructuredRequirement(requirement: LeadRequirement) {
         requirement.preferredWards.length > 0) ||
       (Array.isArray(requirement.preferredStreets) &&
         requirement.preferredStreets.length > 0) ||
+      (Array.isArray(requirement.preferred_streets) &&
+        requirement.preferred_streets.length > 0) ||
+      (typeof requirement.preferred_streets === "string" &&
+        requirement.preferred_streets.trim()) ||
       (Array.isArray(requirement.preferred_districts) &&
         requirement.preferred_districts.length > 0) ||
       (typeof requirement.preferred_districts === "string" &&
@@ -432,7 +488,9 @@ function buildNormalizedRequirementResponse(requirement: LeadRequirement & {
       : normalizeStringList(requirement.preferred_districts),
     allowNearbyDistricts: normalized.allow_nearby_districts,
     preferredWards: normalizeStringList(requirement.preferredWards),
-    preferredStreets: normalizeStringList(requirement.preferredStreets),
+    preferredStreets: normalizeStringList(requirement.preferredStreets).length > 0
+      ? normalizeStringList(requirement.preferredStreets)
+      : normalizeStringList(requirement.preferred_streets),
     minArea: normalized.min_area ?? undefined,
     maxArea: normalized.max_area ?? undefined,
     targetArea: normalized.target_area ?? undefined,
@@ -453,6 +511,7 @@ function buildNormalizedRequirementResponse(requirement: LeadRequirement & {
     targetCustomers: normalized.targetCustomers,
     purpose: requirement.purpose || undefined,
     preferred_districts: normalizeStringList(requirement.preferred_districts),
+    preferred_streets: normalizeStringList(requirement.preferred_streets),
     allow_nearby_districts: normalized.allow_nearby_districts,
     min_price: normalized.min_price,
     max_price: normalized.max_price,
@@ -511,25 +570,29 @@ export async function POST(req: Request) {
 
       const requirement: LeadRequirement = requestRequirement;
       const hasStructuredFilters = hasStructuredRequirement(requirement);
-      const { listingsForScoring, fallbackWarning } = getSearchFilteredListings(
+      const { listingsForScoring, fallbackWarning, streetFallback } = getSearchFilteredListings(
         listings || [],
         requestRequirement.preferred_districts,
         requestRequirement.allowNearbyDistricts,
+        requestRequirement.preferred_streets,
         hasStructuredFilters ? null : requestRequirement.keywordSearch
       );
-      const scoringRequirement: LeadRequirement = requirement;
+      const scoringRequirement: LeadRequirement = streetFallback
+        ? { ...requirement, preferred_streets: [], preferredStreets: [] }
+        : requirement;
 
       const matches: MatchResult[] = [];
       const minimumScore = MIN_MATCH_SCORE;
       const hasDistrictFilter =
         normalizePreferredDistricts(requestRequirement.preferred_districts).length > 0;
+      const hasStreetFilter =
+        normalizeStringList(requestRequirement.preferred_streets).length > 0;
 
       for (const listing of listingsForScoring) {
         const match = scoreListingForLead(listing, scoringRequirement);
-        const keywordScore = scoreListingKeyword(
-          listing,
-          requestRequirement.keywordSearch
-        );
+        const keywordScore = hasStreetFilter
+          ? 0
+          : scoreListingKeyword(listing, requestRequirement.keywordSearch);
 
         if (match && (hasDistrictFilter || match.score + keywordScore >= minimumScore)) {
           if (keywordScore > 0) {
@@ -664,25 +727,29 @@ export async function POST(req: Request) {
         "lead-match-debug listings before scoring:",
         listings?.length || 0
       );
-      const { listingsForScoring, fallbackWarning } = getSearchFilteredListings(
+      const { listingsForScoring, fallbackWarning, streetFallback } = getSearchFilteredListings(
         listings || [],
         requestRequirement.preferred_districts,
         requestRequirement.allowNearbyDistricts,
+        requestRequirement.preferred_streets,
         hasStructuredRequirement(requirement) ? null : requestRequirement.keywordSearch
       );
-      const scoringRequirement: LeadRequirement = requirement;
+      const scoringRequirement: LeadRequirement = streetFallback
+        ? { ...requirement, preferred_streets: [], preferredStreets: [] }
+        : requirement;
 
       const matches: MatchWithLead[] = [];
       const minimumScore = MIN_MATCH_SCORE;
       const hasDistrictFilter =
         normalizePreferredDistricts(requestRequirement.preferred_districts).length > 0;
+      const hasStreetFilter =
+        normalizeStringList(requestRequirement.preferred_streets).length > 0;
 
       for (const listing of listingsForScoring) {
         const match = scoreListingForLead(listing, scoringRequirement);
-        const keywordScore = scoreListingKeyword(
-          listing,
-          requestRequirement.keywordSearch
-        );
+        const keywordScore = hasStreetFilter
+          ? 0
+          : scoreListingKeyword(listing, requestRequirement.keywordSearch);
 
         if (match && (hasDistrictFilter || match.score + keywordScore >= minimumScore)) {
           if (keywordScore > 0) {
@@ -764,18 +831,24 @@ export async function POST(req: Request) {
         preferredDistricts: hardDistricts,
       };
       const hasStructuredFilters = hasStructuredRequirement(searchRequirement);
-      const { listingsForScoring, fallbackWarning } = getSearchFilteredListings(
+      const { listingsForScoring, fallbackWarning, streetFallback } = getSearchFilteredListings(
         listings || [],
         hardDistricts,
         searchRequirement.allowNearbyDistricts,
+        searchRequirement.preferred_streets,
         hasStructuredFilters ? null : keyword
       );
+      const scoringRequirement: LeadRequirement = streetFallback
+        ? { ...searchRequirement, preferred_streets: [], preferredStreets: [] }
+        : searchRequirement;
+      const hasStreetFilter =
+        normalizeStringList(searchRequirement.preferred_streets).length > 0;
 
       const matches: MatchResult[] = [];
 
       for (const listing of listingsForScoring) {
-        const match = scoreListingForLead(listing, searchRequirement);
-        const keywordScore = scoreListingKeyword(listing, keyword);
+        const match = scoreListingForLead(listing, scoringRequirement);
+        const keywordScore = hasStreetFilter ? 0 : scoreListingKeyword(listing, keyword);
 
         if (match && match.score + keywordScore >= MIN_MATCH_SCORE) {
           if (keywordScore > 0) {
@@ -795,7 +868,7 @@ export async function POST(req: Request) {
           continue;
         }
 
-        if (!listingPassesHardFilters(listing, searchRequirement)) {
+        if (!listingPassesHardFilters(listing, scoringRequirement)) {
           continue;
         }
 
