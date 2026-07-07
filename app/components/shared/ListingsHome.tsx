@@ -21,6 +21,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 );
 
+const LISTINGS_PAGE_SIZE = 20;
+
 type ListingMatchBreakdown = {
   district_score?: number;
   price_score?: number;
@@ -72,6 +74,9 @@ export default function ListingsHome({
   item.listing ?? (item as Listing);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [listingPage, setListingPage] = useState(1);
+  const [listingTotal, setListingTotal] = useState(0);
+  const [hasNextListingPage, setHasNextListingPage] = useState(false);
   const [queryReady, setQueryReady] = useState(false);
   const [parsedFilters, setParsedFilters] =
     useState<ParsedRequirementFilters | null>(null);
@@ -112,6 +117,15 @@ export default function ListingsHome({
   const aiPropertySuggestionsKey = aiChatMessages
     .map((message) => `${message.property_suggestions?.length || 0}:${message.suggestion_followup_parts?.length || 0}`)
     .join("|");
+  const listingCountLabel = search.trim()
+    ? listings.length
+    : listingTotal || listings.length;
+  const totalListingPages =
+    listingTotal > 0
+      ? Math.max(1, Math.ceil(listingTotal / LISTINGS_PAGE_SIZE))
+      : listingPage;
+  const canGoPreviousListingPage = listingPage > 1;
+  const canGoNextListingPage = hasNextListingPage;
 
   const scrollChatToBottom = () => {
     const el = aiChatContainerRef.current;
@@ -337,6 +351,7 @@ return labels;
   };
 
   const updateSearch = (value: string) => {
+    setListingPage(1);
     setSearch(value);
     replaceSearchQuery(value);
   };
@@ -415,6 +430,8 @@ return labels;
           max_bedrooms: parsed.max_bedrooms,
           property_types: parsed.property_types,
           keywordSearch: parsed.keywordSearch,
+          page: listingPage,
+          limit: LISTINGS_PAGE_SIZE,
         }),
       });
 
@@ -425,12 +442,20 @@ return labels;
 
       if (!res.ok || !json.success) {
         setListings([]);
+        setListingTotal(0);
+        setHasNextListingPage(false);
         setLoading(false);
         return;
       }
 
       const matches = json.matches || [];
+      const total =
+        typeof json.pagination?.total === "number"
+          ? json.pagination.total
+          : matches.length;
       setListings(matches);
+      setListingTotal(total);
+      setHasNextListingPage(Boolean(json.pagination?.hasNextPage));
       setSearchWarning(
         json.fallbackWarning ||
           json.message ||
@@ -443,19 +468,27 @@ return labels;
     setParsedFilters(null);
     setSearchWarning("");
 
-    const { data, error } = await supabase
+    const from = (listingPage - 1) * LISTINGS_PAGE_SIZE;
+    const to = from + LISTINGS_PAGE_SIZE - 1;
+
+    const { data, error, count } = await supabase
       .from("listings")
-      .select("*")
-      .order("updated_at", { ascending: false });
+      .select("*", { count: "exact" })
+      .order("updated_at", { ascending: false })
+      .range(from, to);
 
     if (error) {
       console.error(error);
       setListings([]);
+      setListingTotal(0);
+      setHasNextListingPage(false);
       setLoading(false);
       return;
     }
 
     setListings(data || []);
+    setListingTotal(count || 0);
+    setHasNextListingPage(to + 1 < (count || 0));
     setLoading(false);
   };
 
@@ -588,7 +621,7 @@ return labels;
     window.clearTimeout(timer);
     searchAbortRef.current?.abort();
   };
-}, [queryReady, search]);
+}, [queryReady, search, listingPage]);
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search).get("q");
@@ -704,8 +737,8 @@ return labels;
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <h2 style={{ marginBottom: 8 }}>
             {search.trim()
-              ? `Kết quả phù hợp (${listings.length})`
-              : `Bất động sản nổi bật (${listings.length})`}
+              ? `Kết quả phù hợp (${listingCountLabel})`
+              : `Bất động sản nổi bật (${listingCountLabel})`}
           </h2>
           {search.trim() && (
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -791,6 +824,55 @@ return labels;
                 />
               );
             })}
+          </div>
+        )}
+
+        {!loading && (listingTotal > LISTINGS_PAGE_SIZE || canGoPreviousListingPage || canGoNextListingPage) && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 10,
+              flexWrap: "wrap",
+              marginTop: 24,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setListingPage((current) => Math.max(1, current - 1))}
+              disabled={!canGoPreviousListingPage}
+              style={{
+                background: canGoPreviousListingPage ? "#111827" : "#e5e7eb",
+                color: canGoPreviousListingPage ? "#fff" : "#9ca3af",
+                border: "none",
+                borderRadius: 8,
+                cursor: canGoPreviousListingPage ? "pointer" : "default",
+                padding: "10px 14px",
+                fontWeight: 700,
+              }}
+            >
+              Trang trước
+            </button>
+            <span style={{ color: "#4b5563", fontWeight: 700 }}>
+              Trang {listingPage}/{totalListingPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setListingPage((current) => current + 1)}
+              disabled={!canGoNextListingPage}
+              style={{
+                background: canGoNextListingPage ? "#111827" : "#e5e7eb",
+                color: canGoNextListingPage ? "#fff" : "#9ca3af",
+                border: "none",
+                borderRadius: 8,
+                cursor: canGoNextListingPage ? "pointer" : "default",
+                padding: "10px 14px",
+                fontWeight: 700,
+              }}
+            >
+              Trang sau
+            </button>
           </div>
         )}
       </div>

@@ -48,6 +48,7 @@ const canDeleteListing = permissions.canDeleteListing;
       <div style={{ position: "relative", width: isMobile ? "100%" : 260, height: isMobile ? 200 : 180, flexShrink: 0 }}>
         <img
           src={listing.images?.[0] || "https://placehold.co/600x400"}
+          loading="lazy"
           alt={canSeeRawListing ? listing.title || "Bất động sản" : publicListing.publicTitle}
           style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 10, opacity: listing.status === "rented" ? 0.6 : 1 }}
         />

@@ -237,6 +237,7 @@ const homeHref =
               {currentImage ? (
                 <img
                   src={currentImage}
+                  loading="lazy"
                   alt={displayTitle || "Bất động sản"}
                   style={{
                     ...styles.mainImage,
@@ -270,6 +271,7 @@ const homeHref =
                 <img
                   key={i}
                   src={img}
+                  loading="lazy"
                   onClick={() => selectImage(i)}
                   style={{
                     ...styles.thumb,
@@ -410,6 +412,7 @@ const homeHref =
 
           <img
             src={currentImage}
+            loading="lazy"
             style={styles.modalImage}
             onClick={(event) => event.stopPropagation()}
           />

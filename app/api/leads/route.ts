@@ -26,6 +26,8 @@ type MatchWithLead = MatchResult & { lead_id: string };
 
 const MIN_MATCH_SCORE = 40;
 const KEYWORD_MATCH_SCORE = 45;
+const DEFAULT_MATCH_PAGE_SIZE = 20;
+const MAX_MATCH_PAGE_SIZE = 30;
 
 const hardFilterDistricts = normalizedDistrictNames.map((district) => district.label);
 
@@ -64,6 +66,85 @@ function normalizeStringList(value: unknown) {
   return rawValues
     .map((item) => String(item || "").trim())
     .filter(Boolean);
+}
+
+function clampPositiveInteger(value: unknown, fallback: number, max: number) {
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return Math.min(Math.floor(parsed), max);
+}
+
+function getListingPagination(body: Record<string, unknown>) {
+  const page = clampPositiveInteger(body.page, 1, 100000);
+  const limit = clampPositiveInteger(
+    body.limit ?? body.pageSize,
+    DEFAULT_MATCH_PAGE_SIZE,
+    MAX_MATCH_PAGE_SIZE
+  );
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+
+  return { page, limit, from, to };
+}
+
+function buildPaginationMeta(
+  pagination: ReturnType<typeof getListingPagination>,
+  total: number | null
+) {
+  const safeTotal = total || 0;
+
+  return {
+    page: pagination.page,
+    limit: pagination.limit,
+    total: safeTotal,
+    totalPages: safeTotal > 0 ? Math.ceil(safeTotal / pagination.limit) : 1,
+    hasNextPage: pagination.to + 1 < safeTotal,
+  };
+}
+
+function paginateItems<T>(
+  items: T[],
+  pagination: ReturnType<typeof getListingPagination>
+) {
+  return items.slice(pagination.from, pagination.to + 1);
+}
+
+function getRoughPriceBounds(requirement: LeadRequirement) {
+  const normalized = normalizeLeadRequirement(requirement);
+  const roughMin =
+    normalized.min_price !== null
+      ? Math.max(0, Math.floor(normalized.min_price * 0.75))
+      : null;
+  const roughMax =
+    normalized.price_mode === "target" && normalized.target_price !== null
+      ? Math.ceil(normalized.target_price * 1.5)
+      : normalized.max_price !== null
+        ? Math.ceil(normalized.max_price * 1.05)
+        : null;
+
+  return { roughMin, roughMax };
+}
+
+function buildRoughListingsQuery(requirement: LeadRequirement) {
+  const { roughMin, roughMax } = getRoughPriceBounds(requirement);
+  let query = supabase
+    .from("listings")
+    .select("*")
+    .order("updated_at", { ascending: false });
+
+  if (roughMin !== null) {
+    query = query.gte("price", roughMin);
+  }
+
+  if (roughMax !== null) {
+    query = query.lte("price", roughMax);
+  }
+
+  return query;
 }
 
 function buildStreetFallbackWarning(streets: string[], districts: string[]) {
@@ -562,11 +643,13 @@ export async function POST(req: Request) {
     const requestRequirement = buildRequirementFromBody(body);
     const normalizedRequirement =
       buildNormalizedRequirementResponse(requestRequirement);
+    const listingPagination = getListingPagination(body);
 
     if (mode === "match") {
-      const { data: listings } = await supabase
-        .from("listings")
-        .select("*");
+      const { data: listings, error: listingsError } =
+        await buildRoughListingsQuery(requestRequirement);
+
+      if (listingsError) throw listingsError;
 
       const requirement: LeadRequirement = requestRequirement;
       const hasStructuredFilters = hasStructuredRequirement(requirement);
@@ -648,11 +731,13 @@ export async function POST(req: Request) {
       }
 
       matches.sort(compareMatchResults);
+      const pagedMatches = paginateItems(matches, listingPagination);
 
       return NextResponse.json({
         success: true,
         normalizedRequirement,
-        matches,
+        matches: pagedMatches,
+        pagination: buildPaginationMeta(listingPagination, matches.length),
         fallbackWarning,
       });
     }
@@ -813,9 +898,10 @@ export async function POST(req: Request) {
     // 🔵 MODE 2: SEARCH BAR (LEVEL 2 UI SEARCH)
     // =================================================
     if (mode === "search") {
-      const { data: listings } = await supabase
-        .from("listings")
-        .select("*");
+      const { data: listings, error: listingsError } =
+        await buildRoughListingsQuery(requestRequirement);
+
+      if (listingsError) throw listingsError;
 
       const district = getDistrictLabel(query);
       const hardDistricts =
@@ -880,11 +966,13 @@ export async function POST(req: Request) {
       }
 
       matches.sort(compareMatchResults);
+      const pagedMatches = paginateItems(matches, listingPagination);
 
       return NextResponse.json({
         success: true,
         normalizedRequirement,
-        matches,
+        matches: pagedMatches,
+        pagination: buildPaginationMeta(listingPagination, matches.length),
         fallbackWarning,
       });
     }

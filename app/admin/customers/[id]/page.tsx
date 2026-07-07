@@ -285,7 +285,7 @@ function Matches({ matches }: { matches: MatchItem[] }) {
           return (
             <article className="match-item" key={`${listingId}-${index}`}>
               <div className="listing-image">
-                {image ? <img src={image} alt="" /> : <span>Ảnh</span>}
+                {image ? <img src={image} alt="" loading="lazy" /> : <span>Ảnh</span>}
               </div>
               <div>
                 <strong>{listing.title || "Căn phù hợp nhu cầu khách"}</strong>
