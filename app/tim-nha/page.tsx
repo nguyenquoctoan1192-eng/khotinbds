@@ -442,6 +442,7 @@ export default function FindHomePage() {
               <div style={{ position: "relative", width: 250, maxWidth: "100%" }}>
                 <img
                   src={listing.images[0]}
+                  loading="lazy"
                   alt={canSeeRawListing ? listing.title || "Bất động sản" : publicListing.publicTitle}
                   style={{ display: "block", width: "100%", opacity: listing.status === "rented" ? 0.6 : 1 }}
                 />

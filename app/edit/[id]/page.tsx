@@ -16,6 +16,7 @@ import {
 } from "next/navigation";
 import { useUserRole } from "@/lib/userRole";
 import RoleGate from "@/app/components/role-gate";
+import { resizeImageForUpload } from "@/lib/clientImageResize";
 import type { ListingContentResult } from "@/lib/listingContent";
 
 const supabase = createClient(
@@ -217,12 +218,16 @@ const [amenities, setAmenities] =
     const uploadedUrls: string[] = [];
 
     for (const file of files) {
-      const fileName = `${Date.now()}-${file.name}`;
+      const uploadFile = await resizeImageForUpload(file);
+      const fileName = `${Date.now()}-${uploadFile.name}`;
 
       const { error } =
         await supabase.storage
           .from("image")
-          .upload(fileName, file);
+          .upload(fileName, uploadFile, {
+            cacheControl: "31536000",
+            upsert: false,
+          });
 
       if (error) {
         console.error(error);

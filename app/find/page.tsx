@@ -109,6 +109,7 @@ function FindContent() {
               <div style={{ position: "relative", width: 250, maxWidth: "100%" }}>
                 <img
                   src={item.images[0]}
+                  loading="lazy"
                   alt={canSeeRawListing ? item.title || "Bất động sản" : publicListing.publicTitle}
                   style={{ display: "block", width: "100%", opacity: item.status === "rented" ? 0.6 : 1 }}
                 />

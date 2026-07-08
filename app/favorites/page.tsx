@@ -59,6 +59,7 @@ export default function FavoritesPage() {
                 <div style={styles.imageFrame}>
                   <img
                     src={item.image || item.images?.[0] || "https://placehold.co/600x400"}
+                    loading="lazy"
                     alt={canSeeRawListing ? item.title || "Bất động sản" : publicListing.publicTitle}
                     style={{
                       ...styles.image,

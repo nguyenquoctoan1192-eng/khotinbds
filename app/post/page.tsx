@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import SiteNavbar from "@/app/components/site-navbar";
 import RoleGate from "@/app/components/role-gate";
+import { resizeImageForUpload } from "@/lib/clientImageResize";
 import { parseZaloListingText } from "@/lib/zaloListingParser";
 
 function DraggableImage({
@@ -240,13 +241,17 @@ const [amenities, setAmenities] =
     const uploadedUrls: string[] = [];
 
     for (const file of files) {
+      const uploadFile = await resizeImageForUpload(file);
       const fileName =
-  `${Date.now()}-${Math.random()}-${file.name}`;
+  `${Date.now()}-${Math.random()}-${uploadFile.name}`;
 
       const { error } =
         await supabase.storage
           .from("image")
-          .upload(fileName, file);
+          .upload(fileName, uploadFile, {
+            cacheControl: "31536000",
+            upsert: false,
+          });
 
       if (error) {
         console.error(error);
