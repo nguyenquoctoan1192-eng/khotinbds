@@ -1,0 +1,26 @@
+"use client";
+import { useEffect, useMemo, useState } from "react";
+
+type Account={id:string;name:string;is_active:boolean};
+type Group={id:string;name:string;url:string;district:string|null;category:string;priority:number;is_active:boolean};
+type Job={id:string;status:string;scheduled_at:string;posted_at:string|null;content:string;listing_id:string;facebook_accounts?:{name:string};facebook_groups?:{name:string;url:string;district:string}};
+
+export default function SocialPublishingPage(){
+ const [accounts,setAccounts]=useState<Account[]>([]),[groups,setGroups]=useState<Group[]>([]),[jobs,setJobs]=useState<Job[]>([]),[loading,setLoading]=useState(true);
+ const [accountName,setAccountName]=useState(""),[groupForm,setGroupForm]=useState({name:"",url:"",district:"Quận 3",category:"general"});
+ async function load(){setLoading(true);const r=await fetch("/api/social/dashboard",{cache:"no-store"});const j=await r.json();setAccounts(j.accounts||[]);setGroups(j.groups||[]);setJobs(j.jobs||[]);setLoading(false)}
+ useEffect(()=>{void load()},[]);
+ const counts=useMemo(()=>({pending:jobs.filter(x=>x.status==="pending").length,processing:jobs.filter(x=>x.status==="processing").length,posted:jobs.filter(x=>x.status==="posted").length,failed:jobs.filter(x=>x.status==="failed").length}),[jobs]);
+ async function addAccount(){if(!accountName.trim())return;await fetch("/api/social/accounts",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({name:accountName})});setAccountName("");await load()}
+ async function addGroup(){if(!groupForm.name.trim()||!groupForm.url.trim())return;await fetch("/api/social/groups",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(groupForm)});setGroupForm({...groupForm,name:"",url:""});await load()}
+ return <main style={{padding:24,maxWidth:1400,margin:"0 auto",fontFamily:"Arial,sans-serif"}}>
+  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:16}}><div><h1 style={{margin:0}}>AI Social Publisher</h1><p style={{color:"#64748b"}}>Quản lý nick, nhóm Facebook và hàng chờ đăng chéo tối đa 10 nhóm.</p></div><button onClick={load}>Làm mới</button></div>
+  <section style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:12,margin:"20px 0"}}>{Object.entries(counts).map(([k,v])=><div key={k} style={{border:"1px solid #e2e8f0",borderRadius:12,padding:16}}><div style={{fontSize:28,fontWeight:700}}>{v}</div><div style={{color:"#64748b"}}>{k}</div></div>)}</section>
+  <section style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:16}}>
+   <div style={{border:"1px solid #e2e8f0",borderRadius:12,padding:16}}><h2>Nick Facebook</h2><div style={{display:"flex",gap:8}}><input value={accountName} onChange={e=>setAccountName(e.target.value)} placeholder="Tên nick" style={{flex:1}}/><button onClick={addAccount}>Thêm</button></div>{accounts.map(a=><div key={a.id} style={{padding:"10px 0",borderBottom:"1px solid #f1f5f9"}}>{a.name}</div>)}</div>
+   <div style={{border:"1px solid #e2e8f0",borderRadius:12,padding:16}}><h2>Thêm nhóm</h2><div style={{display:"grid",gridTemplateColumns:"2fr 3fr 1fr 1fr auto",gap:8}}><input placeholder="Tên nhóm" value={groupForm.name} onChange={e=>setGroupForm({...groupForm,name:e.target.value})}/><input placeholder="Link nhóm" value={groupForm.url} onChange={e=>setGroupForm({...groupForm,url:e.target.value})}/><input placeholder="Quận" value={groupForm.district} onChange={e=>setGroupForm({...groupForm,district:e.target.value})}/><select value={groupForm.category} onChange={e=>setGroupForm({...groupForm,category:e.target.value})}><option value="general">Tổng hợp</option><option value="frontage">Mặt tiền</option><option value="business">Mặt bằng</option><option value="whole-house">Nguyên căn</option></select><button onClick={addGroup}>Thêm</button></div><div style={{maxHeight:260,overflow:"auto",marginTop:12}}>{groups.map(g=><div key={g.id} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #f1f5f9"}}><a href={g.url} target="_blank" rel="noreferrer">{g.name}</a><span>{g.district||"Toàn TP"} · {g.category}</span></div>)}</div></div>
+  </section>
+  <section style={{border:"1px solid #e2e8f0",borderRadius:12,padding:16,marginTop:16}}><h2>Hàng chờ gần nhất</h2>{loading?<p>Đang tải...</p>:<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}><thead><tr><th>Trạng thái</th><th>Thời gian</th><th>Nick</th><th>Nhóm</th><th>Nội dung</th></tr></thead><tbody>{jobs.map(j=><tr key={j.id}><td>{j.status}</td><td>{new Date(j.scheduled_at).toLocaleString("vi-VN")}</td><td>{j.facebook_accounts?.name||""}</td><td><a href={j.facebook_groups?.url} target="_blank" rel="noreferrer">{j.facebook_groups?.name||""}</a></td><td style={{maxWidth:480,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{j.content}</td></tr>)}</tbody></table></div>}</section>
+ </main>
+}
+

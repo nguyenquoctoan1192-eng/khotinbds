@@ -1,0 +1,310 @@
+
+==================================================
+FILE: app\api\social\dashboard\route.ts
+==================================================
+
+import { NextResponse } from "next/server";
+import { getSocialAdminClient } from "@/lib/socialSupabase";
+
+export async function GET() {
+  const db = getSocialAdminClient();
+  const [{ data: jobs, error: je }, { data: accounts }, { data: groups }] = await Promise.all([
+    db.from("social_post_jobs").select("id,status,scheduled_at,posted_at,content,listing_id,facebook_accounts(name),facebook_groups(name,url,district)").order("scheduled_at", { ascending: false }).limit(100),
+    db.from("facebook_accounts").select("id,name,is_active").order("name"),
+    db.from("facebook_groups").select("id,name,url,district,category,priority,is_active").order("priority").limit(500),
+  ]);
+  if (je) return NextResponse.json({ error: je.message }, { status: 500 });
+  return NextResponse.json({ jobs, accounts, groups });
+}
+
+==================================================
+FILE: app\api\social\next-job\route.ts
+==================================================
+
+import { NextResponse } from "next/server";
+import { addRandomRepeatHours } from "@/lib/socialPosting";
+import { getSocialAdminClient } from "@/lib/socialSupabase";
+
+export const dynamic = "force-dynamic";
+
+function vietnamHour() {
+  return Number(new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    hour: "2-digit",
+    hour12: false,
+  }).format(new Date()));
+}
+
+function insideHours(hour: number, start: number, end: number) {
+  if (start === end) return true;
+  return start < end ? hour >= start && hour < end : hour >= start || hour < end;
+}
+
+export async function GET(request: Request) {
+  const accountId = new URL(request.url).searchParams.get("accountId");
+  if (!accountId) return NextResponse.json({ error: "Thiếu accountId" }, { status: 400 });
+
+  const db = getSocialAdminClient();
+  const now = new Date();
+
+  const { data: account, error: ae } = await db
+    .from("facebook_accounts")
+    .select("id,is_active,status,health_status,daily_post_limit,hourly_post_limit,paused_until")
+    .eq("id", accountId)
+    .single();
+
+  if (ae || !account) return NextResponse.json({ error: "Không tìm thấy tài khoản Facebook" }, { status: 404 });
+  if (!account.is_active || account.status !== "active" || !["healthy", "warming_up"].includes(account.health_status)) {
+    return NextResponse.json({ job: null, blocked: true, reason: `Tài khoản đang ở trạng thái ${account.health_status}` });
+  }
+  if (account.paused_until && new Date(account.paused_until) > now) {
+    return NextResponse.json({ job: null, blocked: true, reason: "Tài khoản đang tạm dừng", pausedUntil: account.paused_until });
+  }
+
+  const dayStart = new Date(now); dayStart.setHours(0,0,0,0);
+  const hourStart = new Date(now.getTime() - 60 * 60 * 1000);
+  const [{ count: postedToday }, { count: postedLastHour }] = await Promise.all([
+    db.from("social_post_history").select("id", { count: "exact", head: true }).eq("facebook_account_id", accountId).gte("posted_at", dayStart.toISOString()),
+    db.from("social_post_history").select("id", { count: "exact", head: true }).eq("facebook_account_id", accountId).gte("posted_at", hourStart.toISOString()),
+  ]);
+
+  if ((postedToday ?? 0) >= account.daily_post_limit) return NextResponse.json({ job: null, blocked: true, reason: "Đã đạt giới hạn bài hôm nay" });
+  if ((postedLastHour ?? 0) >= account.hourly_post_limit) return NextResponse.json({ job: null, blocked: true, reason: "Đã đạt giới hạn bài trong 1 giờ" });
+
+  const { data: candidates, error } = await db
+    .from("social_post_jobs")
+    .select(`id,listing_id,facebook_group_id,facebook_account_id,content,content_version,scheduled_at,attempt_count,max_attempts,next_retry_at,facebook_groups(id,name,url,district,post_interval_hours,daily_post_limit,allowed_start_hour,allowed_end_hour,group_status,muted_until)`)
+    .eq("facebook_account_id", accountId)
+    .eq("status", "pending")
+    .lte("scheduled_at", now.toISOString())
+    .or(`next_retry_at.is.null,next_retry_at.lte.${now.toISOString()}`)
+    .order("scheduled_at")
+    .limit(20);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  for (const job of candidates ?? []) {
+    const group = Array.isArray(job.facebook_groups) ? job.facebook_groups[0] : job.facebook_groups;
+    if (!group || group.group_status !== "active" || (group.muted_until && new Date(group.muted_until) > now)) continue;
+    if (!insideHours(vietnamHour(), group.allowed_start_hour, group.allowed_end_hour)) continue;
+
+    const { count: groupPostsToday } = await db
+      .from("social_post_history")
+      .select("id", { count: "exact", head: true })
+      .eq("facebook_account_id", accountId)
+      .eq("facebook_group_id", job.facebook_group_id)
+      .gte("posted_at", dayStart.toISOString());
+    if ((groupPostsToday ?? 0) >= group.daily_post_limit) continue;
+
+    const { data: listing } = await db.from("listings")
+      .select("id,title,district,address,price,area,width,length,floors,bedrooms,bathrooms,description,contact_phone,images,status")
+      .eq("id", job.listing_id).single();
+
+    if (!listing) {
+      await db.from("social_post_jobs").update({ status: "cancelled", error_code: "LISTING_NOT_FOUND", last_error: "Không tìm thấy tin" }).eq("id", job.id);
+      continue;
+    }
+    if (listing.status && listing.status !== "available") {
+      await db.from("social_post_jobs").update({ status: "cancelled", error_code: "LISTING_UNAVAILABLE", last_error: "Tin đã cho thuê hoặc ngừng đăng" }).eq("listing_id", job.listing_id).in("status", ["pending","processing"]);
+      continue;
+    }
+
+    const { data: last } = await db.from("social_post_history").select("posted_at")
+      .eq("facebook_account_id", accountId).eq("facebook_group_id", job.facebook_group_id)
+      .eq("listing_id", job.listing_id).order("posted_at", { ascending: false }).limit(1).maybeSingle();
+
+    if (last?.posted_at) {
+      const randomEarliest = addRandomRepeatHours(new Date(last.posted_at));
+      const groupEarliest = new Date(new Date(last.posted_at).getTime() + group.post_interval_hours * 3600000);
+      const earliest = randomEarliest > groupEarliest ? randomEarliest : groupEarliest;
+      if (earliest > now) {
+        await db.from("social_post_jobs").update({ scheduled_at: earliest.toISOString() }).eq("id", job.id);
+        continue;
+      }
+    }
+
+    if (Number(job.attempt_count || 0) >= Number(job.max_attempts || 3)) {
+      await db.from("social_post_jobs").update({ status: "failed", error_code: "MAX_ATTEMPTS_REACHED", last_error: "Đã vượt số lần thử tối đa" }).eq("id", job.id);
+      continue;
+    }
+
+    const { data: claimed, error: ce } = await db.from("social_post_jobs")
+      .update({ status: "processing", attempt_count: Number(job.attempt_count || 0) + 1, claimed_at: now.toISOString(), last_error: null, error_code: null, error_type: null })
+      .eq("id", job.id).eq("status", "pending")
+      .select(`id,listing_id,facebook_group_id,facebook_account_id,content,content_version,scheduled_at,attempt_count,facebook_groups(id,name,url,district)`)
+      .maybeSingle();
+
+    if (!ce && claimed) return NextResponse.json({ job: { ...claimed, listing, images: Array.isArray(listing.images) ? listing.images : [] } });
+  }
+
+  return NextResponse.json({ job: null });
+}
+
+==================================================
+FILE: app\api\social\mark-posted\route.ts
+==================================================
+
+import { NextResponse } from "next/server";
+import { getSocialAdminClient } from "@/lib/socialSupabase";
+
+type Body = { jobId: string; facebookPostUrl?: string; pendingApproval?: boolean; note?: string };
+
+export async function POST(request: Request) {
+  const body = (await request.json()) as Body;
+  if (!body.jobId) return NextResponse.json({ error: "Thiếu jobId" }, { status: 400 });
+  const db = getSocialAdminClient();
+  const { data: job, error: je } = await db.from("social_post_jobs")
+    .select("id,batch_id,listing_id,facebook_account_id,facebook_group_id,content,content_version")
+    .eq("id", body.jobId).single();
+  if (je || !job) return NextResponse.json({ error: "Không tìm thấy job" }, { status: 404 });
+
+  const status = body.pendingApproval ? "pending_approval" : "posted";
+  const postedAt = new Date().toISOString();
+  const { error: ue } = await db.from("social_post_jobs").update({
+    status,
+    approval_status: body.pendingApproval ? "pending" : "approved",
+    facebook_post_url: body.facebookPostUrl || null,
+    posted_at: postedAt,
+    result_note: body.note || null,
+    last_error: null,
+    error_code: null,
+    error_type: null,
+  }).eq("id", body.jobId).eq("status", "processing");
+  if (ue) return NextResponse.json({ error: ue.message }, { status: 500 });
+
+  const { error: he } = await db.from("social_post_history").insert({
+    job_id: job.id, batch_id: job.batch_id, listing_id: job.listing_id,
+    facebook_account_id: job.facebook_account_id, facebook_group_id: job.facebook_group_id,
+    content_version: job.content_version, content: job.content,
+    facebook_post_url: body.facebookPostUrl || null, posted_at: postedAt,
+  });
+  if (he) return NextResponse.json({ error: he.message }, { status: 500 });
+
+  await db.from("facebook_groups").update({ last_posted_at: postedAt }).eq("id", job.facebook_group_id);
+  await db.from("facebook_accounts").update({ last_seen_at: postedAt }).eq("id", job.facebook_account_id);
+  return NextResponse.json({ success: true, status });
+}
+
+==================================================
+FILE: app\api\social\mark-failed\route.ts
+==================================================
+
+import { NextResponse } from "next/server";
+import { getSocialAdminClient } from "@/lib/socialSupabase";
+
+type ErrorType = "network"|"timeout"|"ui_changed"|"checkpoint"|"captcha"|"rate_limit"|"group_muted"|"group_banned"|"permission"|"content_rejected"|"unknown";
+type Body = { jobId: string; errorType?: ErrorType; errorCode?: string; message?: string };
+const RETRYABLE = new Set<ErrorType>(["network","timeout","ui_changed","rate_limit"]);
+
+export async function POST(request: Request) {
+  const body = (await request.json()) as Body;
+  if (!body.jobId) return NextResponse.json({ error: "Thiếu jobId" }, { status: 400 });
+  const db = getSocialAdminClient();
+  const errorType: ErrorType = body.errorType || "unknown";
+  const { data: job, error: je } = await db.from("social_post_jobs")
+    .select("id,facebook_account_id,facebook_group_id,attempt_count,max_attempts")
+    .eq("id", body.jobId).single();
+  if (je || !job) return NextResponse.json({ error: "Không tìm thấy job" }, { status: 404 });
+
+  if (errorType === "checkpoint" || errorType === "captcha") {
+    await db.from("facebook_accounts").update({
+      health_status: errorType, status: "paused", paused_until: null,
+      last_error: body.message || errorType,
+      ...(errorType === "checkpoint" ? { last_checkpoint_at: new Date().toISOString() } : { last_captcha_at: new Date().toISOString() }),
+    }).eq("id", job.facebook_account_id);
+    await db.from("social_post_jobs").update({ status: "pending", error_type: errorType, error_code: body.errorCode || errorType.toUpperCase(), last_error: body.message || errorType, next_retry_at: null }).eq("id", body.jobId);
+    return NextResponse.json({ success: true, action: "account_paused", retry: false });
+  }
+
+  if (errorType === "group_muted" || errorType === "group_banned") {
+    await db.from("facebook_groups").update({ group_status: errorType === "group_banned" ? "banned" : "muted", last_error: body.message || errorType }).eq("id", job.facebook_group_id);
+    await db.from("social_post_jobs").update({ status: "failed", error_type: errorType, error_code: body.errorCode || errorType.toUpperCase(), last_error: body.message || errorType, next_retry_at: null }).eq("id", body.jobId);
+    return NextResponse.json({ success: true, action: "group_disabled", retry: false });
+  }
+
+  const canRetry = RETRYABLE.has(errorType) && Number(job.attempt_count || 0) < Number(job.max_attempts || 3);
+  if (canRetry) {
+    const minutes = errorType === "rate_limit" ? 60 : Math.min(5 * Math.max(Number(job.attempt_count || 1), 1), 30);
+    const nextRetryAt = new Date(Date.now() + minutes * 60000).toISOString();
+    await db.from("social_post_jobs").update({ status: "pending", error_type: errorType, error_code: body.errorCode || errorType.toUpperCase(), last_error: body.message || errorType, next_retry_at: nextRetryAt }).eq("id", body.jobId);
+    return NextResponse.json({ success: true, action: "retry_scheduled", retry: true, nextRetryAt });
+  }
+
+  await db.from("social_post_jobs").update({ status: "failed", error_type: errorType, error_code: body.errorCode || errorType.toUpperCase(), last_error: body.message || errorType, next_retry_at: null }).eq("id", body.jobId);
+  return NextResponse.json({ success: true, action: "failed", retry: false });
+}
+
+==================================================
+FILE: lib\socialPosting.ts
+==================================================
+
+import crypto from "node:crypto";
+
+export const MAX_GROUPS_PER_CROSSPOST = 10;
+export const MIN_DELAY_MINUTES = 3;
+export const MAX_DELAY_MINUTES = 10;
+export const MIN_REPEAT_HOURS = 12;
+export const MAX_REPEAT_HOURS = 16;
+
+export function randomInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+export function addRandomMinutes(from: Date, min = MIN_DELAY_MINUTES, max = MAX_DELAY_MINUTES): Date {
+  return new Date(from.getTime() + randomInt(min, max) * 60_000);
+}
+
+export function addRandomRepeatHours(from: Date): Date {
+  const minutes = randomInt(MIN_REPEAT_HOURS * 60, MAX_REPEAT_HOURS * 60);
+  return new Date(from.getTime() + minutes * 60_000);
+}
+
+export function contentHash(content: string): string {
+  return crypto.createHash("sha256").update(content.trim().replace(/\s+/g, " ")).digest("hex");
+}
+
+export type GroupCandidate = {
+  id: string;
+  district: string | null;
+  category: string;
+  priority: number;
+};
+
+export function selectCrosspostGroups(groups: GroupCandidate[], district: string, listingCategories: string[]) {
+  const d = district.trim().toLowerCase();
+  const categories = new Set(listingCategories.map((x) => x.trim().toLowerCase()));
+  return [...groups]
+    .sort((a, b) => {
+      const ad = a.district?.trim().toLowerCase() === d ? 0 : 1;
+      const bd = b.district?.trim().toLowerCase() === d ? 0 : 1;
+      if (ad !== bd) return ad - bd;
+      const ac = categories.has(a.category.toLowerCase()) ? 0 : a.category === "whole-house" ? 1 : 2;
+      const bc = categories.has(b.category.toLowerCase()) ? 0 : b.category === "whole-house" ? 1 : 2;
+      if (ac !== bc) return ac - bc;
+      return a.priority - b.priority;
+    })
+    .slice(0, MAX_GROUPS_PER_CROSSPOST);
+}
+
+export function buildSchedule(startAt: Date, count: number): Date[] {
+  const result: Date[] = [];
+  let cursor = new Date(startAt);
+  for (let i = 0; i < count; i += 1) {
+    if (i > 0) cursor = addRandomMinutes(cursor);
+    result.push(new Date(cursor));
+  }
+  return result;
+}
+
+==================================================
+FILE: lib\socialSupabase.ts
+==================================================
+
+import { createClient } from "@supabase/supabase-js";
+
+export function getSocialAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error("Thiếu NEXT_PUBLIC_SUPABASE_URL hoặc SUPABASE_SERVICE_ROLE_KEY");
+  return createClient(url, key, { auth: { persistSession: false } });
+}

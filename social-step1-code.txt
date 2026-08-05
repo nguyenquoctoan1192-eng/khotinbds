@@ -1,0 +1,398 @@
+
+==================================================
+FILE: app\api\social\sync-today\route.ts
+==================================================
+
+import { NextResponse } from "next/server";
+import { buildSchedule, selectCrosspostGroups } from "@/lib/socialPosting";
+import { getSocialAdminClient } from "@/lib/socialSupabase";
+
+export const dynamic = "force-dynamic";
+
+type ListingRow = {
+  id: string;
+  title: string | null;
+  district: string | null;
+  address: string | null;
+  price: number | null;
+  area: number | null;
+  width: number | null;
+  length: number | null;
+  floors: number | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  description: string | null;
+  contact_phone: string | null;
+  images: string[] | null;
+  status: string | null;
+  created_at: string;
+};
+
+function startOfTodayVietnam() {
+  const now = new Date();
+  const vnOffset = 7 * 60 * 60 * 1000;
+  const vnNow = new Date(now.getTime() + vnOffset);
+  const utcStart = Date.UTC(
+    vnNow.getUTCFullYear(),
+    vnNow.getUTCMonth(),
+    vnNow.getUTCDate(),
+    0, 0, 0, 0
+  );
+  return new Date(utcStart - vnOffset);
+}
+
+function endOfTodayVietnam() {
+  return new Date(startOfTodayVietnam().getTime() + 24 * 60 * 60 * 1000);
+}
+
+function detectCategories(listing: ListingRow) {
+  const source = [listing.title, listing.address, listing.description]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  const categories = new Set<string>(["whole-house", "general"]);
+
+  if (source.includes("mặt tiền") || source.includes("mat tien") || /\bmt\b/.test(source)) {
+    categories.add("frontage");
+    categories.add("business");
+  }
+  if (source.includes("văn phòng") || source.includes("van phong")) categories.add("office");
+  if (source.includes("phòng trọ") || source.includes("phong tro")) categories.add("room");
+  if (
+    source.includes("kinh doanh") ||
+    source.includes("showroom") ||
+    source.includes("spa") ||
+    source.includes("nhà hàng") ||
+    source.includes("nha hang") ||
+    source.includes("cafe")
+  ) categories.add("business");
+
+  return Array.from(categories);
+}
+
+function formatPrice(price: number | null) {
+  if (!price) return "Liên hệ";
+  return `${price.toLocaleString("vi-VN")} đồng/tháng`;
+}
+
+function buildFacebookContents(listing: ListingRow) {
+  const dimensions = listing.width && listing.length
+    ? `${listing.width}x${listing.length}m`
+    : listing.area
+      ? `${listing.area}m²`
+      : "";
+
+  const structure = [
+    listing.floors ? `${listing.floors} tầng` : "",
+    listing.bedrooms ? `${listing.bedrooms} phòng ngủ` : "",
+    listing.bathrooms ? `${listing.bathrooms} WC` : "",
+  ].filter(Boolean);
+
+  const location = [listing.address, listing.district].filter(Boolean).join(", ");
+  const description = listing.description?.trim() || "Phù hợp thuê ở, làm văn phòng hoặc kinh doanh tùy nhu cầu.";
+  const contact = listing.contact_phone ? `☎️ Liên hệ: ${listing.contact_phone}` : "";
+
+  return [
+    [
+      `🔥 ${listing.title || "CHO THUÊ BẤT ĐỘNG SẢN"}`,
+      location ? `📍 ${location}` : "",
+      dimensions ? `📐 Diện tích: ${dimensions}` : "",
+      structure.length ? `🏢 ${structure.join(" – ")}` : "",
+      `💰 Giá thuê: ${formatPrice(listing.price)}`,
+      "",
+      description,
+      contact,
+    ],
+    [
+      `🏠 CHO THUÊ ${(listing.title || listing.district || "").toUpperCase()}`,
+      listing.district ? `Khu vực: ${listing.district}` : "",
+      dimensions ? `Diện tích: ${dimensions}` : "",
+      structure.length ? `Công năng: ${structure.join(", ")}` : "",
+      `Giá: ${formatPrice(listing.price)}`,
+      "",
+      description,
+      contact,
+    ],
+    [
+      `📣 CĂN ĐẸP KHU ${listing.district || "TP.HCM"}`,
+      location ? `Vị trí: ${location}` : "",
+      dimensions ? `Không gian: ${dimensions}` : "",
+      structure.length ? structure.join(" – ") : "",
+      `💵 ${formatPrice(listing.price)}`,
+      "",
+      description,
+      contact,
+    ],
+    [
+      `✨ ${listing.title || "BẤT ĐỘNG SẢN CHO THUÊ"}`,
+      listing.district ? `📍 ${listing.district}` : "",
+      dimensions ? `📐 ${dimensions}` : "",
+      structure.length ? `🏢 ${structure.join(" – ")}` : "",
+      `💰 ${formatPrice(listing.price)}`,
+      "",
+      description,
+      contact,
+    ],
+    [
+      `🔥 NHÀ / MẶT BẰNG CHO THUÊ ${listing.district || ""}`.trim(),
+      location ? `Đường/khu vực: ${location}` : "",
+      dimensions ? `Diện tích: ${dimensions}` : "",
+      structure.length ? `Kết cấu: ${structure.join(", ")}` : "",
+      `Giá thuê: ${formatPrice(listing.price)}`,
+      "",
+      "Ưu tiên khách thiện chí, có thể trao đổi thêm khi xem nhà.",
+      contact,
+    ],
+  ].map((parts) => parts.filter(Boolean).join("\n").trim());
+}
+
+async function getAccountId(db: ReturnType<typeof getSocialAdminClient>, requested?: string | null) {
+  if (requested) return requested;
+
+  const { data: active } = await db
+    .from("facebook_accounts")
+    .select("id,is_active")
+    .eq("is_active", true)
+    .limit(1);
+
+  if (active?.[0]?.id) return String(active[0].id);
+
+  const { data: anyAccount } = await db
+    .from("facebook_accounts")
+    .select("id")
+    .limit(1);
+
+  return anyAccount?.[0]?.id ? String(anyAccount[0].id) : null;
+}
+
+export async function POST(request: Request) {
+  const db = getSocialAdminClient();
+  let requestedAccountId: string | null = null;
+
+  try {
+    const body = await request.json();
+    requestedAccountId = body?.facebookAccountId || body?.accountId || body?.facebook_account_id || null;
+  } catch {}
+
+  const facebookAccountId = await getAccountId(db, requestedAccountId);
+  if (!facebookAccountId) {
+    return NextResponse.json({ error: "Chưa có tài khoản Facebook trong bảng facebook_accounts" }, { status: 409 });
+  }
+
+  const start = startOfTodayVietnam();
+  const end = endOfTodayVietnam();
+
+  const { data: listings, error: listingsError } = await db
+    .from("listings")
+    .select("id,title,district,address,price,area,width,length,floors,bedrooms,bathrooms,description,contact_phone,images,status,created_at")
+    .gte("created_at", start.toISOString())
+    .lt("created_at", end.toISOString())
+    .order("created_at", { ascending: true });
+
+  if (listingsError) return NextResponse.json({ error: listingsError.message }, { status: 500 });
+
+  const available = (listings ?? []).filter((x: ListingRow) => !x.status || x.status === "available");
+  if (!available.length) {
+    return NextResponse.json({ success: true, found: 0, queuedListings: 0, skippedListings: 0, createdJobs: 0, results: [] });
+  }
+
+  const listingIds = available.map((x: ListingRow) => x.id);
+  const { data: existingBatches, error: batchesError } = await db
+    .from("social_post_batches")
+    .select("listing_id")
+    .eq("facebook_account_id", facebookAccountId)
+    .in("listing_id", listingIds);
+
+  if (batchesError) return NextResponse.json({ error: batchesError.message }, { status: 500 });
+
+  const alreadyQueued = new Set((existingBatches ?? []).map((x) => String(x.listing_id)));
+
+  const { data: groups, error: groupsError } = await db
+    .from("facebook_groups")
+    .select("id,district,category,priority")
+    .eq("is_active", true);
+
+  if (groupsError) return NextResponse.json({ error: groupsError.message }, { status: 500 });
+  if (!groups?.length) return NextResponse.json({ error: "Chưa có nhóm Facebook đang hoạt động" }, { status: 409 });
+
+  let nextStartAt = new Date();
+  let queuedListings = 0;
+  let skippedListings = 0;
+  let createdJobs = 0;
+  const results: Array<Record<string, unknown>> = [];
+
+  for (const listing of available as ListingRow[]) {
+    if (alreadyQueued.has(listing.id)) {
+      skippedListings++;
+      results.push({ listingId: listing.id, title: listing.title, status: "skipped", reason: "Đã có lịch Facebook" });
+      continue;
+    }
+
+    if (!listing.district) {
+      skippedListings++;
+      results.push({ listingId: listing.id, title: listing.title, status: "skipped", reason: "Tin chưa có quận" });
+      continue;
+    }
+
+    const selectedGroups = selectCrosspostGroups(groups, listing.district, detectCategories(listing)).slice(0, 10);
+    if (!selectedGroups.length) {
+      skippedListings++;
+      results.push({ listingId: listing.id, title: listing.title, status: "skipped", reason: "Không có nhóm phù hợp" });
+      continue;
+    }
+
+    const { data: batch, error: batchError } = await db
+      .from("social_post_batches")
+      .insert({ listing_id: listing.id, facebook_account_id: facebookAccountId })
+      .select("id")
+      .single();
+
+    if (batchError || !batch) {
+      results.push({ listingId: listing.id, title: listing.title, status: "error", reason: batchError?.message || "Không tạo được batch" });
+      continue;
+    }
+
+    const contents = buildFacebookContents(listing);
+    const schedule = buildSchedule(nextStartAt, selectedGroups.length);
+    const jobs = selectedGroups.map((group, index) => ({
+      batch_id: batch.id,
+      listing_id: listing.id,
+      facebook_account_id: facebookAccountId,
+      facebook_group_id: group.id,
+      content_version: (index % contents.length) + 1,
+      content: contents[index % contents.length],
+      scheduled_at: schedule[index].toISOString(),
+      status: "pending",
+    }));
+
+    const { error: insertError } = await db.from("social_post_jobs").insert(jobs);
+    if (insertError) {
+      await db.from("social_post_batches").delete().eq("id", batch.id);
+      results.push({ listingId: listing.id, title: listing.title, status: "error", reason: insertError.message });
+      continue;
+    }
+
+    queuedListings++;
+    createdJobs += jobs.length;
+    const lastScheduledAt = schedule[schedule.length - 1];
+    const gapMinutes = 3 + Math.floor(Math.random() * 8);
+    nextStartAt = new Date(lastScheduledAt.getTime() + gapMinutes * 60 * 1000);
+
+    results.push({
+      listingId: listing.id,
+      title: listing.title,
+      status: "queued",
+      groupCount: jobs.length,
+      firstScheduledAt: schedule[0].toISOString(),
+      lastScheduledAt: lastScheduledAt.toISOString(),
+    });
+  }
+
+  return NextResponse.json({
+    success: true,
+    facebookAccountId,
+    found: available.length,
+    queuedListings,
+    skippedListings,
+    createdJobs,
+    results,
+  });
+}
+
+export async function GET(request: Request) {
+  return POST(request);
+}
+
+==================================================
+FILE: app\api\social\groups\route.ts
+==================================================
+
+import { NextResponse } from "next/server";
+import { getSocialAdminClient } from "@/lib/socialSupabase";
+
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const district = url.searchParams.get("district");
+  let q = getSocialAdminClient().from("facebook_groups").select("*").order("priority").order("name");
+  if (district) q = q.eq("district", district);
+  const { data, error } = await q;
+  return error ? NextResponse.json({ error: error.message }, { status: 500 }) : NextResponse.json({ groups: data });
+}
+export async function POST(request: Request) {
+  const body = await request.json();
+  if (!body.name?.trim() || !body.url?.trim()) return NextResponse.json({ error: "Thiếu tên hoặc link nhóm" }, { status: 400 });
+  const payload = { name: body.name.trim(), url: body.url.trim(), district: body.district?.trim() || null, category: body.category || "general", priority: Number(body.priority || 100), is_active: true };
+  const { data, error } = await getSocialAdminClient().from("facebook_groups").insert(payload).select().single();
+  return error ? NextResponse.json({ error: error.message }, { status: 500 }) : NextResponse.json({ group: data });
+}
+
+==================================================
+FILE: app\api\social\accounts\route.ts
+==================================================
+
+import { NextResponse } from "next/server";
+import { getSocialAdminClient } from "@/lib/socialSupabase";
+
+export async function GET() {
+  const { data, error } = await getSocialAdminClient().from("facebook_accounts").select("*").order("created_at");
+  return error ? NextResponse.json({ error: error.message }, { status: 500 }) : NextResponse.json({ accounts: data });
+}
+export async function POST(request: Request) {
+  const body = await request.json();
+  if (!body.name?.trim()) return NextResponse.json({ error: "Thiếu tên nick" }, { status: 400 });
+  const { data, error } = await getSocialAdminClient().from("facebook_accounts").insert({ name: body.name.trim() }).select().single();
+  return error ? NextResponse.json({ error: error.message }, { status: 500 }) : NextResponse.json({ account: data });
+}
+
+==================================================
+FILE: app\api\social\enqueue\route.ts
+==================================================
+
+import { NextResponse } from "next/server";
+import { buildSchedule, MAX_GROUPS_PER_CROSSPOST, selectCrosspostGroups } from "@/lib/socialPosting";
+import { getSocialAdminClient } from "@/lib/socialSupabase";
+
+type Body = { listingId: string; facebookAccountId: string; district: string; categories: string[]; contents: string[]; groupIds?: string[]; startAt?: string };
+
+export async function POST(request: Request) {
+  const body = (await request.json()) as Body;
+  if (!body.listingId || !body.facebookAccountId || !body.district || !body.contents?.length) return NextResponse.json({ error: "Thiếu dữ liệu bắt buộc" }, { status: 400 });
+  if ((body.groupIds?.length || 0) > MAX_GROUPS_PER_CROSSPOST) return NextResponse.json({ error: "Mỗi lượt chỉ được chọn tối đa 10 nhóm" }, { status: 400 });
+  const db = getSocialAdminClient();
+  const { data: listing, error: le } = await db.from("listings").select("id,status").eq("id", body.listingId).single();
+  if (le || !listing) return NextResponse.json({ error: "Không tìm thấy tin" }, { status: 404 });
+  if (listing.status && listing.status !== "available") return NextResponse.json({ error: "Tin không còn khả dụng" }, { status: 409 });
+  let q = db.from("facebook_groups").select("id,district,category,priority").eq("is_active", true);
+  if (body.groupIds?.length) q = q.in("id", body.groupIds);
+  const { data: groups, error: ge } = await q;
+  if (ge) return NextResponse.json({ error: ge.message }, { status: 500 });
+  const selected = body.groupIds?.length ? (groups ?? []).slice(0, 10) : selectCrosspostGroups(groups ?? [], body.district, body.categories ?? []);
+  if (!selected.length) return NextResponse.json({ error: "Chưa có nhóm phù hợp" }, { status: 409 });
+  const { data: batch, error: be } = await db.from("social_post_batches").insert({ listing_id: body.listingId, facebook_account_id: body.facebookAccountId }).select("id").single();
+  if (be || !batch) return NextResponse.json({ error: be?.message || "Không tạo được lượt đăng" }, { status: 500 });
+  const schedule = buildSchedule(body.startAt ? new Date(body.startAt) : new Date(), selected.length);
+  const jobs = selected.map((group, index) => ({ batch_id: batch.id, listing_id: body.listingId, facebook_account_id: body.facebookAccountId, facebook_group_id: group.id, content_version: (index % body.contents.length) + 1, content: body.contents[index % body.contents.length], scheduled_at: schedule[index].toISOString() }));
+  const { error: ie } = await db.from("social_post_jobs").insert(jobs);
+  if (ie) return NextResponse.json({ error: ie.message }, { status: 500 });
+  return NextResponse.json({ batchId: batch.id, groupCount: jobs.length, jobs });
+}
+
+==================================================
+FILE: C:\Users\DELL\Desktop\batdongsan-web\supabase\migrations\202607230010_social_publisher_complete.sql
+==================================================
+
+create extension if not exists pgcrypto;
+create table if not exists public.facebook_accounts (id uuid primary key default gen_random_uuid(),name text not null,is_active boolean not null default true,created_at timestamptz not null default now());
+create table if not exists public.facebook_groups (id uuid primary key default gen_random_uuid(),name text not null,url text not null unique,district text,category text not null default 'general',priority integer not null default 100,is_active boolean not null default true,created_at timestamptz not null default now());
+create table if not exists public.social_post_batches (id uuid primary key default gen_random_uuid(),listing_id uuid not null,facebook_account_id uuid not null references public.facebook_accounts(id) on delete cascade,status text not null default 'pending' check(status in('pending','processing','completed','cancelled','failed')),created_at timestamptz not null default now(),completed_at timestamptz);
+create table if not exists public.social_post_jobs (id uuid primary key default gen_random_uuid(),batch_id uuid not null references public.social_post_batches(id) on delete cascade,listing_id uuid not null,facebook_account_id uuid not null references public.facebook_accounts(id) on delete cascade,facebook_group_id uuid not null references public.facebook_groups(id) on delete cascade,content_version integer not null default 1,content text not null,status text not null default 'pending' check(status in('pending','processing','posted','cancelled','failed')),scheduled_at timestamptz not null,posted_at timestamptz,facebook_post_url text,attempt_count integer not null default 0,last_error text,created_at timestamptz not null default now());
+create table if not exists public.social_post_history (id uuid primary key default gen_random_uuid(),listing_id uuid not null,facebook_account_id uuid not null references public.facebook_accounts(id) on delete cascade,facebook_group_id uuid not null references public.facebook_groups(id) on delete cascade,content_version integer not null,content_hash text not null,posted_at timestamptz not null default now(),facebook_post_url text);
+create index if not exists idx_social_jobs_due on public.social_post_jobs(status,scheduled_at);
+create index if not exists idx_social_history_repeat on public.social_post_history(facebook_account_id,facebook_group_id,listing_id,posted_at desc);
+create index if not exists idx_groups_matching on public.facebook_groups(district,category,priority) where is_active=true;
+alter table public.facebook_accounts enable row level security;
+alter table public.facebook_groups enable row level security;
+alter table public.social_post_batches enable row level security;
+alter table public.social_post_jobs enable row level security;
+alter table public.social_post_history enable row level security;

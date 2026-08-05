@@ -27,7 +27,8 @@ type MatchWithLead = MatchResult & { lead_id: string };
 const MIN_MATCH_SCORE = 40;
 const KEYWORD_MATCH_SCORE = 45;
 const DEFAULT_MATCH_PAGE_SIZE = 20;
-const MAX_MATCH_PAGE_SIZE = 30;
+const MAX_MATCH_PAGE_SIZE = 20;
+const SEARCH_BATCH_SIZE = 1000;
 
 const hardFilterDistricts = normalizedDistrictNames.map((district) => district.label);
 
@@ -100,8 +101,9 @@ function buildPaginationMeta(
   return {
     page: pagination.page,
     limit: pagination.limit,
+    pageSize: pagination.limit,
     total: safeTotal,
-    totalPages: safeTotal > 0 ? Math.ceil(safeTotal / pagination.limit) : 1,
+    totalPages: Math.ceil(safeTotal / pagination.limit),
     hasNextPage: pagination.to + 1 < safeTotal,
   };
 }
@@ -129,11 +131,14 @@ function getRoughPriceBounds(requirement: LeadRequirement) {
   return { roughMin, roughMax };
 }
 
-function buildRoughListingsQuery(requirement: LeadRequirement) {
+function buildRoughListingsQuery(
+  requirement: LeadRequirement,
+  count?: "exact"
+) {
   const { roughMin, roughMax } = getRoughPriceBounds(requirement);
   let query = supabase
     .from("listings")
-    .select("*")
+    .select("*", count ? { count } : undefined)
     .order("updated_at", { ascending: false });
 
   if (roughMin !== null) {
@@ -145,6 +150,39 @@ function buildRoughListingsQuery(requirement: LeadRequirement) {
   }
 
   return query;
+}
+
+async function fetchRoughListingsForScoring(requirement: LeadRequirement) {
+  const listings: ListingMatchCandidate[] = [];
+  let total: number | null = null;
+  let from = 0;
+
+  while (total === null || from < total) {
+    const to = from + SEARCH_BATCH_SIZE - 1;
+    const { data, error, count } = await buildRoughListingsQuery(
+      requirement,
+      total === null ? "exact" : undefined
+    ).range(from, to);
+
+    if (error) {
+      throw error;
+    }
+
+    if (typeof count === "number") {
+      total = count;
+    }
+
+    const batch = data || [];
+    listings.push(...batch);
+
+    if (batch.length < SEARCH_BATCH_SIZE) {
+      break;
+    }
+
+    from += SEARCH_BATCH_SIZE;
+  }
+
+  return listings;
 }
 
 function buildStreetFallbackWarning(streets: string[], districts: string[]) {
@@ -646,10 +684,7 @@ export async function POST(req: Request) {
     const listingPagination = getListingPagination(body);
 
     if (mode === "match") {
-      const { data: listings, error: listingsError } =
-        await buildRoughListingsQuery(requestRequirement);
-
-      if (listingsError) throw listingsError;
+      const listings = await fetchRoughListingsForScoring(requestRequirement);
 
       const requirement: LeadRequirement = requestRequirement;
       const hasStructuredFilters = hasStructuredRequirement(requirement);
@@ -732,12 +767,18 @@ export async function POST(req: Request) {
 
       matches.sort(compareMatchResults);
       const pagedMatches = paginateItems(matches, listingPagination);
+      const pagination = buildPaginationMeta(listingPagination, matches.length);
 
       return NextResponse.json({
         success: true,
         normalizedRequirement,
+        listings: pagedMatches,
         matches: pagedMatches,
-        pagination: buildPaginationMeta(listingPagination, matches.length),
+        total: pagination.total,
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        totalPages: pagination.totalPages,
+        pagination,
         fallbackWarning,
       });
     }
@@ -898,10 +939,7 @@ export async function POST(req: Request) {
     // 🔵 MODE 2: SEARCH BAR (LEVEL 2 UI SEARCH)
     // =================================================
     if (mode === "search") {
-      const { data: listings, error: listingsError } =
-        await buildRoughListingsQuery(requestRequirement);
-
-      if (listingsError) throw listingsError;
+      const listings = await fetchRoughListingsForScoring(requestRequirement);
 
       const district = getDistrictLabel(query);
       const hardDistricts =
@@ -967,12 +1005,18 @@ export async function POST(req: Request) {
 
       matches.sort(compareMatchResults);
       const pagedMatches = paginateItems(matches, listingPagination);
+      const pagination = buildPaginationMeta(listingPagination, matches.length);
 
       return NextResponse.json({
         success: true,
         normalizedRequirement,
+        listings: pagedMatches,
         matches: pagedMatches,
-        pagination: buildPaginationMeta(listingPagination, matches.length),
+        total: pagination.total,
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        totalPages: pagination.totalPages,
+        pagination,
         fallbackWarning,
       });
     }

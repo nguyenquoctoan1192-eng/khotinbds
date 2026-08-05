@@ -1,0 +1,84 @@
+{
+  "version": "v31",
+  "name": "Bot MG",
+  "description": "Configuration for Bot MG v31 social publishing and bot status integration",
+  "environment": "development",
+  "auth": {
+    "required": true,
+    "tokenHeader": "x-bot-mg-token",
+    "tokenScheme": "Bearer",
+    "errorMessage": "Token Bot MG không hợp lệ hoặc đã hết hạn"
+  },
+  "endpoints": {
+    "status": "/api/bot/status",
+    "socialAccounts": "/api/social/accounts",
+    "enqueue": "/api/social/enqueue",
+    "dashboard": "/api/social/dashboard"
+  },
+  "defaults": {
+    "postingMode": "live",
+    "scheduleEnabled": false,
+    "startTime": "00:00",
+    "endTime": "23:59",
+    "intervalMinMinutes": 1,
+    "intervalMaxMinutes": 6,
+    "maxPostsPerDay": 100,
+    "isActive": true,
+    "maxGroupsPerCrosspost": 10
+  },
+  "postingModes": [
+    "live",
+    "scheduled"
+  ],
+  "features": {
+    "livePosting": true,
+    "scheduledPosting": true,
+    "groupSelection": true,
+    "crosspost": true,
+    "deviceTracking": true,
+    "accountStats": true
+  },
+  "database": {
+    "tables": {
+      "facebookAccounts": "facebook_accounts",
+      "facebookGroups": "facebook_groups",
+      "socialPostJobs": "social_post_jobs",
+      "botDevices": "bot_devices",
+      "botBrokerProfiles": "bot_broker_profiles"
+    },
+    "accountFields": [
+      "id",
+      "name",
+      "profile_url",
+      "is_active",
+      "posting_mode",
+      "start_time",
+      "end_time",
+      "interval_min_minutes",
+      "interval_max_minutes",
+      "max_posts_per_day"
+    ]
+  },
+  "status": {
+    "supportedStatuses": [
+      "pending",
+      "processing",
+      "posted",
+      "failed"
+    ],
+    "counts": {
+      "groups": true,
+      "queue": true,
+      "processing": true,
+      "posted": true,
+      "failed": true,
+      "scheduled": true
+    }
+  },
+  "ui": {
+    "accountModeLabels": {
+      "live": "Live",
+      "scheduled": "Theo lịch"
+    }
+  }
+}

@@ -1,0 +1,212 @@
+import crypto from "node:crypto";
+
+export const MAX_GROUPS_PER_CROSSPOST = 10;
+export const MIN_DELAY_MINUTES = 3;
+export const MAX_DELAY_MINUTES = 10;
+export const MIN_REPEAT_HOURS = 12;
+export const MAX_REPEAT_HOURS = 16;
+
+export function randomInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+export function addRandomMinutes(from: Date, min = MIN_DELAY_MINUTES, max = MAX_DELAY_MINUTES): Date {
+  return new Date(from.getTime() + randomInt(min, max) * 60_000);
+}
+
+export function addRandomRepeatHours(from: Date): Date {
+  const minutes = randomInt(MIN_REPEAT_HOURS * 60, MAX_REPEAT_HOURS * 60);
+  return new Date(from.getTime() + minutes * 60_000);
+}
+
+export function contentHash(content: string): string {
+  return crypto.createHash("sha256").update(content.trim().replace(/\s+/g, " ")).digest("hex");
+}
+
+export type GroupCandidate = {
+  id: string;
+  name: string;
+  districts: string[];
+  category: string;
+  priority: number;
+};
+
+const ADJACENT_DISTRICTS: Record<string, string[]> = {
+  "quan 1": ["quan 3", "quan 4", "quan 5", "binh thanh", "phu nhuan"],
+  "quan 2": ["quan 1", "quan 7", "quan 9", "binh thanh", "thu duc"],
+  "thu duc": ["quan 2", "quan 9", "binh thanh", "go vap"],
+  "quan 3": ["quan 1", "quan 5", "quan 10", "phu nhuan", "tan binh"],
+  "quan 4": ["quan 1", "quan 5", "quan 7", "quan 8"],
+  "quan 5": ["quan 1", "quan 3", "quan 4", "quan 6", "quan 8", "quan 10", "quan 11"],
+  "quan 6": ["quan 5", "quan 8", "quan 11", "binh tan", "tan phu"],
+  "quan 7": ["quan 2", "quan 4", "quan 8", "nha be"],
+  "quan 8": ["quan 4", "quan 5", "quan 6", "quan 7", "binh chanh"],
+  "quan 9": ["quan 2", "thu duc"],
+  "quan 10": ["quan 3", "quan 5", "quan 11", "tan binh"],
+  "quan 11": ["quan 5", "quan 6", "quan 10", "tan binh", "tan phu"],
+  "quan 12": ["go vap", "tan binh", "hoc mon"],
+  "binh thanh": ["quan 1", "quan 2", "phu nhuan", "go vap", "thu duc"],
+  "phu nhuan": ["quan 1", "quan 3", "binh thanh", "tan binh", "go vap"],
+  "tan binh": ["quan 3", "quan 10", "quan 11", "quan 12", "phu nhuan", "go vap", "tan phu"],
+  "tan phu": ["quan 6", "quan 11", "tan binh", "binh tan"],
+  "go vap": ["quan 12", "binh thanh", "phu nhuan", "tan binh", "thu duc"],
+  "binh tan": ["quan 6", "tan phu", "binh chanh"],
+  "hoc mon": ["quan 12", "binh chanh", "cu chi"],
+  "nha be": ["quan 7", "binh chanh"],
+  "binh chanh": ["quan 8", "binh tan", "hoc mon", "nha be"],
+  "cu chi": ["hoc mon"],
+  "can gio": ["nha be"],
+};
+
+function stripMarks(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D");
+}
+
+export function normalizeDistrict(value: string | null | undefined): string {
+  const normalized = stripMarks(String(value || ""))
+    .toLowerCase()
+    .replace(/[,_/\\-]+/g, " ")
+    .replace(/\b(tp|thanh pho)\.?\s*hcm\b/g, "")
+    .replace(/\bho chi minh\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalized) return "";
+  if (["thu duc", "thanh pho thu duc"].includes(normalized)) return "thu duc";
+
+  const numberMatch = normalized.match(/^(?:q|quan)?\.?\s*(\d{1,2})$/);
+  if (numberMatch) return `quan ${Number(numberMatch[1])}`;
+
+  return normalized;
+}
+
+function normalizeCategory(value: string | null | undefined): string {
+  return stripMarks(String(value || "general")).toLowerCase().trim().replace(/[\s_]+/g, "-");
+}
+
+function isWholeHouse(category: string): boolean {
+  return ["whole-house", "wholehouse", "nha-nguyen-can", "house-rental"].includes(category);
+}
+
+function isGeneral(category: string): boolean {
+  return ["general", "rental", "cho-thue", "bat-dong-san"].includes(category);
+}
+
+function categoryScore(groupCategory: string, listingCategories: Set<string>): number {
+  const category = normalizeCategory(groupCategory);
+  if (listingCategories.has(category)) return 0;
+  if (isWholeHouse(category)) return 1;
+  if (isGeneral(category)) return 2;
+  return 3;
+}
+
+function sortGroups(groups: GroupCandidate[], listingCategories: Set<string>): GroupCandidate[] {
+  return [...groups].sort((a, b) => {
+    const byCategory = categoryScore(a.category, listingCategories) - categoryScore(b.category, listingCategories);
+    if (byCategory !== 0) return byCategory;
+    return Number(a.priority || 100) - Number(b.priority || 100);
+  });
+}
+
+function uniqueById(groups: GroupCandidate[]): GroupCandidate[] {
+  const seen = new Set<string>();
+  return groups.filter((group) => {
+    if (seen.has(group.id)) return false;
+    seen.add(group.id);
+    return true;
+  });
+}
+
+export function selectCrosspostGroups(
+  groups: GroupCandidate[],
+  district: string,
+  listingCategories: string[],
+): GroupCandidate[] {
+  const targetDistrict = normalizeDistrict(district);
+
+  if (!targetDistrict) {
+    return [];
+  }
+
+  const categories = new Set(
+    listingCategories
+      .map(normalizeCategory)
+      .filter(Boolean),
+  );
+
+  const groupHasDistrict = (
+    group: GroupCandidate,
+    expectedDistrict: string,
+  ): boolean => {
+    return (group.districts ?? []).some(
+      (groupDistrict) =>
+        normalizeDistrict(groupDistrict) === expectedDistrict,
+    );
+  };
+
+  const exactGroups = sortGroups(
+    groups.filter((group) =>
+      groupHasDistrict(group, targetDistrict),
+    ),
+    categories,
+  );
+
+  if (exactGroups.length > 0) {
+    return uniqueById(exactGroups).slice(
+      0,
+      MAX_GROUPS_PER_CROSSPOST,
+    );
+  }
+
+  const adjacentDistricts = new Set(
+    ADJACENT_DISTRICTS[targetDistrict] ?? [],
+  );
+
+  const nearbyGroups = sortGroups(
+    groups.filter((group) =>
+      (group.districts ?? []).some((groupDistrict) =>
+        adjacentDistricts.has(
+          normalizeDistrict(groupDistrict),
+        ),
+      ),
+    ),
+    categories,
+  );
+
+  const fallbackGroups = sortGroups(
+    groups.filter((group) => {
+      if ((group.districts ?? []).length > 0) {
+        return false;
+      }
+
+      const category = normalizeCategory(
+        group.category,
+      );
+
+      return (
+        isWholeHouse(category) ||
+        isGeneral(category)
+      );
+    }),
+    categories,
+  );
+
+  return uniqueById([
+    ...nearbyGroups,
+    ...fallbackGroups,
+  ]).slice(0, MAX_GROUPS_PER_CROSSPOST);
+}
+
+
+
+export function buildSchedule(startAt: Date, count: number): Date[] {
+  const result: Date[] = [];
+  let cursor = new Date(startAt);
+
+  for (let i = 0; i < count; i += 1) {
+    if (i > 0) cursor = addRandomMinutes(cursor);
+    result.push(new Date(cursor));
+  }
+
+  return result;
+}

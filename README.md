@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Bot License: Admin + Broker
 
-## Getting Started
+## 1. Run migration
 
-First, run the development server:
+Run:
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+supabase/migrations/202607290001_bot_license_admin_broker.sql
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+in Supabase SQL Editor.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 2. Replace Admin API
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Copy:
 
-## Learn More
+app/api/admin/bot/route.ts
 
-To learn more about Next.js, take a look at the following resources:
+to the same path in batdongsan-web.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 3. Add broker-scoped API
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Copy:
 
-## Deploy on Vercel
+app/api/bot/dashboard/route.ts
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+A broker account must call this route, not `/api/admin/bot`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 4. Add the license creation UI
+
+Copy:
+
+app/admin/bot/CreateBotLicenseCard.tsx
+
+Then render it inside the current BotAdminClient and provide brokerOptions:
+
+<CreateBotLicenseCard
+  brokerOptions={brokers.map((item) => ({
+    id: item.id,
+    label: item.full_name || item.email || item.id,
+  }))}
+  onCreated={loadDashboard}
+/>
+
+## 5. Important behavior
+
+- Full license key is never stored.
+- Only SHA-256 hash is stored.
+- Full key is returned once by POST `/api/admin/bot`.
+- The old "License test" full key cannot be recovered.
+- Create a new Admin license, copy the key, and paste it into facebook-worker/.env:
+
+LICENSE_KEY=KTB-XXXXXXXX-XXXXXXXX
+DEVICE_UID=admin-pc-01
+DEVICE_NAME=PC DELL
+
+## 6. Broker separation
+
+Broker dashboard calls `/api/bot/dashboard`.
+It only returns licenses where:
+
+owner_user_id = current profile id
+
+Devices and Facebook accounts are filtered by those license IDs.
+Groups and jobs are filtered by those Facebook account IDs.

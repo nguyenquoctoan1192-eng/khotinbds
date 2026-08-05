@@ -26,6 +26,7 @@ const namedDistricts = [
   "Củ Chi",
   "Hóc Môn",
   "Cần Giờ",
+  "Bình Tân",
 ];
 
 const escapeRegExp = (value: string) =>
@@ -55,15 +56,81 @@ const stripLeadingHouseNumber = (value: string) =>
 
 const roundArea = (value: number) => Math.round(value * 10) / 10;
 
-function parsePrice(text: string) {
-  const match = text.match(
-    /(?:^|[^\p{L}\p{N}])(\d+(?:[.,]\d+)?)\s*(?:triệu|tr(?!\p{L}))/iu
-  );
+/**
+ * Đọc giá thuê theo đơn vị triệu.
+ *
+ * Hỗ trợ:
+ * - 200t
+ * - 200 t
+ * - 200tr
+ * - 200 tr
+ * - 200triệu
+ * - 200 triệu
+ * - 200triệu
+ * - 200 triệu
+ * - 12,5tr
+ * - 12.5 t
+ *
+ * Kết quả trả về theo đơn vị đồng:
+ * 200t => 200000000
+ */
+function parsePrice(text: string): number | null {
+  if (!text) return null;
 
-  if (!match) return null;
+  /*
+   * Chuẩn hóa tiếng Việt để:
+   * "triệu", "triệu" và "trieu" đều trở thành "trieu".
+   */
+  const normalized = normalizeText(text).replace(/\u00a0/g, " ");
 
-  const value = Number(match[1].replace(",", "."));
-  return Number.isFinite(value) ? Math.round(value * 1000000) : null;
+  const lines = normalized
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  /*
+   * Ưu tiên các dòng thường chứa giá:
+   * - có "giá"
+   * - có "hh"
+   * - có "tháng"
+   *
+   * Sau đó mới quét toàn bộ các dòng còn lại.
+   */
+  const priorityLines = [
+    ...lines.filter((line) => /\b(?:gia|hh|thang)\b/i.test(line)),
+    ...lines,
+  ];
+
+  /*
+   * Các đơn vị được nhận:
+   * - t
+   * - tr
+   * - trieu
+   *
+   * Dùng thứ tự trieu|tr|t để tránh "t" bắt trước "tr".
+   *
+   * Phần (?=$|[\s/;,.-]|hh)
+   * đảm bảo ký hiệu giá phải kết thúc hợp lệ,
+   * tránh lấy nhầm chữ "t" nằm trong một từ khác.
+   */
+  const pricePattern =
+    /(?:^|[^\p{L}\p{N}])(\d+(?:[.,]\d+)?)\s*(?:trieu|tr|t)(?=$|[\s/;,.-]|hh)/iu;
+
+  for (const line of priorityLines) {
+    const match = line.match(pricePattern);
+
+    if (!match) continue;
+
+    const value = Number(match[1].replace(",", "."));
+
+    if (!Number.isFinite(value) || value <= 0) {
+      continue;
+    }
+
+    return Math.round(value * 1_000_000);
+  }
+
+  return null;
 }
 
 function parsePhone(text: string) {
@@ -73,20 +140,30 @@ function parsePhone(text: string) {
 
 function normalizeDistrict(text: string) {
   const numericMatch = text.match(/\b(?:q|quận)\.?\s*(\d{1,2})\b/iu);
-  if (numericMatch) return formatDistrict(String(Number(numericMatch[1])));
+
+  if (numericMatch) {
+    return formatDistrict(String(Number(numericMatch[1])));
+  }
 
   const normalized = normalizeText(text);
+
   const normalizedNamedDistricts = namedDistricts.map((district) => ({
     district,
     normalized: normalizeText(district),
   }));
 
-  for (const { district, normalized: normalizedDistrict } of normalizedNamedDistricts) {
+  for (const {
+    district,
+    normalized: normalizedDistrict,
+  } of normalizedNamedDistricts) {
     const pattern = new RegExp(
       `(?:\\bq\\.?\\s*)?\\b${escapeRegExp(normalizedDistrict)}\\b`,
       "i"
     );
-    if (pattern.test(normalized)) return formatDistrict(district);
+
+    if (pattern.test(normalized)) {
+      return formatDistrict(district);
+    }
   }
 
   return "";
@@ -100,9 +177,14 @@ function detectHouseType(addressLine: string, text: string) {
   if (/\bhxt\b/iu.test(text)) return "Hẻm Xe Tải";
   if (/\bhxh\b/iu.test(text)) return "Hẻm Xe Hơi";
   if (/\bhxm\b/iu.test(text)) return "Hẻm Xe Máy";
-  if (/^\s*\d+[A-Za-zÀ-ỹ]?(?:\/\d+[A-Za-zÀ-ỹ]?)+/u.test(addressLine)) {
+  if (/\bhxm\b/iu.test(text)) return "Hẻm Ba Gác";
+
+  if (
+    /^\s*\d+[A-Za-zÀ-ỹ]?(?:\/\d+[A-Za-zÀ-ỹ]?)+/u.test(addressLine)
+  ) {
     return "Hẻm";
   }
+
   return "Mặt Tiền";
 }
 
@@ -118,7 +200,9 @@ const normalizeDistrictForTitle = (value: string) =>
 function buildTitleAddress(addressLine: string) {
   return trimExtraPunctuation(
     normalizeDistrictForTitle(
-      stripLeadingHouseNumber(stripHouseTypeTags(stripTrailingHouseTag(addressLine)))
+      stripLeadingHouseNumber(
+        stripHouseTypeTags(stripTrailingHouseTag(addressLine))
+      )
     )
   )
     .replace(/\s+,/g, ",")
@@ -139,6 +223,7 @@ function removeDistrictFromStreet(value: string) {
 
   for (const district of namedDistricts) {
     const escaped = escapeRegExp(district);
+
     street = street.replace(
       new RegExp(`(?:,|\\s)+(?:q\\.?\\s*)?${escaped}\\s*$`, "iu"),
       ""
@@ -149,8 +234,11 @@ function removeDistrictFromStreet(value: string) {
 }
 
 function extractStreetName(addressLine: string) {
-  const withoutTag = stripTrailingHouseTag(addressLine)
-    .replace(/^\s*(?:hxh|hxt|h3g|mt)\s+/iu, "");
+  const withoutTag = stripTrailingHouseTag(addressLine).replace(
+    /^\s*(?:hxh|hxt|h3g|mt)\s+/iu,
+    ""
+  );
+
   const withoutHouseNumber = stripLeadingHouseNumber(withoutTag);
 
   const withoutWard = withoutHouseNumber.replace(
@@ -162,52 +250,91 @@ function extractStreetName(addressLine: string) {
 }
 
 function parseDimensions(text: string) {
-  const match = text.match(/(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)/iu);
-  if (!match) return { width: null, length: null };
+  const match = text.match(
+    /(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)/iu
+  );
+
+  if (!match) {
+    return {
+      width: null,
+      length: null,
+    };
+  }
 
   const width = Number(match[1].replace(",", "."));
   const length = Number(match[2].replace(",", "."));
 
   if (!Number.isFinite(width) || !Number.isFinite(length)) {
-    return { width: null, length: null };
+    return {
+      width: null,
+      length: null,
+    };
   }
 
-  return { width, length };
+  return {
+    width,
+    length,
+  };
 }
 
 function parseExplicitArea(text: string) {
   const match = text.match(/(\d+(?:[.,]\d+)?)\s*m\s*(?:2|²)\b/iu);
+
   if (!match) return null;
 
   const area = Number(match[1].replace(",", "."));
+
   return Number.isFinite(area) ? area : null;
 }
 
 function parseMainFloors(text: string) {
   const normalized = normalizeText(text);
-  const explicitMainFloors = normalized.match(/\btret\s*(\d+)\s*lau\b/i);
-  if (explicitMainFloors) return Number(explicitMainFloors[1]);
 
-  if (/\btret\s*lau\b/i.test(normalized)) return 1;
+  const explicitMainFloors = normalized.match(
+    /\btret\s*(\d+)\s*lau\b/i
+  );
+
+  if (explicitMainFloors) {
+    return Number(explicitMainFloors[1]);
+  }
+
+  if (/\btret\s*lau\b/i.test(normalized)) {
+    return 1;
+  }
 
   const looseFloors = normalized.match(/\b(\d+)\s*lau\b/i);
-  if (looseFloors) return Number(looseFloors[1]);
+
+  if (looseFloors) {
+    return Number(looseFloors[1]);
+  }
 
   return 0;
 }
 
 function parseAreaMultiplier(text: string, mainFloors: number) {
   const normalized = normalizeText(text);
+
   const hasMezzanine = /\blung\b/i.test(normalized);
   const hasTerrace = /\bst\b|\bsan\s*thuong\b/i.test(normalized);
 
-  return 1 + mainFloors + (hasMezzanine ? 0.5 : 0) + (hasTerrace ? 1 : 0);
+  return (
+    1 +
+    mainFloors +
+    (hasMezzanine ? 0.5 : 0) +
+    (hasTerrace ? 1 : 0)
+  );
 }
 
-function parseFurnishing(text: string): ParsedZaloListing["furnishing"] {
+function parseFurnishing(
+  text: string
+): ParsedZaloListing["furnishing"] {
   const normalized = normalizeText(text);
 
-  if (/\bfull\s*nt\b|\bfull\s*noi\s*that\b|\bday\s*du\b/i.test(normalized)) {
+  if (
+    /\bfull\s*nt\b|\bfull\s*noi\s*that\b|\bday\s*du\b/i.test(
+      normalized
+    )
+  ) {
     return "Đầy đủ";
   }
 
@@ -219,12 +346,18 @@ function parseFurnishing(text: string): ParsedZaloListing["furnishing"] {
 }
 
 function parseRoomCount(text: string, label: "pn" | "wc") {
-  const match = text.match(new RegExp(`(\\d+)\\s*${label}\\b`, "i"));
+  const match = text.match(
+    new RegExp(`(\\d+)\\s*${label}\\b`, "i")
+  );
+
   return match ? Number(match[1]) : null;
 }
 
-export function parseZaloListingText(input: string): ParsedZaloListing {
+export function parseZaloListingText(
+  input: string
+): ParsedZaloListing {
   const text = input.trim();
+
   const lines = text
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -237,10 +370,17 @@ export function parseZaloListingText(input: string): ParsedZaloListing {
   const phone = parsePhone(text);
   const { width, length } = parseDimensions(text);
   const floors = parseMainFloors(text);
-  const explicitArea = width && length ? null : parseExplicitArea(text);
+
+  const explicitArea =
+    width && length ? null : parseExplicitArea(text);
+
   const area =
     width && length
-      ? roundArea(width * length * parseAreaMultiplier(text, floors))
+      ? roundArea(
+          width *
+            length *
+            parseAreaMultiplier(text, floors)
+        )
       : explicitArea;
 
   return {

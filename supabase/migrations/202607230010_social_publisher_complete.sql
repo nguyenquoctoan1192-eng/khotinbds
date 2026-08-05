@@ -1,0 +1,14 @@
+create extension if not exists pgcrypto;
+create table if not exists public.facebook_accounts (id uuid primary key default gen_random_uuid(),name text not null,is_active boolean not null default true,created_at timestamptz not null default now());
+create table if not exists public.facebook_groups (id uuid primary key default gen_random_uuid(),name text not null,url text not null unique,district text,category text not null default 'general',priority integer not null default 100,is_active boolean not null default true,created_at timestamptz not null default now());
+create table if not exists public.social_post_batches (id uuid primary key default gen_random_uuid(),listing_id uuid not null,facebook_account_id uuid not null references public.facebook_accounts(id) on delete cascade,status text not null default 'pending' check(status in('pending','processing','completed','cancelled','failed')),created_at timestamptz not null default now(),completed_at timestamptz);
+create table if not exists public.social_post_jobs (id uuid primary key default gen_random_uuid(),batch_id uuid not null references public.social_post_batches(id) on delete cascade,listing_id uuid not null,facebook_account_id uuid not null references public.facebook_accounts(id) on delete cascade,facebook_group_id uuid not null references public.facebook_groups(id) on delete cascade,content_version integer not null default 1,content text not null,status text not null default 'pending' check(status in('pending','processing','posted','cancelled','failed')),scheduled_at timestamptz not null,posted_at timestamptz,facebook_post_url text,attempt_count integer not null default 0,last_error text,created_at timestamptz not null default now());
+create table if not exists public.social_post_history (id uuid primary key default gen_random_uuid(),listing_id uuid not null,facebook_account_id uuid not null references public.facebook_accounts(id) on delete cascade,facebook_group_id uuid not null references public.facebook_groups(id) on delete cascade,content_version integer not null,content_hash text not null,posted_at timestamptz not null default now(),facebook_post_url text);
+create index if not exists idx_social_jobs_due on public.social_post_jobs(status,scheduled_at);
+create index if not exists idx_social_history_repeat on public.social_post_history(facebook_account_id,facebook_group_id,listing_id,posted_at desc);
+create index if not exists idx_groups_matching on public.facebook_groups(district,category,priority) where is_active=true;
+alter table public.facebook_accounts enable row level security;
+alter table public.facebook_groups enable row level security;
+alter table public.social_post_batches enable row level security;
+alter table public.social_post_jobs enable row level security;
+alter table public.social_post_history enable row level security;

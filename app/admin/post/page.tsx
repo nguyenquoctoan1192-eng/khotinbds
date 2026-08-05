@@ -229,6 +229,9 @@ const [amenities, setAmenities] =
   const [imageEnhance, setImageEnhance] =
     useState<ImageEnhanceState | null>(null);
 
+  const [socialQueueMessage, setSocialQueueMessage] =
+    useState("");
+
   // UPLOAD IMAGES
   const uploadImages = async (
     files: FileList | null
@@ -578,6 +581,224 @@ const autoFillFromZalo = () => {
     }
   };
 
+  const detectFacebookCategories = () => {
+    const source = `${title} ${address} ${description}`.toLowerCase();
+    const categories = new Set<string>();
+
+    if (
+      source.includes("mặt tiền") ||
+      source.includes("mat tien") ||
+      source.includes("mt ")
+    ) {
+      categories.add("frontage");
+      categories.add("business");
+    }
+
+    if (
+      source.includes("văn phòng") ||
+      source.includes("van phong")
+    ) {
+      categories.add("office");
+    }
+
+    if (
+      source.includes("phòng trọ") ||
+      source.includes("phong tro")
+    ) {
+      categories.add("room");
+    }
+
+    if (
+      source.includes("kinh doanh") ||
+      source.includes("showroom") ||
+      source.includes("spa") ||
+      source.includes("nhà hàng") ||
+      source.includes("nha hang") ||
+      source.includes("cafe")
+    ) {
+      categories.add("business");
+    }
+
+    categories.add("whole-house");
+    categories.add("general");
+
+    return Array.from(categories);
+  };
+
+  const buildFacebookContents = () => {
+    const numericPrice = Number(price);
+    const displayPrice = numericPrice
+      ? `${numericPrice.toLocaleString("vi-VN")} đồng/tháng`
+      : `${price}/tháng`;
+
+    const dimensions =
+      width && length
+        ? `${width}x${length}m`
+        : area
+          ? `${area}m²`
+          : "";
+
+    const structureParts = [
+      floors ? `${floors} tầng` : "",
+      bedrooms ? `${bedrooms} phòng ngủ` : "",
+      bathrooms ? `${bathrooms} WC` : "",
+    ].filter(Boolean);
+
+    const location = [address, district].filter(Boolean).join(", ");
+    const baseDescription =
+      description.trim() ||
+      aiContent?.primary_content?.trim() ||
+      "Phù hợp thuê ở, làm văn phòng hoặc kinh doanh tùy nhu cầu.";
+
+    return [
+      [
+        `🔥 ${aiContent?.facebook_title || title}`,
+        location ? `📍 ${location}` : "",
+        dimensions ? `📐 Diện tích: ${dimensions}` : "",
+        structureParts.length ? `🏢 ${structureParts.join(" – ")}` : "",
+        `💰 Giá thuê: ${displayPrice}`,
+        "",
+        baseDescription,
+        contactPhone ? `☎️ Liên hệ: ${contactPhone}` : "",
+      ],
+      [
+        `🏠 CHO THUÊ ${title.toUpperCase()}`,
+        district ? `Khu vực: ${district}` : "",
+        dimensions ? `Diện tích: ${dimensions}` : "",
+        structureParts.length ? `Công năng: ${structureParts.join(", ")}` : "",
+        `Giá: ${displayPrice}`,
+        "",
+        baseDescription,
+        contactPhone ? `Liên hệ xem nhà: ${contactPhone}` : "",
+      ],
+      [
+        `📣 CĂN ĐẸP KHU ${district || "TP.HCM"}`,
+        location ? `Vị trí: ${location}` : "",
+        dimensions ? `Không gian: ${dimensions}` : "",
+        structureParts.length ? structureParts.join(" – ") : "",
+        `💵 ${displayPrice}`,
+        "",
+        "Phù hợp khách cần thuê nhà nguyên căn, mặt bằng kinh doanh hoặc văn phòng.",
+        contactPhone ? `☎️ ${contactPhone}` : "",
+      ],
+      [
+        `✨ ${title}`,
+        district ? `📍 ${district}` : "",
+        dimensions ? `📐 ${dimensions}` : "",
+        structureParts.length ? `🏢 ${structureParts.join(" – ")}` : "",
+        `💰 ${displayPrice}`,
+        "",
+        baseDescription,
+        contactPhone ? `Nhắn hoặc gọi: ${contactPhone}` : "",
+      ],
+      [
+        `🔥 MẶT BẰNG / NHÀ NGUYÊN CĂN ${district || ""}`.trim(),
+        location ? `Đường/khu vực: ${location}` : "",
+        dimensions ? `Diện tích: ${dimensions}` : "",
+        structureParts.length ? `Kết cấu: ${structureParts.join(", ")}` : "",
+        `Giá thuê: ${displayPrice}`,
+        "",
+        "Ưu tiên khách thiện chí, có thể trao đổi thêm khi xem nhà.",
+        contactPhone ? `Liên hệ: ${contactPhone}` : "",
+      ],
+    ]
+      .map((parts) => parts.filter(Boolean).join("\n").trim())
+      .filter(Boolean);
+  };
+
+  const getActiveFacebookAccountId = async () => {
+    try {
+      const response = await fetch("/api/social/accounts", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      if (!response.ok) return "";
+
+      const json = await response.json();
+      const accounts =
+        json.accounts ||
+        json.data ||
+        (Array.isArray(json) ? json : []);
+
+      if (!Array.isArray(accounts) || accounts.length === 0) {
+        return "";
+      }
+
+      const activeAccount =
+        accounts.find(
+          (account: any) =>
+            account.is_active === true ||
+            account.active === true ||
+            account.status === "active"
+        ) || accounts[0];
+
+      return String(activeAccount.id || activeAccount.account_id || "");
+    } catch (error) {
+      console.error("Không lấy được nick Facebook:", error);
+      return "";
+    }
+  };
+
+  const enqueueFacebookPosting = async (listing: any) => {
+    const facebookAccountId = await getActiveFacebookAccountId();
+    const contents = buildFacebookContents();
+    const categories = detectFacebookCategories();
+
+    const response = await fetch("/api/social/enqueue", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        listingId: listing.id,
+        listing_id: listing.id,
+
+        facebookAccountId: facebookAccountId || undefined,
+        accountId: facebookAccountId || undefined,
+        facebook_account_id: facebookAccountId || undefined,
+
+        district,
+        categories,
+        contents,
+        contentVariants: contents,
+
+        maxGroups: 10,
+        max_groups: 10,
+
+        listing: {
+          id: listing.id,
+          title,
+          district,
+          address,
+          price: Number(price) || 0,
+          area: Number(area) || 0,
+          width: Number(width) || 0,
+          length: Number(length) || 0,
+          floors: Number(floors) || 0,
+          bedrooms: Number(bedrooms) || 0,
+          bathrooms: Number(bathrooms) || 0,
+          description,
+          images,
+          contact_phone: contactPhone,
+          status: "available",
+        },
+      }),
+    });
+
+    const json = await response.json().catch(() => ({}));
+
+    if (!response.ok || json.success === false) {
+      throw new Error(
+        json.error ||
+          json.message ||
+          "Không tạo được hàng chờ đăng Facebook."
+      );
+    }
+
+    return json;
+  };
+
   // CREATE POST
   const createPost = async () => {
     if (
@@ -644,17 +865,52 @@ const { data, error } = await supabase
 console.log("DATA =", data);
 console.log("ERROR =", error);
 
-    setLoading(false);
-
     if (error) {
+      setLoading(false);
       console.error(error);
       alert("Đăng tin thất bại");
       return;
     }
 
-    alert("Đăng tin thành công");
+    const createdListing = data?.[0];
 
-   router.push("/admin");
+    if (createdListing?.id) {
+      setSocialQueueMessage("Đang tạo nội dung và lịch đăng Facebook...");
+
+      try {
+        const queueResult = await enqueueFacebookPosting(createdListing);
+        const selectedGroups =
+          queueResult.groupCount ??
+          queueResult.group_count ??
+          queueResult.jobs?.length ??
+          0;
+
+        setSocialQueueMessage(
+          queueResult.skipped
+            ? "Tin này đã có trong hàng chờ Facebook."
+            : selectedGroups > 0
+              ? `Đã đưa tin vào hàng chờ Facebook cho ${selectedGroups} nhóm.`
+              : "Đã xử lý hàng chờ Facebook."
+        );
+
+        console.log("SOCIAL_QUEUE_RESULT =", queueResult);
+      } catch (socialError) {
+        console.error("SOCIAL_ENQUEUE_ERROR =", socialError);
+        setSocialQueueMessage(
+          socialError instanceof Error
+            ? `Tin đã đăng lên web nhưng chưa tạo được lịch Facebook: ${socialError.message}`
+            : "Tin đã đăng lên web nhưng chưa tạo được lịch Facebook."
+        );
+      }
+    }
+
+    setLoading(false);
+
+    alert(
+  "Đăng tin lên web thành công. Hệ thống đã xử lý hàng chờ Facebook."
+);
+
+    router.push("/admin");
   };
 
   const aiContentSections = aiContent
@@ -969,6 +1225,31 @@ console.log("ERROR =", error);
             </div>
           )}
 
+          <div style={styles.facebookPanel}>
+            <div style={styles.facebookHeader}>
+              <div>
+                <strong>Đăng Facebook tự động</strong>
+                <div style={styles.facebookHint}>
+                  Khi lưu tin, hệ thống tự tạo nội dung, ưu tiên nhóm {district || "đúng quận"}
+                  và đưa vào hàng chờ tối đa 10 nhóm.
+                </div>
+              </div>
+            </div>
+
+            <div style={styles.facebookRules}>
+              <div>• Tin mới được tự động đưa vào hàng chờ Facebook.</div>
+              <div>• Các bài đăng cách nhau ngẫu nhiên 3–10 phút.</div>
+              <div>• Một lượt đăng chéo tối đa 10 nhóm.</div>
+              <div>• Tin đã cho thuê sẽ tự dừng lịch đăng.</div>
+            </div>
+
+            {socialQueueMessage && (
+              <div style={styles.socialQueueMessage}>
+                {socialQueueMessage}
+              </div>
+            )}
+          </div>
+
           {/* BUTTON */}
           <button
             className="btn"
@@ -1267,6 +1548,51 @@ const styles: any = {
     width: 24,
     height: 24,
     cursor: "pointer",
+  },
+
+  facebookPanel: {
+    border: "1px solid #bfdbfe",
+    background: "#eff6ff",
+    borderRadius: 12,
+    padding: 14,
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  },
+
+  facebookHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 16,
+    flexWrap: "wrap",
+  },
+
+  facebookHint: {
+    marginTop: 4,
+    color: "#475569",
+    fontSize: 13,
+    lineHeight: 1.45,
+  },
+
+  facebookRules: {
+    background: "white",
+    border: "1px solid #dbeafe",
+    borderRadius: 10,
+    padding: 12,
+    color: "#334155",
+    fontSize: 13,
+    lineHeight: 1.7,
+  },
+
+  socialQueueMessage: {
+    background: "#ecfdf5",
+    color: "#047857",
+    border: "1px solid #a7f3d0",
+    borderRadius: 10,
+    padding: 10,
+    fontSize: 14,
+    fontWeight: 600,
   },
 
   button: {

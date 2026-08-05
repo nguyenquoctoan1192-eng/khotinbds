@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
+import RelatedListingsMapSection from "@/app/components/map/RelatedListingsMapSection";
 import RentedStamp from "@/app/components/rented-stamp";
 import { formatPublicListing } from "@/lib/publicListingFormatter";
 import { useUserRole } from "@/lib/userRole";
+import type { Listing } from "@/types/listing";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -57,6 +59,7 @@ const homeHref =
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [showImageModal, setShowImageModal] = useState(false);
   const [shareMessage, setShareMessage] = useState("");
+  const [relatedListings, setRelatedListings] = useState<Listing[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -77,6 +80,47 @@ const homeHref =
 
     fetchListing();
   }, [id]);
+
+  useEffect(() => {
+    if (!listing?.id) return;
+
+    const fetchRelatedListings = async () => {
+      let query = supabase
+        .from("listings")
+        .select("*")
+        .neq("id", listing.id)
+        .order("updated_at", { ascending: false })
+        .limit(18);
+
+      if (listing.district) {
+        query = query.eq("district", listing.district);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error("related listings failed", error);
+        setRelatedListings([]);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        setRelatedListings(data as Listing[]);
+        return;
+      }
+
+      const fallback = await supabase
+        .from("listings")
+        .select("*")
+        .neq("id", listing.id)
+        .order("updated_at", { ascending: false })
+        .limit(18);
+
+      setRelatedListings((fallback.data || []) as Listing[]);
+    };
+
+    fetchRelatedListings();
+  }, [listing?.id, listing?.district]);
 
   const refreshPost = async () => {
     if (!listing) return;
@@ -309,15 +353,6 @@ const homeHref =
             )}
           </div>
 
-          <div style={styles.card}>
-            <h3>📍 Bản đồ</h3>
-            <iframe
-              style={styles.map}
-              src={`https://www.google.com/maps?q=${encodeURIComponent(
-                displayAddress || ""
-              )}&output=embed`}
-            />
-          </div>
         </div>
 
         {/* RIGHT (FIX MOBILE FULL WIDTH) */}
@@ -382,6 +417,11 @@ const homeHref =
         </div>
 
       </div>
+      <RelatedListingsMapSection
+        listings={relatedListings}
+        currentListing={listing}
+        viewMode={viewMode}
+      />
       {showImageModal && currentImage && (
         <div style={styles.imageModal} onClick={() => setShowImageModal(false)}>
           <button

@@ -6,6 +6,12 @@ export interface Listing {
   location?: string | null;
   district?: string | null;
   street?: string | null;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
+  lat?: number | string | null;
+  lng?: number | string | null;
+  geocoded_at?: string | null;
+  geocode_status?: string | null;
 
   price?: number | string | null;
   area?: number | string | null;

@@ -1,0 +1,9 @@
+﻿
+Path                                                                                                 LineNumber Line                                                  
+----                                                                                                 ---------- ----                                                  
+C:\Users\DELL\Desktop\batdongsan-web\supabase\migrations\202606220001_add_listing_status.sql                  1 alter table public.listings                           
+C:\Users\DELL\Desktop\batdongsan-web\supabase\migrations\202606230001_upgrade_agent_profiles.sql            105 alter table public.listings enable row level security;
+C:\Users\DELL\Desktop\batdongsan-web\supabase\migrations\202606290001_add_ai_content_to_listings.sql          1 ALTER TABLE listings                                  
+C:\Users\DELL\Desktop\batdongsan-web\supabase\migrations\202607220001_add_listing_coordinates.sql             1 alter table public.listings                           
+
+

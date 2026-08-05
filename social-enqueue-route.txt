@@ -1,0 +1,213 @@
+import { NextResponse } from "next/server";
+import {
+  buildSchedule,
+  MAX_GROUPS_PER_CROSSPOST,
+  selectCrosspostGroups,
+  type GroupCandidate,
+} from "@/lib/socialPosting";
+import { getSocialAdminClient } from "@/lib/socialSupabase";
+
+type Body = {
+  listingId: string;
+  facebookAccountId: string;
+  district: string;
+  categories: string[];
+  contents: string[];
+  groupIds?: string[];
+  startAt?: string;
+};
+
+export async function POST(request: Request) {
+  const body = (await request.json()) as Body;
+
+  if (
+    !body.listingId ||
+    !body.facebookAccountId ||
+    !body.district ||
+    !body.contents?.length
+  ) {
+    return NextResponse.json(
+      { error: "Thiếu dữ liệu bắt buộc" },
+      { status: 400 },
+    );
+  }
+
+  if (
+    (body.groupIds?.length || 0) >
+    MAX_GROUPS_PER_CROSSPOST
+  ) {
+    return NextResponse.json(
+      { error: "Mỗi lượt chỉ được chọn tối đa 10 nhóm" },
+      { status: 400 },
+    );
+  }
+
+  const db = getSocialAdminClient();
+
+  const { data: listing, error: listingError } =
+    await db
+      .from("listings")
+      .select("id,status")
+      .eq("id", body.listingId)
+      .single();
+
+  if (listingError || !listing) {
+    return NextResponse.json(
+      { error: "Không tìm thấy tin" },
+      { status: 404 },
+    );
+  }
+
+  if (
+    listing.status &&
+    listing.status !== "available"
+  ) {
+    return NextResponse.json(
+      { error: "Tin không còn khả dụng" },
+      { status: 409 },
+    );
+  }
+
+  let groupsQuery = db
+    .from("facebook_groups")
+    .select(`
+      id,
+      name,
+      districts,
+      category,
+      priority
+    `)
+    .eq("is_active", true);
+
+  if (body.groupIds?.length) {
+    groupsQuery = groupsQuery.in(
+      "id",
+      body.groupIds,
+    );
+  }
+
+  const {
+    data: groupRows,
+    error: groupsError,
+  } = await groupsQuery;
+
+  if (groupsError) {
+    return NextResponse.json(
+      { error: groupsError.message },
+      { status: 500 },
+    );
+  }
+
+  const groups: GroupCandidate[] = (
+    groupRows ?? []
+  ).map((group) => ({
+    id: String(group.id),
+    name: String(group.name || ""),
+    districts: Array.isArray(group.districts)
+      ? group.districts.map(String)
+      : [],
+    category: String(
+      group.category || "general",
+    ),
+    priority: Number(group.priority || 100),
+  }));
+
+  const selectedGroups = body.groupIds?.length
+    ? groups.slice(0, MAX_GROUPS_PER_CROSSPOST)
+    : selectCrosspostGroups(
+        groups,
+        body.district,
+        body.categories ?? [],
+      );
+
+  if (!selectedGroups.length) {
+    return NextResponse.json(
+      { error: "Chưa có nhóm phù hợp" },
+      { status: 409 },
+    );
+  }
+
+  const { data: batch, error: batchError } =
+    await db
+      .from("social_post_batches")
+      .insert({
+        listing_id: body.listingId,
+        facebook_account_id:
+          body.facebookAccountId,
+      })
+      .select("id")
+      .single();
+
+  if (batchError || !batch) {
+    return NextResponse.json(
+      {
+        error:
+          batchError?.message ||
+          "Không tạo được lượt đăng",
+      },
+      { status: 500 },
+    );
+  }
+
+  const startAt = body.startAt
+    ? new Date(body.startAt)
+    : new Date();
+
+  if (Number.isNaN(startAt.getTime())) {
+    await db
+      .from("social_post_batches")
+      .delete()
+      .eq("id", batch.id);
+
+    return NextResponse.json(
+      { error: "Thời gian bắt đầu không hợp lệ" },
+      { status: 400 },
+    );
+  }
+
+  const schedule = buildSchedule(
+    startAt,
+    selectedGroups.length,
+  );
+
+  const jobs = selectedGroups.map(
+    (group, index) => ({
+      batch_id: batch.id,
+      listing_id: body.listingId,
+      facebook_account_id:
+        body.facebookAccountId,
+      facebook_group_id: group.id,
+      content_version:
+        (index % body.contents.length) + 1,
+      content:
+        body.contents[
+          index % body.contents.length
+        ],
+      scheduled_at:
+        schedule[index].toISOString(),
+      status: "pending",
+    }),
+  );
+
+  const { error: insertError } = await db
+    .from("social_post_jobs")
+    .insert(jobs);
+
+  if (insertError) {
+    await db
+      .from("social_post_batches")
+      .delete()
+      .eq("id", batch.id);
+
+    return NextResponse.json(
+      { error: insertError.message },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json({
+    batchId: batch.id,
+    groupCount: jobs.length,
+    jobs,
+  });
+}

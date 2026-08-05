@@ -1,5 +1,6 @@
-﻿"use client";
+"use client";
 
+import type { RentalConsultationState } from "@/lib/rentalConsultation";
 import type { ListingCardItem } from "./ListingCard";
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
@@ -13,7 +14,6 @@ import SiteNavbar from "@/app/components/site-navbar";
 import ListingCard from "@/app/components/shared/ListingCard";
 import { formatPublicListing } from "@/lib/publicListingFormatter";
 import { useUserRole } from "@/lib/userRole";
-import type { RentalConsultationState } from "@/lib/rentalConsultation";
 import type { Listing } from "@/types/listing";
 
 const supabase = createClient(
@@ -21,7 +21,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 );
 
-const LISTINGS_PAGE_SIZE = 20;
+const PAGE_SIZE = 20;
 
 type ListingMatchBreakdown = {
   district_score?: number;
@@ -39,7 +39,42 @@ type ListingResult = Listing & {
   reasons?: string[];
 };
 
+type ListingsResponse = {
+  listings?: ListingResult[];
+  matches?: ListingResult[];
+  total?: number;
+  page?: number;
+  pageSize?: number;
+  totalPages?: number;
+  pagination?: {
+    total?: number;
+    page?: number;
+    pageSize?: number;
+    limit?: number;
+    totalPages?: number;
+  };
+  success?: boolean;
+  fallbackWarning?: string;
+  message?: string;
+};
 
+
+
+type PublicChatProfile = {
+  name: string | null;
+  phone: string | null;
+  purpose: string | null;
+  business_type: string | null;
+  business: string | null;
+  location: string | null;
+  primary_location: string | null;
+  alternative_locations: string[];
+  budget: string | null;
+  area: string | null;
+  structure: string | null;
+  frontage: string | null;
+  move_in_time: string | null;
+};
 
 type PublicChatMessage = {
   role: "assistant" | "user";
@@ -56,27 +91,38 @@ type PropertySuggestion = {
   comment_label?: string;
 };
 
+const emptyPublicChatProfile = (): PublicChatProfile => ({
+  name: null,
+  phone: null,
+  purpose: null,
+  business_type: null,
+  business: null,
+  location: null,
+  primary_location: null,
+  alternative_locations: [],
+  budget: null,
+  area: null,
+  structure: null,
+  frontage: null,
+  move_in_time: null,
+});
+
 type AccessMode = "public" | "agent" | "admin";
 
-export default function ListingsHome({
-  mode,
-  showNavbar = true,
-}: {
-  mode: AccessMode;
-  showNavbar?: boolean;
-}) {
+export default function ListingsHome({ mode }: { mode: AccessMode }) {
   const router = useRouter();
   const { roleLoading, isAuthenticated } = useUserRole();
   const aiChatContainerRef = useRef<HTMLDivElement | null>(null);
+  const listingsSectionRef = useRef<HTMLDivElement | null>(null);
   const [listings, setListings] = useState<ListingResult[]>([]);
+  const [totalListings, setTotalListings] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
   const searchAbortRef = useRef<AbortController | null>(null);
   const getListingFromResult = (item: { listing?: Listing; [key: string]: unknown }): Listing =>
   item.listing ?? (item as Listing);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [listingPage, setListingPage] = useState(1);
-  const [listingTotal, setListingTotal] = useState(0);
-  const [hasNextListingPage, setHasNextListingPage] = useState(false);
   const [queryReady, setQueryReady] = useState(false);
   const [parsedFilters, setParsedFilters] =
     useState<ParsedRequirementFilters | null>(null);
@@ -99,33 +145,28 @@ export default function ListingsHome({
   const [copyMessage, setCopyMessage] = useState("");
   const [showAiChat, setShowAiChat] = useState(false);
   const [aiChatMessages, setAiChatMessages] = useState<PublicChatMessage[]>([
-    {
-      role: "assistant",
-      content: "",
-      reply_parts: [
-        "Em chào anh/chị.",
-        "Em là Linh bên BDS.",
-        "Anh/chị đang cần thuê để ở hay kinh doanh ạ?",
-      ],
-    },
-  ]);
+  {
+    role: "assistant",
+    content: "",
+    reply_parts: [
+      "Em chào anh/chị.",
+      "Em là Linh bên BDS.",
+      "Anh/chị đang cần thuê để ở hay kinh doanh ạ?",
+    ],
+  },
+]);
   const [aiChatInput, setAiChatInput] = useState("");
+  const [aiChatProfile, setAiChatProfile] = useState<PublicChatProfile>(
+    emptyPublicChatProfile()
+  );
   const [rentalConsultState, setRentalConsultState] =
-    useState<RentalConsultationState | null>(null);
+  useState<RentalConsultationState | null>(null);
   const [aiChatLoading, setAiChatLoading] = useState(false);
   const [aiChatError, setAiChatError] = useState("");
+  const [aiChatLeadCreated, setAiChatLeadCreated] = useState(false);
   const aiPropertySuggestionsKey = aiChatMessages
     .map((message) => `${message.property_suggestions?.length || 0}:${message.suggestion_followup_parts?.length || 0}`)
     .join("|");
-  const listingCountLabel = search.trim()
-    ? listings.length
-    : listingTotal || listings.length;
-  const totalListingPages =
-    listingTotal > 0
-      ? Math.max(1, Math.ceil(listingTotal / LISTINGS_PAGE_SIZE))
-      : listingPage;
-  const canGoPreviousListingPage = listingPage > 1;
-  const canGoNextListingPage = hasNextListingPage;
 
   const scrollChatToBottom = () => {
     const el = aiChatContainerRef.current;
@@ -269,68 +310,80 @@ return labels;
   };
 
   const sendAiChatMessage = async () => {
-    const message = aiChatInput.trim();
+  const message = aiChatInput.trim();
 
-    if (!message || aiChatLoading) {
-      return;
+  if (!message || aiChatLoading) {
+    return;
+  }
+
+  const nextMessages: PublicChatMessage[] = [
+    ...aiChatMessages,
+    { role: "user", content: message },
+  ];
+
+  setAiChatMessages(nextMessages);
+  setAiChatInput("");
+  setAiChatLoading(true);
+  setAiChatError("");
+
+  try {
+    const res = await fetch("/api/rental-consultant", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message,
+        state: rentalConsultState,
+      }),
+    });
+
+    const json = await res.json();
+
+    if (!res.ok) {
+      throw new Error(json.error || "Không xử lý được yêu cầu.");
     }
 
-    const nextMessages: PublicChatMessage[] = [
-      ...aiChatMessages,
-      { role: "user", content: message },
-    ];
+    setRentalConsultState(json.state || null);
 
-    setAiChatMessages(nextMessages);
-    setAiChatInput("");
-    setAiChatLoading(true);
+    setAiChatMessages((current) => [
+      ...current,
+      {
+        role: "assistant",
+        content: json.reply || "Dạ em nhận được tin nhắn của anh/chị rồi ạ.",
+      },
+    ]);
+  } catch (err) {
+    console.error("rental consultant chat request failed", err);
     setAiChatError("");
+    setAiChatMessages((current) => [
+      ...current,
+      {
+        role: "assistant",
+        content:
+          "Dạ em nhận được tin nhắn của anh/chị rồi. Anh/chị nhắn lại giúp em nhu cầu thuê khu vực nào để em tư vấn sát hơn nha.",
+      },
+    ]);
+  } finally {
+    setAiChatLoading(false);
+  }
+};
 
-    try {
-      const res = await fetch("/api/rental-consultant", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          message,
-          state: rentalConsultState,
-        }),
-      });
-      const json = await res.json();
-      
+  const getUrlPage = (value: string | null) => {
+    const page = Number(value);
 
-      if (!res.ok) {
-        throw new Error(json.error || "Chưa phản hồi được.");
-      }
-
-      setRentalConsultState(json.state || null);
-      setAiChatMessages((current) => [
-        ...current,
-        {
-          role: "assistant",
-          content:
-            typeof json.reply === "string" && json.reply.trim()
-              ? json.reply
-              : "Dạ em nhận được tin nhắn của anh/chị rồi ạ.",
-        },
-      ]);
-    } catch (err) {
-      console.error("rental consultant chat request failed", err);
-      setAiChatError("");
-      setAiChatMessages((current) => [
-        ...current,
-        {
-          role: "assistant",
-          content:
-            "Dạ em nhận được tin nhắn của anh/chị rồi ạ.",
-        },
-      ]);
-    } finally {
-      setAiChatLoading(false);
+    if (!Number.isFinite(page) || page < 1) {
+      return 1;
     }
+
+    return Math.floor(page);
   };
 
-  const replaceSearchQuery = (value: string) => {
+  const updateListingQuery = (
+    value: string,
+    page: number,
+    mode: "push" | "replace" = "replace"
+  ) => {
     if (typeof window === "undefined") {
       return;
     }
@@ -343,7 +396,9 @@ return labels;
       url.searchParams.delete("q");
     }
 
-    window.history.replaceState(
+    url.searchParams.set("page", String(page));
+
+    window.history[mode === "push" ? "pushState" : "replaceState"](
       window.history.state,
       "",
       `${url.pathname}${url.search}${url.hash}`
@@ -351,31 +406,45 @@ return labels;
   };
 
   const updateSearch = (value: string) => {
-    setListingPage(1);
     setSearch(value);
-    replaceSearchQuery(value);
+    setCurrentPage(1);
+    updateListingQuery(value, 1);
   };
 
   const clearSearch = () => {
     updateSearch("");
   };
 
-  const buildListingUrl = (listingId: string) => {
-    const params = new URLSearchParams({ view: mode });
+  const scrollToListings = () => {
+    window.setTimeout(() => {
+      listingsSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 0);
+  };
 
-    if (mode === "admin") {
-      params.set("from", "admin");
-
-      if (typeof window !== "undefined") {
-        params.set("back", `${window.location.pathname}${window.location.search}`);
-      }
+  const goToPage = (page: number) => {
+    if (page < 1 || page === currentPage || (totalPages > 0 && page > totalPages)) {
+      return;
     }
+
+    setCurrentPage(page);
+    updateListingQuery(search, page, "push");
+    scrollToListings();
+  };
+
+  const buildListingUrl = (listingId: string) => {
+    const params = new URLSearchParams();
 
     if (search.trim()) {
       params.set("fromSearch", search.trim());
     }
 
-    return `/listing/${listingId}?${params.toString()}`;
+    const query = params.toString();
+    return query
+  ? `/listing/${listingId}?view=${mode}&${query}`
+  : `/listing/${listingId}?view=${mode}`;
   };
 
   const deleteListing = async (listing: Listing) => {
@@ -397,99 +466,124 @@ return labels;
   };
 
   const fetchListings = async () => {
-  searchAbortRef.current?.abort();
+    searchAbortRef.current?.abort();
 
-  const controller = new AbortController();
-  searchAbortRef.current = controller;
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
 
-  setLoading(true);
-  setSaveMessage("");
-  setSearchWarning("");
+    setLoading(true);
+    setSaveMessage("");
+    setSearchWarning("");
 
-    if (search.trim()) {
-      const parsed = parseVietnameseRequirement(search);
+    try {
+      if (search.trim()) {
+        const parsed = parseVietnameseRequirement(search);
 
-      setParsedFilters(parsed);
+        setParsedFilters(parsed);
 
-      const res = await fetch("/api/leads", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-  },
-  signal: controller.signal,
-  body: JSON.stringify({
-           query: search.trim(),
-          mode: "match",
-          note: parsed.note || null,
-          preferred_districts: parsed.preferred_districts,
-          allow_nearby_districts: parsed.allowNearbyDistricts,
-          max_price: parsed.max_price,
-          min_area: parsed.min_area,
-          bedrooms: parsed.bedrooms,
-          min_bedrooms: parsed.min_bedrooms,
-          max_bedrooms: parsed.max_bedrooms,
-          property_types: parsed.property_types,
-          keywordSearch: parsed.keywordSearch,
-          page: listingPage,
-          limit: LISTINGS_PAGE_SIZE,
-        }),
-      });
+        const res = await fetch("/api/leads", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            query: search.trim(),
+            mode: "match",
+            page: currentPage,
+            pageSize: PAGE_SIZE,
+            note: parsed.note || null,
+            preferred_districts: parsed.preferred_districts,
+            max_price: parsed.max_price,
+            min_area: parsed.min_area,
+            keywordSearch: parsed.keywordSearch,
+          }),
+        });
 
-      const json = await res.json();
-      if (controller.signal.aborted) {
-  return;
-}
+        const json = (await res.json()) as ListingsResponse;
+        if (controller.signal.aborted) {
+          return;
+        }
 
-      if (!res.ok || !json.success) {
-        setListings([]);
-        setListingTotal(0);
-        setHasNextListingPage(false);
+        if (!res.ok || !json.success) {
+          setListings([]);
+          setTotalListings(0);
+          setTotalPages(0);
+          setLoading(false);
+          return;
+        }
+
+        const matches = json.listings || json.matches || [];
+        const total = json.total ?? json.pagination?.total ?? matches.length;
+        const nextTotalPages =
+          json.totalPages ?? json.pagination?.totalPages ?? Math.ceil(total / PAGE_SIZE);
+
+        if (nextTotalPages > 0 && currentPage > nextTotalPages) {
+          setCurrentPage(nextTotalPages);
+          updateListingQuery(search, nextTotalPages);
+          return;
+        }
+
+        setListings(matches);
+        setTotalListings(total);
+        setTotalPages(nextTotalPages);
+        setSearchWarning(
+          json.fallbackWarning ||
+            json.message ||
+            (matches.length === 0 ? noSearchResultsMessage : "")
+        );
         setLoading(false);
         return;
       }
 
-      const matches = json.matches || [];
-      const total =
-        typeof json.pagination?.total === "number"
-          ? json.pagination.total
-          : matches.length;
-      setListings(matches);
-      setListingTotal(total);
-      setHasNextListingPage(Boolean(json.pagination?.hasNextPage));
-      setSearchWarning(
-        json.fallbackWarning ||
-          json.message ||
-          (matches.length === 0 ? noSearchResultsMessage : "")
-      );
+      setParsedFilters(null);
+      setSearchWarning("");
+
+      const params = new URLSearchParams({
+        page: String(currentPage),
+      });
+      const res = await fetch(`/api/listings?${params.toString()}`, {
+        signal: controller.signal,
+      });
+      const json = (await res.json()) as ListingsResponse;
+
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      if (!res.ok) {
+        setListings([]);
+        setTotalListings(0);
+        setTotalPages(0);
+        setLoading(false);
+        return;
+      }
+
+      const nextListings = json.listings || [];
+      const total = json.total ?? nextListings.length;
+      const nextTotalPages = json.totalPages ?? Math.ceil(total / PAGE_SIZE);
+
+      if (nextTotalPages > 0 && currentPage > nextTotalPages) {
+        setCurrentPage(nextTotalPages);
+        updateListingQuery(search, nextTotalPages);
+        return;
+      }
+
+      setListings(nextListings);
+      setTotalListings(total);
+      setTotalPages(nextTotalPages);
       setLoading(false);
-      return;
-    }
+    } catch (err) {
+      if (controller.signal.aborted) {
+        return;
+      }
 
-    setParsedFilters(null);
-    setSearchWarning("");
-
-    const from = (listingPage - 1) * LISTINGS_PAGE_SIZE;
-    const to = from + LISTINGS_PAGE_SIZE - 1;
-
-    const { data, error, count } = await supabase
-      .from("listings")
-      .select("*", { count: "exact" })
-      .order("updated_at", { ascending: false })
-      .range(from, to);
-
-    if (error) {
-      console.error(error);
+      console.error(err);
       setListings([]);
-      setListingTotal(0);
-      setHasNextListingPage(false);
+      setTotalListings(0);
+      setTotalPages(0);
       setLoading(false);
-      return;
     }
-
-    setListings(data || []);
-    setListingTotal(count || 0);
-    setHasNextListingPage(to + 1 < (count || 0));
-    setLoading(false);
   };
 
   const parseBudgetValue = (value: string) => {
@@ -585,13 +679,8 @@ return labels;
         preferred_districts: saveDistrict.trim()
           ? [saveDistrict.trim()]
           : filters.preferred_districts,
-        allow_nearby_districts: filters.allowNearbyDistricts,
         max_price: parseBudgetValue(saveBudget) ?? filters.max_price,
         min_area: filters.min_area,
-        bedrooms: filters.bedrooms,
-        min_bedrooms: filters.min_bedrooms,
-        max_bedrooms: filters.max_bedrooms,
-        property_types: filters.property_types,
         existing_matches: getExistingMatches(),
       }),
     });
@@ -621,16 +710,31 @@ return labels;
     window.clearTimeout(timer);
     searchAbortRef.current?.abort();
   };
-}, [queryReady, search, listingPage]);
+}, [queryReady, search, currentPage]);
 
   useEffect(() => {
-    const query = new URLSearchParams(window.location.search).get("q");
+    const params = new URLSearchParams(window.location.search);
+    const query = params.get("q");
+    const page = getUrlPage(params.get("page"));
 
     if (query && query !== search) {
       setSearch(query);
     }
 
+    setCurrentPage(page);
     setQueryReady(true);
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+
+      setSearch(params.get("q") || "");
+      setCurrentPage(getUrlPage(params.get("page")));
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
   useEffect(() => {
@@ -646,16 +750,81 @@ return labels;
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  const paginationItems = (() => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const pages = new Set<number>([
+      1,
+      totalPages,
+      currentPage,
+      currentPage - 2,
+      currentPage - 1,
+      currentPage + 1,
+      currentPage + 2,
+    ]);
+    const visiblePages = Array.from(pages)
+      .filter((page) => page >= 1 && page <= totalPages)
+      .sort((a, b) => a - b);
+    const items: Array<number | string> = [];
+
+    visiblePages.forEach((page, index) => {
+      const previous = visiblePages[index - 1];
+
+      if (previous && page - previous > 1) {
+        items.push(`ellipsis-${previous}-${page}`);
+      }
+
+      items.push(page);
+    });
+
+    return items;
+  })();
+
   return (
     <div style={{ fontFamily: "Arial", minHeight: "100vh", background: "#f3f4f6" }}>
-      {showNavbar && <SiteNavbar />}
+      {mode !== "admin" && <SiteNavbar />}
 
-      <div style={{ background: "linear-gradient(to right,#2563eb,#1d4ed8)", color: "#fff", padding: "60px 20px", textAlign: "center" }}>
-        <h1>Tìm bất động sản nhanh chóng</h1>
-        <p>Nhà đẹp - Giá tốt - Vị trí đẹp</p>
-      </div>
+      <section
+        style={{
+          background: "linear-gradient(120deg,#0f4dc9,#2563eb)",
+          color: "#fff",
+          padding: "42px 20px 70px",
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 1200,
+            margin: "0 auto",
+            position: "relative",
+            zIndex: 1,
+          }}
+        >
+          <h1 style={{ margin: 0, fontSize: "clamp(28px,4vw,42px)" }}>
+            Tìm bất động sản nhanh chóng
+          </h1>
+          <p style={{ margin: "10px 0 0", fontSize: 18, opacity: 0.92 }}>
+            Nhà đẹp - Giá tốt - Vị trí đẹp
+          </p>
+        </div>
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            right: 20,
+            bottom: -45,
+            width: 420,
+            height: 180,
+            border: "2px solid rgba(255,255,255,.16)",
+            borderRadius: "50% 50% 0 0",
+          }}
+        />
+      </section>
 
-      {mode !== "admin" && !roleLoading && !isAuthenticated && (
+      {!roleLoading && !isAuthenticated && (
         <section
           role="link"
           tabIndex={0}
@@ -712,7 +881,7 @@ return labels;
         </section>
       )}
 
-      <div style={{ maxWidth: 900, margin: "-30px auto 20px", background: "#fff", padding: 20, borderRadius: 16, boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}>
+      <div style={{ maxWidth: 1200, margin: "-38px auto 24px", background: "#fff", padding: 14, borderRadius: 14, boxShadow: "0 12px 28px rgba(15,23,42,0.14)", position: "relative", zIndex: 2 }}>
         <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
           <input
             placeholder="VD: tìm nhà khu vực phú nhuận, làm spa, giá 50tr đổ lại, dt 80m2"
@@ -733,12 +902,12 @@ return labels;
         </div>
       </div>
 
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: 20 }}>
+      <div ref={listingsSectionRef} style={{ maxWidth: 1200, margin: "0 auto", padding: "8px 20px 40px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <h2 style={{ marginBottom: 8 }}>
             {search.trim()
-              ? `Kết quả phù hợp (${listingCountLabel})`
-              : `Bất động sản nổi bật (${listingCountLabel})`}
+              ? `Kết quả phù hợp (${totalListings})`
+              : `Bất động sản nổi bật (${totalListings})`}
           </h2>
           {search.trim() && (
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -760,23 +929,6 @@ return labels;
           )}
         </div>
 
-        {parsedFilters && (
-          <div style={{ background: "#fff", borderRadius: 10, padding: 14, marginTop: 12, marginBottom: 12 }}>
-            <h3 style={{ marginTop: 0 }}>Bộ lọc đã phân tích</h3>
-            <p>Quận: {parsedFilters.preferred_districts.join(", ") || "Không có"}</p>
-            <p>
-              Giá tối đa:{" "}
-              {parsedFilters.max_price
-                ? parsedFilters.max_price.toLocaleString("vi-VN")
-                : "Không có"}
-            </p>
-            <p>Diện tích tối thiểu: {parsedFilters.min_area || "Không có"}</p>
-            <p>Nhu cầu: {parsedFilters.note || "Không có"}</p>
-            {parsedFilters.keywordSearch && (
-              <p>Từ khóa: {parsedFilters.keywordSearch}</p>
-            )}
-          </div>
-        )}
 
         {searchWarning && (
           <div
@@ -805,75 +957,107 @@ return labels;
         ) : listings.length === 0 && !searchWarning ? (
           <p>Không tìm thấy dữ liệu</p>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 18, marginTop: 20 }}>
-            {listings.map((item) => {
-              const listing = getListingFromResult(item);
+          <>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 20 }}>
+              {listings.map((item) => {
+                const listing = getListingFromResult(item);
 
-              return (
-                <ListingCard
-                  key={listing.id}
-                  item={item}
-                  isMobile={isMobile}
-                  mode={mode}
-                  search={search}
-                  getListingFromResult={getListingFromResult}
-                  getReasonLabels={getReasonLabels}
-                  onView={(listingId) => router.push(buildListingUrl(listingId))}
-                  onEdit={(listingId) => router.push(`/edit/${listingId}`)}
-                  onDelete={deleteListing}
-                />
-              );
-            })}
-          </div>
-        )}
+                return (
+                  <ListingCard
+                    key={listing.id}
+                    item={item}
+                    isMobile={isMobile}
+                    mode={mode}
+                    search={search}
+                    getListingFromResult={getListingFromResult}
+                    getReasonLabels={getReasonLabels}
+                    onView={(listingId) => router.push(buildListingUrl(listingId))}
+                    onEdit={(listingId) => router.push(`/edit/${listingId}?view=${mode}`)}
+                    onDelete={deleteListing}
+                  />
+                );
+              })}
+            </div>
 
-        {!loading && (listingTotal > LISTINGS_PAGE_SIZE || canGoPreviousListingPage || canGoNextListingPage) && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 10,
-              flexWrap: "wrap",
-              marginTop: 24,
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setListingPage((current) => Math.max(1, current - 1))}
-              disabled={!canGoPreviousListingPage}
-              style={{
-                background: canGoPreviousListingPage ? "#111827" : "#e5e7eb",
-                color: canGoPreviousListingPage ? "#fff" : "#9ca3af",
-                border: "none",
-                borderRadius: 8,
-                cursor: canGoPreviousListingPage ? "pointer" : "default",
-                padding: "10px 14px",
-                fontWeight: 700,
-              }}
-            >
-              Trang trước
-            </button>
-            <span style={{ color: "#4b5563", fontWeight: 700 }}>
-              Trang {listingPage}/{totalListingPages}
-            </span>
-            <button
-              type="button"
-              onClick={() => setListingPage((current) => current + 1)}
-              disabled={!canGoNextListingPage}
-              style={{
-                background: canGoNextListingPage ? "#111827" : "#e5e7eb",
-                color: canGoNextListingPage ? "#fff" : "#9ca3af",
-                border: "none",
-                borderRadius: 8,
-                cursor: canGoNextListingPage ? "pointer" : "default",
-                padding: "10px 14px",
-                fontWeight: 700,
-              }}
-            >
-              Trang sau
-            </button>
-          </div>
+            {totalPages > 1 && (
+              <nav
+                aria-label="Phan trang bat dong san"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  marginTop: 24,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage <= 1}
+                  style={{
+                    border: "1px solid #d1d5db",
+                    borderRadius: 8,
+                    padding: "9px 13px",
+                    background: currentPage <= 1 ? "#f3f4f6" : "#fff",
+                    color: currentPage <= 1 ? "#9ca3af" : "#111827",
+                    cursor: currentPage <= 1 ? "default" : "pointer",
+                    fontWeight: 700,
+                  }}
+                >
+                  « Trước
+                </button>
+
+                {paginationItems.map((item) =>
+                  typeof item === "number" ? (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => goToPage(item)}
+                      aria-current={item === currentPage ? "page" : undefined}
+                      style={{
+                        minWidth: 40,
+                        border: item === currentPage ? "1px solid #2563eb" : "1px solid #d1d5db",
+                        borderRadius: 8,
+                        padding: "9px 12px",
+                        background: item === currentPage ? "#2563eb" : "#fff",
+                        color: item === currentPage ? "#fff" : "#111827",
+                        cursor: item === currentPage ? "default" : "pointer",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {item}
+                    </button>
+                  ) : (
+                    <span
+                      key={item}
+                      aria-hidden="true"
+                      style={{ color: "#6b7280", padding: "0 2px", fontWeight: 700 }}
+                    >
+                      ...
+                    </span>
+                  )
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage >= totalPages}
+                  style={{
+                    border: "1px solid #d1d5db",
+                    borderRadius: 8,
+                    padding: "9px 13px",
+                    background: currentPage >= totalPages ? "#f3f4f6" : "#fff",
+                    color: currentPage >= totalPages ? "#9ca3af" : "#111827",
+                    cursor: currentPage >= totalPages ? "default" : "pointer",
+                    fontWeight: 700,
+                  }}
+                >
+                  Sau »
+                </button>
+              </nav>
+            )}
+          </>
         )}
       </div>
 
@@ -941,7 +1125,7 @@ return labels;
           }}
         >
           <div style={{ background: "#111827", color: "#fff", padding: 14, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-            <strong>Tư vấn</strong>
+            <strong>Tư vấn AI</strong>
             <button
               type="button"
               onClick={() => setShowAiChat(false)}

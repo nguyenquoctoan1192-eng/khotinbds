@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { authClient, syncServerSession } from "@/lib/userRole";
 
 type MenuItem = {
@@ -18,7 +18,7 @@ const publicMenuItems: MenuItem[] = [
 const adminMenuItems: MenuItem[] = [
   { href: "/admin", label: "Trang chủ" },
   { href: "/admin/dashboard", label: "Dashboard" },
-  { href: "/admin/ai-consultant", label: "AI - Tư vấn AI" },
+  { href: "/admin/social-publishing", label: "AI Đăng Tin" },
   { href: "/admin/post", label: "Đăng tin" },
   { href: "/admin/customers", label: "Khách hàng" },
   { href: "/admin/listing-library", label: "Kho tin đăng" },
@@ -31,6 +31,7 @@ const agentMenuItems: MenuItem[] = [
   { href: "/agent/customers", label: "Khách hàng" },
   { href: "/agent/assigned-homes", label: "Khách được giao" },
   { href: "/agent/listing-library", label: "Kho tin đăng" },
+  { href: "/agent/bot-settings", label: "Bot của tôi" },
   { href: "/agent/account", label: "Tài khoản" },
 ];
 
@@ -38,9 +39,39 @@ export default function SiteNavbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
+  const [agentBotOnline, setAgentBotOnline] = useState<boolean | null>(null);
 
   const isAdminArea = pathname.startsWith("/admin");
   const isAgentArea = pathname.startsWith("/agent");
+
+
+  useEffect(() => {
+    if (!isAgentArea) return;
+    let cancelled = false;
+
+    async function loadBotStatus() {
+      try {
+        const response = await fetch("/api/agent/bot-settings", { cache: "no-store" });
+        if (!response.ok) return;
+        const json = await response.json();
+        const devices = Array.isArray(json?.devices) ? json.devices : [];
+        const isOnline = devices.some((device: { is_active?: boolean; last_seen_at?: string | null }) => {
+          if (!device?.is_active || !device?.last_seen_at) return false;
+          return Date.now() - new Date(device.last_seen_at).getTime() < 90_000;
+        });
+        if (!cancelled) setAgentBotOnline(isOnline);
+      } catch {
+        if (!cancelled) setAgentBotOnline(false);
+      }
+    }
+
+    void loadBotStatus();
+    const timer = window.setInterval(() => void loadBotStatus(), 20_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [isAgentArea]);
 
   const menuItems = isAdminArea
     ? adminMenuItems
@@ -107,7 +138,16 @@ export default function SiteNavbar() {
                 aria-current={active ? "page" : undefined}
                 onClick={() => setIsOpen(false)}
               >
-                {item.label}
+                <span>{item.label}</span>
+                {isAgentArea && item.href === "/agent/bot-settings" && (
+                  <span
+                    className={`site-navbar__status-dot ${
+                      agentBotOnline ? "site-navbar__status-dot--online" : "site-navbar__status-dot--offline"
+                    }`}
+                    title={agentBotOnline ? "Bot đang online" : "Bot đang offline"}
+                    aria-label={agentBotOnline ? "Bot đang online" : "Bot đang offline"}
+                  />
+                )}
               </Link>
             );
           })}
