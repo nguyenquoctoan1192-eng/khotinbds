@@ -63,7 +63,19 @@ export async function GET(
 
     if (error) throw new Error(error.message);
 
-    const jobs = data ?? [];
+  type SocialPostJob = {
+  id: string;
+  batch_id: string | null;
+  listing_id: string | null;
+  facebook_group_id: string | null;
+  status: string;
+  scheduled_at: string | null;
+  attempt_count: number | null;
+  created_at: string;
+  facebook_groups: unknown;
+};
+
+const jobs = (data ?? []) as unknown as SocialPostJob[];
     const listingMap = await loadListingsByIds(
       jobs.map((job) => String(job.listing_id)),
     );
