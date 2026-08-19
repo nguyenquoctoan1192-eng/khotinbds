@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useState } from "react";
@@ -10,8 +10,8 @@ const categories = [
   { label: "Dưới 20tr", icon: "₫", query: "dưới 20tr" },
   { label: "Gia đình", icon: "⌁", query: "nhà ở gia đình" },
   { label: "Văn phòng", icon: "▦", query: "văn phòng" },
-  { label: "Spa, Nail", icon: "✦", query: "spa nail" },
-  { label: "Cafe, F&B", icon: "☕", query: "cafe F&B" },
+  { label: "Spa, Nail", icon: "âœ¦", query: "spa nail" },
+  { label: "Cafe, F&B", icon: "â˜•", query: "cafe F&B" },
 ];
 
 const moreCategories = [
@@ -59,3 +59,4 @@ export default function PopularCategories() {
     </section>
   );
 }
+

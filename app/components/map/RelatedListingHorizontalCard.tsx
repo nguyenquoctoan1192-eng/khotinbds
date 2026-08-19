@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import RentedStamp from "@/app/components/rented-stamp";
 import { formatPublicListing } from "@/lib/publicListingFormatter";
@@ -89,3 +89,4 @@ export default function RelatedListingHorizontalCard({
     </article>
   );
 }
+

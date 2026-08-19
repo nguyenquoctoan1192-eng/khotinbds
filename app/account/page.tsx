@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+﻿import { redirect } from "next/navigation";
 import SiteNavbar from "@/app/components/site-navbar";
 import { getServerProfile } from "@/lib/serverAuth";
 
@@ -25,3 +25,4 @@ export default async function AccountPage() {
     </div>
   );
 }
+

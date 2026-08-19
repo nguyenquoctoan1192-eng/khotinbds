@@ -34,7 +34,7 @@ const homeHref =
     : viewMode === "agent"
     ? "/agent"
     : "/";
- 
+
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const back = searchParams.get("back")?.trim() || "";
   const safeBack = back.startsWith("/") && !back.startsWith("//") ? back : "";
@@ -263,7 +263,7 @@ const homeHref =
 
       {/* WRAPPER */}
       <div style={styles.wrapper}>
-        
+
         {/* LEFT */}
         <div style={styles.left}>
           <div style={styles.card}>
@@ -488,7 +488,7 @@ const styles: any = {
   width: "100%",
   overflowX: "hidden",
   background: "#f3f4f6",
-  fontFamily: "Arial",
+  fontFamily: "var(--font-inter)",
 },
 
   nav: {

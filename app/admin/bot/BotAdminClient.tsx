@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -89,7 +89,7 @@ type Tab = "overview" | "licenses" | "devices" | "facebook" | "groups" | "activi
 
 const navItems = [
   ["/admin", "⌂", "Trang chủ"],
-  ["/admin/dashboard", "▣", "Dashboard"],
+  ["/admin/dashboard", "â–£", "Dashboard"],
   ["/admin/social-publishing", "➤", "AI Đăng Tin"],
   ["/admin/bot", "🤖", "Quản lý Bot"],
   ["/admin/post", "✎", "Đăng tin"],
@@ -472,7 +472,7 @@ export default function BotAdminClient() {
 
       <aside className={`${styles.sidebar} ${menuOpen ? styles.sidebarOpen : ""}`}>
         <div className={styles.brand}>
-          <div className={styles.brandIcon}>🤖</div>
+          <div className={styles.brandIcon}>ðŸ¤–</div>
           <div className={styles.brandText}>
             <strong>BDS</strong>
             <span>TRUNG TÂM ĐIỀU KHIỂN</span>
@@ -504,7 +504,7 @@ export default function BotAdminClient() {
           <span>Quản lý license, thiết bị, queue và kết nối Bot.</span>
         </div>
         <button className={styles.navButton} onClick={() => void logout()}>
-          <span className={styles.navIcon}>↪</span>
+          <span className={styles.navIcon}>â†ª</span>
           Đăng xuất
         </button>
         <div className={styles.version}>© 2026 BDS · Control Center 1.1</div>
@@ -513,7 +513,7 @@ export default function BotAdminClient() {
       <main className={styles.main}>
         <div className={styles.mobileTop}>
           <strong>BDS Bot</strong>
-          <button className={styles.menuButton} onClick={() => setMenuOpen(true)}>☰</button>
+          <button className={styles.menuButton} onClick={() => setMenuOpen(true)}>â˜°</button>
         </div>
 
         <header className={styles.header}>
@@ -524,7 +524,7 @@ export default function BotAdminClient() {
           </div>
           <div className={styles.headerActions}>
             <span className={styles.autoRefresh}><span className={styles.refreshDot} />Tự động làm mới: 10s</span>
-            <button className={styles.button} onClick={() => void load()} disabled={loading}>↻</button>
+            <button className={styles.button} onClick={() => void load()} disabled={loading}>â†»</button>
             <button
               className={styles.primaryButton}
               onClick={() => {
@@ -540,30 +540,30 @@ export default function BotAdminClient() {
         {message && (
           <div className={styles.message}>
             <span>{message}</span>
-            <button onClick={() => setMessage("")}>✕</button>
+            <button onClick={() => setMessage("")}>âœ•</button>
           </div>
         )}
 
         <section className={styles.kpis}>
           <article className={styles.kpi}>
-            <div className={`${styles.kpiIcon} ${styles.kpiGreen}`}>●</div>
+            <div className={`${styles.kpiIcon} ${styles.kpiGreen}`}>â—</div>
             <div><div className={styles.kpiLabel}>Trạng thái Bot</div><div className={styles.kpiValue}>{onlineDevices.length} / {data.devices.length}</div><div className={styles.kpiHint}>{onlineDevices.length} online · {Math.max(0, data.devices.length - onlineDevices.length)} offline</div></div>
           </article>
           <article className={styles.kpi}>
-            <div className={`${styles.kpiIcon} ${styles.kpiOrange}`}>⌛</div>
+            <div className={`${styles.kpiIcon} ${styles.kpiOrange}`}>âŒ›</div>
             <div><div className={styles.kpiLabel}>Chờ đăng</div><div className={styles.kpiValue}>{jobCounts.pending}</div><div className={styles.kpiHint}>Đang nằm trong queue</div></div>
           </article>
           <article className={styles.kpi}>
-            <div className={`${styles.kpiIcon} ${styles.kpiBlue}`}>↻</div>
+            <div className={`${styles.kpiIcon} ${styles.kpiBlue}`}>â†»</div>
             <div><div className={styles.kpiLabel}>Đang đăng</div><div className={styles.kpiValue}>{jobCounts.processing}</div><div className={styles.kpiHint}>Đang xử lý trực tiếp</div></div>
           </article>
           <article className={styles.kpi}>
-            <div className={`${styles.kpiIcon} ${styles.kpiPurple}`}>✓</div>
+            <div className={`${styles.kpiIcon} ${styles.kpiPurple}`}>âœ“</div>
             <div><div className={styles.kpiLabel}>Thành công</div><div className={styles.kpiValue}>{jobCounts.posted}</div><div className={styles.kpiHint}>Theo dữ liệu gần nhất</div></div>
           </article>
           <article className={styles.kpi}>
             <div className={`${styles.kpiIcon} ${styles.kpiRed}`}>!</div>
-            <div><div className={styles.kpiLabel}>Thất bại</div><div className={styles.kpiValue}>{jobCounts.failed}</div><div className={styles.kpiHint}>Cần kiểm tra</div></div>
+            <div><div className={styles.kpiLabel}>Thất bại</div><div className={styles.kpiValue}>{jobCounts.failed}</div><div className={styles.kpiHint}>Cần kiỒm tra</div></div>
           </article>
         </section>
 
@@ -591,7 +591,7 @@ export default function BotAdminClient() {
                   return (
                     <article className={styles.botCard} key={device.id}>
                       <div className={styles.botCardTop}>
-                        <div className={styles.deviceIcon}>▣</div>
+                        <div className={styles.deviceIcon}>â–£</div>
                         <div className={styles.botIdentity}><strong>{device.device_name || "Thiết bị Windows"}</strong><span>{device.device_uid}</span></div>
                         <span className={`${styles.badge} ${online ? styles.badgeGreen : styles.badgeGray}`}>{online ? "Online" : "Offline"}</span>
                       </div>
@@ -645,7 +645,7 @@ export default function BotAdminClient() {
                       return (
                         <div className={styles.activityRow} key={job.id}>
                           <span className={styles.activityTime}>{new Date(job.posted_at || job.created_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</span>
-                          <span className={`${styles.timelineIcon} ${ok ? styles.kpiGreen : fail ? styles.kpiRed : processing ? styles.kpiBlue : styles.kpiOrange}`}>{ok ? "✓" : fail ? "!" : processing ? "↻" : "⌛"}</span>
+                          <span className={`${styles.timelineIcon} ${ok ? styles.kpiGreen : fail ? styles.kpiRed : processing ? styles.kpiBlue : styles.kpiOrange}`}>{ok ? "âœ“" : fail ? "!" : processing ? "â†»" : "âŒ›"}</span>
                           <div className={styles.activityText}><strong>{jobLabel(job.status)}</strong><span>{group?.name || "Nhóm Facebook"}{job.last_error ? ` — ${job.last_error}` : ""}</span></div>
                           <span className={`${styles.badge} ${ok ? styles.badgeGreen : fail ? styles.badgeRed : processing ? styles.badgeBlue : styles.badgeOrange}`}>{job.status}</span>
                         </div>
@@ -716,3 +716,4 @@ export default function BotAdminClient() {
     return <section className={styles.dataCard}><div className={styles.cardHeader}><h2>{title}</h2><button className={styles.button} onClick={() => void load()}>Làm mới</button></div><div className={styles.tableWrap}>{children}</div></section>;
   }
 }
+

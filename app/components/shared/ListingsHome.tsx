@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import type { RentalConsultationState } from "@/lib/rentalConsultation";
 import type { ListingCardItem } from "./ListingCard";
@@ -783,7 +783,7 @@ return labels;
   })();
 
   return (
-    <div style={{ fontFamily: "Arial", minHeight: "100vh", background: "#f3f4f6" }}>
+    <div style={{ fontFamily: "var(--font-inter)", minHeight: "100vh", background: "#f3f4f6" }}>
       {mode !== "admin" && <SiteNavbar />}
 
       <section
@@ -824,62 +824,7 @@ return labels;
         />
       </section>
 
-      {!roleLoading && !isAuthenticated && (
-        <section
-          role="link"
-          tabIndex={0}
-          aria-label="Đăng ký môi giới"
-          onClick={() => router.push("/register")}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              router.push("/register");
-            }
-          }}
-          style={{
-            maxWidth: 900,
-            margin: "18px auto 0",
-            padding: "16px 18px",
-            border: "1px solid #bfdbfe",
-            borderRadius: 14,
-            background: "#eff6ff",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 16,
-            flexWrap: "wrap",
-          }}
-        >
-          <div>
-            <h2 style={{ margin: "0 0 5px", fontSize: 20, color: "#1e3a8a" }}>
-              Bạn là môi giới?
-            </h2>
-            <p style={{ margin: 0, color: "#475569" }}>
-              Tham gia hệ thống để nhận khách hàng theo khu vực phụ trách.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              router.push("/register");
-            }}
-            style={{
-              width: "auto",
-              border: 0,
-              borderRadius: 9,
-              padding: "10px 16px",
-              background: "#2563eb",
-              color: "#fff",
-              cursor: "pointer",
-              fontWeight: 700,
-            }}
-          >
-            Đăng ký ngay
-          </button>
-        </section>
-      )}
+
 
       <div style={{ maxWidth: 1200, margin: "-38px auto 24px", background: "#fff", padding: 14, borderRadius: 14, boxShadow: "0 12px 28px rgba(15,23,42,0.14)", position: "relative", zIndex: 2 }}>
         <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
@@ -1080,7 +1025,7 @@ return labels;
             zIndex: 9999
           }}
         >
-          ↑
+          â†‘
         </button>
       )}
 
@@ -1392,3 +1337,4 @@ return labels;
     </div>
   );
 }
+

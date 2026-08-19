@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import type { CSSProperties, FormEvent } from "react";
 import { useMemo, useState } from "react";
@@ -199,7 +199,7 @@ export default function AiConsultantPage() {
           <div style={styles.panel}>
             <div style={styles.panelHead}>
               <span style={styles.badge}>Lead: {leadLabels[result.lead_quality]}</span>
-              {result.should_handoff && <span style={styles.handoffBadge}>Cần chuyển người thật</span>}
+              {result.should_handoff && <span style={styles.handoffBadge}>Cần chuyỒn người thật</span>}
               <button type="button" style={styles.linkButton} onClick={() => copyText(result.reply)}>
                 Copy tin nhắn
               </button>
@@ -430,3 +430,4 @@ const styles: Record<string, CSSProperties> = {
     margin: 0,
   },
 };
+

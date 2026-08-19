@@ -1,4 +1,4 @@
-export default function RentedStamp() {
+﻿export default function RentedStamp() {
   return (
     <div
       aria-label="Đã cho thuê"
@@ -27,9 +27,10 @@ export default function RentedStamp() {
         zIndex: 2,
       }}
     >
-      <span>ĐÃ</span>
+      <span>ĐÒ</span>
       <span>CHO</span>
       <span>THUÊ</span>
     </div>
   );
 }
+

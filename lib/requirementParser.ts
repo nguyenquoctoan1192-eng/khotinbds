@@ -160,9 +160,9 @@ function normalizeForParsing(value: unknown) {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/đ/g, "d")
     .replace(/Đ/g, "d")
-    .replace(/Ä‘/g, "d")
-    .replace(/Ä/g, "d")
-    .replace(/mÂ²/g, "m2")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "d")
+    .replace(/m²/g, "m2")
     .replace(/m²/g, "m2")
     .toLowerCase();
 }

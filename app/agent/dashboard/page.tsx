@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import SiteNavbar from "@/app/components/site-navbar";
 import { redirect } from "next/navigation";
 import { getServerProfile, type ServerProfile } from "@/lib/serverAuth";
@@ -468,7 +468,7 @@ export default async function DashboardPage() {
   ).sort((a, b) => b.hot - a.hot || b.count - a.count);
 
   return (
-    <div style={{ fontFamily: "Arial", minHeight: "100vh", background: "#f3f4f6" }}>
+    <div style={{ fontFamily: "var(--font-inter)", minHeight: "100vh", background: "#f3f4f6" }}>
       <SiteNavbar />
 
       <main style={{ maxWidth: 1180, margin: "0 auto", padding: 20 }}>
@@ -581,3 +581,4 @@ export default async function DashboardPage() {
     </div>
   );
 }
+

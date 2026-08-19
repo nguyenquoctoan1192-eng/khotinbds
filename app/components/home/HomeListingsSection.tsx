@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import HomeHorizontalListingCard, {
@@ -69,3 +69,4 @@ export default function HomeListingsSection({ items, isSearching, buildHref }: P
     </section>
   );
 }
+

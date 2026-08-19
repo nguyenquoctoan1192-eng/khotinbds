@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import L from "leaflet";
 import { getPriceTone } from "@/lib/map/coordinates";
@@ -37,3 +37,4 @@ export function createPropertyPriceIcon(priceLabel: string, priceValue: number |
     popupAnchor: [0, -18],
   });
 }
+

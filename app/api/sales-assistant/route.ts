@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import {
   generateContextualReply,
   type GenerateContextualReplyInput,
@@ -31,3 +31,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

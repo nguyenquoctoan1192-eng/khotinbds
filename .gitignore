@@ -42,3 +42,4 @@ next-env.d.ts
 facebook-profiles/
 playwright-report/
 test-results/
+.vercel

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import SiteNavbar from "@/app/components/site-navbar";
 import Link from "next/link";
@@ -1321,7 +1321,7 @@ function CustomersContent({ mode }: { mode: AccessMode }) {
   return (
   <div
     style={{
-      fontFamily: "Arial",
+      fontFamily: "var(--font-inter)",
       minHeight: "100vh",
       background: "#f3f4f6",
     }}
@@ -1620,3 +1620,4 @@ export default function CustomersPage({ mode }: { mode: AccessMode }) {
     </RoleGate>
   );
 }
+

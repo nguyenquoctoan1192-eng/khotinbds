@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { getMatchLevel } from "@/lib/map/coordinates";
 import type { PropertyMapListing } from "@/types/map";
@@ -34,3 +34,4 @@ export default function PropertyMapPopup({ item, onView }: Props) {
     </div>
   );
 }
+

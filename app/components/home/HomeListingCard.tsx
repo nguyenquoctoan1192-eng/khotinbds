@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import RentedStamp from "@/app/components/rented-stamp";
@@ -95,7 +95,7 @@ export default function HomeListingCard({
             event.stopPropagation();
           }}
         >
-          ♡
+          â™¡
         </button>
       </div>
       <div className="home-listing-card__body">
@@ -117,3 +117,4 @@ export default function HomeListingCard({
     </Link>
   );
 }
+

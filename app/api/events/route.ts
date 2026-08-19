@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getAccess } from "@/lib/access";
 
@@ -28,3 +28,4 @@ if (!access) {
 
   return NextResponse.json({ success: true });
 }
+

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import {
   LeadRequirement,
@@ -39,6 +39,41 @@ const supabase = createClient(
 
 function normalizeKeywordText(value: unknown) {
   return normalizeSearchText(value);
+}
+
+function isMissingColumnError(error: unknown) {
+  const message = String(
+    error && typeof error === "object" && "message" in error
+      ? (error as { message?: unknown }).message
+      : error || ""
+  );
+
+  return /column .* does not exist|could not find the .* column|schema cache/i.test(message);
+}
+
+function cleanDetectedValue(value: string | null) {
+  const cleaned = String(value || "").trim().replace(/[\t ]+/g, " ");
+  return cleaned || null;
+}
+
+function detectCustomerContacts(rawText: string) {
+  const phoneCandidates = rawText.match(/(?:\+84|0)(?:[ .-]?\d){9,10}/g) || [];
+  const phone = phoneCandidates
+    .map((value) => value.replace(/\D/g, ""))
+    .map((digits) => digits.startsWith("84") ? `0${digits.slice(2)}` : digits)
+    .find((digits) => /^(03|05|07|08|09)\d{8}$/.test(digits)) || null;
+
+  const zaloMatch = rawText.match(/\bzalo\s*(?::|-|là)\s*([^\n,;|]+)/i);
+  const facebookUrl = rawText.match(/https?:\/\/(?:www\.)?facebook\.com\/[^\s,;]+/i)?.[0] || null;
+  const facebookMatch = rawText.match(/\bfacebook\s*(?::|-|là)\s*([^\n,;|]+)/i);
+  const nameMatch = rawText.match(/\b(?:họ tên|tên khách|khách hàng)\s*(?::|-)\s*([^\n,;|]+)/i);
+
+  return {
+    fullname: cleanDetectedValue(nameMatch?.[1] || null),
+    phone,
+    zalo: cleanDetectedValue(zaloMatch?.[1] || null),
+    facebook: cleanDetectedValue(facebookUrl || facebookMatch?.[1] || null),
+  };
 }
 
 function normalizeDistrictText(value: unknown) {
@@ -672,16 +707,88 @@ export async function POST(req: Request) {
       keywordSearch,
       detected_intent,
       mode, // 👈 THÊM MODE
-      query, // 👈 SEARCH MODE
+      query, // ðŸ‘ˆ SEARCH MODE
     } = body;
 
     console.log("lead-match-debug mode:", mode);
     console.log("lead-match-debug preferred_districts:", preferred_districts);
 
     const requestRequirement = buildRequirementFromBody(body);
-    const normalizedRequirement =
-      buildNormalizedRequirementResponse(requestRequirement);
+    const normalizedRequirement = buildNormalizedRequirementResponse(requestRequirement);
     const listingPagination = getListingPagination(body);
+
+    // =================================================
+    // ðŸŸ£ MODE: CUSTOMER RAW
+    // Giữ nguyên 100% rawText. Chỉ nhận diện contact.
+    // Không parse/ghi quận, giá, diện tích, phòng ngủ...
+    // =================================================
+    if (mode === "customer_raw") {
+      const rawText = typeof body.rawText === "string" ? body.rawText : "";
+
+      if (!rawText.trim()) {
+        return NextResponse.json(
+          { success: false, error: "Nội dung khách gửi đang trống." },
+          { status: 400 }
+        );
+      }
+
+      const detected = detectCustomerContacts(rawText);
+
+      const { data: lead, error: insertError } = await supabase
+        .from("leads")
+        .insert([{
+          fullname: detected.fullname,
+          phone: detected.phone,
+          note: rawText,
+        }])
+        .select("*")
+        .single();
+
+      if (insertError || !lead) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: insertError?.message || "Không thể lưu khách hàng.",
+          },
+          { status: 500 }
+        );
+      }
+
+      // Zalo/Facebook được lưu nếu schema hiện tại có hai column này.
+      // Nếu database cũ chưa có column, vẫn giữ lead + rawText và không phá customer_raw.
+      const socialUpdate: Record<string, string | null> = {
+        zalo: detected.zalo,
+        facebook: detected.facebook,
+      };
+
+      const hasSocialValue = Object.values(socialUpdate).some(Boolean);
+      let savedLead = lead as Record<string, unknown>;
+
+      if (hasSocialValue) {
+        const { data: socialLead, error: socialError } = await supabase
+          .from("leads")
+          .update(socialUpdate)
+          .eq("id", lead.id)
+          .select("*")
+          .single();
+
+        if (!socialError && socialLead) {
+          savedLead = socialLead as Record<string, unknown>;
+        } else if (socialError && !isMissingColumnError(socialError)) {
+          return NextResponse.json(
+            { success: false, error: socialError.message },
+            { status: 500 }
+          );
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        lead: savedLead,
+        detected,
+        rawText,
+      });
+    }
 
     if (mode === "match") {
       const listings = await fetchRoughListingsForScoring(requestRequirement);
@@ -811,30 +918,82 @@ export async function POST(req: Request) {
         bedrooms,
         note: leadNote,
       };
-      let { data: lead, error: leadError } = await supabase
-        .from("leads")
-        .insert([
-          {
+
+      let existingLeadByPhone: { id: string } | null = null;
+
+      if (phone) {
+        const { data: existingLeads } = await supabase
+          .from("leads")
+          .select("id")
+          .eq("phone", phone)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        existingLeadByPhone =
+          existingLeads && existingLeads.length > 0
+            ? (existingLeads[0] as { id: string })
+            : null;
+      }
+
+      let lead: Record<string, unknown> | null = null;
+      let leadError: { message?: string } | null = null;
+
+      if (existingLeadByPhone) {
+        const updateResult = await supabase
+          .from("leads")
+          .update({
             ...leadPayload,
             ...leadScoring,
-          },
-        ])
-        .select()
-        .single();
-
-      if (
-        leadError &&
-        String(leadError.message || "").includes("lead_score")
-      ) {
-        console.error("lead scoring columns missing; saving lead without score", leadError);
-        const fallbackInsert = await supabase
-          .from("leads")
-          .insert([leadPayload])
+          })
+          .eq("id", existingLeadByPhone.id)
           .select()
           .single();
 
-        lead = fallbackInsert.data;
-        leadError = fallbackInsert.error;
+        lead = updateResult.data;
+        leadError = updateResult.error;
+
+        if (
+          leadError &&
+          String(leadError.message || "").includes("lead_score")
+        ) {
+          const fallbackUpdate = await supabase
+            .from("leads")
+            .update(leadPayload)
+            .eq("id", existingLeadByPhone.id)
+            .select()
+            .single();
+
+          lead = fallbackUpdate.data;
+          leadError = fallbackUpdate.error;
+        }
+      } else {
+        const insertResult = await supabase
+          .from("leads")
+          .insert([
+            {
+              ...leadPayload,
+              ...leadScoring,
+            },
+          ])
+          .select()
+          .single();
+
+        lead = insertResult.data;
+        leadError = insertResult.error;
+
+        if (
+          leadError &&
+          String(leadError.message || "").includes("lead_score")
+        ) {
+          console.error("lead scoring columns missing; saving lead without score", leadError);
+          const fallbackInsert = await supabase
+            .from("leads")
+            .insert([leadPayload])
+            .select()
+            .single();
+          lead = fallbackInsert.data;
+          leadError = fallbackInsert.error;
+        }
       }
 
       if (leadError) throw leadError;
@@ -892,7 +1051,7 @@ export async function POST(req: Request) {
           }
           matches.push({
             ...match,
-            lead_id: lead.id,
+            lead_id: String(lead?.id || ""),
           });
           continue;
         }
@@ -904,7 +1063,7 @@ export async function POST(req: Request) {
         if (keywordScore >= minimumScore && isSearchableListing(listing)) {
           matches.push({
             ...createSearchMatch(listing, keywordScore, "Search text matches listing"),
-            lead_id: lead.id,
+            lead_id: String(lead?.id || ""),
           });
         }
       }
@@ -936,7 +1095,7 @@ export async function POST(req: Request) {
     }
 
     // =================================================
-    // 🔵 MODE 2: SEARCH BAR (LEVEL 2 UI SEARCH)
+    // ðŸ”µ MODE 2: SEARCH BAR (LEVEL 2 UI SEARCH)
     // =================================================
     if (mode === "search") {
       const listings = await fetchRoughListingsForScoring(requestRequirement);
@@ -1034,3 +1193,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

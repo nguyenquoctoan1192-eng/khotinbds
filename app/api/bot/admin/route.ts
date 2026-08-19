@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { createLicenseKey, sha256 } from "@/lib/bot/security";
 import { getServerProfile } from "@/lib/serverAuth";
 import { getSocialAdminClient } from "@/lib/socialSupabase";
@@ -165,3 +165,4 @@ export async function PATCH(request: Request) {
     );
   }
 }
+

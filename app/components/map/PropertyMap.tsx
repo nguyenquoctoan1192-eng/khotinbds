@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import dynamic from "next/dynamic";
 import type { MapBounds, PropertyMapListing } from "@/types/map";
@@ -22,3 +22,4 @@ type Props = {
 export default function PropertyMap(props: Props) {
   return <PropertyMapClient {...props} />;
 }
+

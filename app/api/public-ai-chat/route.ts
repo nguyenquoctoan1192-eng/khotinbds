@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import {
   detectConversationStage,
   selectPlaybook,
@@ -2222,3 +2222,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

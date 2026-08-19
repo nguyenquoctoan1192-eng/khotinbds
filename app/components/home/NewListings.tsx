@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import HomeListingCard from "@/app/components/home/HomeListingCard";
@@ -31,3 +31,4 @@ export default function NewListings({ listings, buildHref }: Props) {
     </section>
   );
 }
+

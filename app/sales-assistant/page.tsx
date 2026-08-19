@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 
@@ -23,7 +23,7 @@ const stageOptions = [
 ];
 
 export default function SalesAssistantPage() {
-  const [customerMessage, setCustomerMessage] = useState("Để anh suy nghĩ");
+  const [customerMessage, setCustomerMessage] = useState("ĐỒ anh suy nghĩ");
   const [customerStage, setCustomerStage] = useState("after_viewing");
   const [type, setType] = useState("mặt bằng kinh doanh");
   const [business, setBusiness] = useState("spa");
@@ -251,7 +251,7 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: "100vh",
     background: "#f3f4f6",
     color: "#111827",
-    fontFamily: "Arial, sans-serif",
+    fontFamily: "var(--font-inter)",
     padding: 16,
   },
   shell: {
@@ -386,3 +386,4 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 12,
   },
 };
+

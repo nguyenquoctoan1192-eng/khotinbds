@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { AGENT_AREAS } from "@/lib/agentProfile";
 
@@ -188,3 +188,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

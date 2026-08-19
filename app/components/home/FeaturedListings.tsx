@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useRef } from "react";
@@ -32,10 +32,10 @@ export default function FeaturedListings({
         <h2>{title}</h2>
         <div className="home-section__actions">
           <button type="button" aria-label="Tin trước" onClick={() => scroll(-1)}>
-            ‹
+            â¬¹
           </button>
           <button type="button" aria-label="Tin tiếp theo" onClick={() => scroll(1)}>
-            ›
+            â¬º
           </button>
           <Link href="#new-listings">Xem tất cả →</Link>
         </div>
@@ -53,3 +53,4 @@ export default function FeaturedListings({
     </section>
   );
 }
+

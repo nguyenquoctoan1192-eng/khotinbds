@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import L from "leaflet";
@@ -168,3 +168,4 @@ export default function PropertyMapClient({
     </div>
   );
 }
+

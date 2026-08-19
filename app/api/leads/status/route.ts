@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { calculateLeadScoring } from "@/lib/leadScoring";
 import { getAccess } from "@/lib/access";
@@ -88,3 +88,4 @@ if (!access) {
     );
   }
 }
+

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 const benefits = [
   {
@@ -41,3 +41,4 @@ export default function HomeBenefits() {
     </section>
   );
 }
+

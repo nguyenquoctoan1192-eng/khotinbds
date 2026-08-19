@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { authorizeRequest } from "@/lib/auth";
 
 type ImageEnhanceOptions = {
@@ -81,3 +81,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

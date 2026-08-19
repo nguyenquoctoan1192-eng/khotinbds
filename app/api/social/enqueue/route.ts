@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import {
   buildSchedule,
   MAX_GROUPS_PER_CROSSPOST,
@@ -469,3 +469,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

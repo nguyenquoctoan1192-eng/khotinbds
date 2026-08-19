@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { authenticateBot } from "@/lib/bot/security";
 import { getSocialAdminClient } from "@/lib/socialSupabase";
 import { normalizeVietnamPhone } from "@/lib/socialContent";
@@ -75,3 +75,4 @@ export async function PATCH(request: Request) {
 
   return NextResponse.json({ success: true, profile, readyToPost: true });
 }
+

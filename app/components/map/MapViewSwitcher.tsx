@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import type { MapViewMode } from "@/types/map";
 
@@ -36,3 +36,4 @@ export default function MapViewSwitcher({ value, isMobile, onChange }: Props) {
     </div>
   );
 }
+

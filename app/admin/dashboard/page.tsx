@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { getServerProfile, type ServerProfile } from "@/lib/serverAuth";
@@ -351,7 +351,7 @@ function KpiCards({ cards }: { cards: KpiCard[] }) {
             <div>
               <div className="kpi-label">{card.label}</div>
               <strong className="kpi-value">{card.value}</strong>
-              <div className="kpi-change">↑ {card.change}</div>
+              <div className="kpi-change">â†‘ {card.change}</div>
             </div>
           </Link>
         );
@@ -549,7 +549,7 @@ function AIInsight({
 
   return (
     <section className="card insight-card">
-      <h3>✨ AI Insight</h3>
+      <h3>âœ¨ AI Insight</h3>
       <div className="insight-list">
         {insights.map((item, index) => (
           <Link key={item.text} href={aiInsightLinks[index]} className="insight-item">
@@ -558,7 +558,7 @@ function AIInsight({
               <strong>{item.text}</strong>
               <p>{item.sub}</p>
             </div>
-            <em>›</em>
+            <em>â¬º</em>
           </Link>
         ))}
       </div>
@@ -672,7 +672,7 @@ export default async function DashboardPage() {
           </div>
           <div className="header-actions">
             <div className="search-box">⌕ <span>Tìm khách hàng, SĐT, nhu cầu, dự án...</span><kbd>⌘K</kbd></div>
-            <div className="bell">🔔<sup>12</sup></div>
+            <div className="bell">ðŸ””<sup>12</sup></div>
             <div className="user-chip">
               <div className="avatar">T</div>
               <div><strong>Toàn</strong><span>Sales</span></div>
@@ -695,7 +695,7 @@ export default async function DashboardPage() {
                 tone="red"
                 items={highPriorityItems}
                 badgeBuilder={(item) => `${Math.min(99, Math.max(10, getLeadScore(item.lead)))}%`}
-                actionIcon="☎"
+                actionIcon="â˜Ž"
                 viewAllHref="/admin/customers?filter=high_priority"
               />
               <ActionColumn
@@ -704,7 +704,7 @@ export default async function DashboardPage() {
                 tone="orange"
                 items={todaysActions}
                 badgeBuilder={(item) => item.nextBestAction.priority}
-                actionIcon="✉"
+                actionIcon="âœ‰"
                 viewAllHref="/admin/customers?filter=today"
               />
               <ActionColumn
@@ -713,7 +713,7 @@ export default async function DashboardPage() {
                 tone="blue"
                 items={newMatchItems}
                 badgeBuilder={() => "Mới"}
-                actionIcon="›"
+                actionIcon="â¬º"
                 viewAllHref="/admin/customers?filter=new_matches"
               />
               <ActionColumn
@@ -722,7 +722,7 @@ export default async function DashboardPage() {
                 tone="purple"
                 items={followUpItems}
                 badgeBuilder={(item) => `${getDaysSince(item.latestActivity?.created_at || item.lead.created_at)} ngày`}
-                actionIcon="💬"
+                actionIcon="ðŸ’¬"
                 viewAllHref="/admin/customers?filter=follow_up"
               />
             </div>
@@ -751,7 +751,7 @@ export default async function DashboardPage() {
 
       <style>{`
         * { box-sizing: border-box; }
-        .dashboard-page { color: #0f172a; font-family: Arial, sans-serif; overflow: hidden; }
+        .dashboard-page { color: #0f172a; font-family: var(--font-inter), sans-serif; overflow: hidden; }
         .crm-header { display: flex; justify-content: space-between; gap: 18px; align-items: center; margin-bottom: 22px; }
         .crm-header h1 { margin: 0 0 6px; font-size: 25px; }
         .crm-header p { margin: 0; color: #64748b; }
@@ -856,3 +856,4 @@ export default async function DashboardPage() {
     </div>
   );
 }
+

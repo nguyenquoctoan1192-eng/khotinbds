@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import {
   selectCrosspostGroups,
   type GroupCandidate,
@@ -198,7 +198,7 @@ function buildBaseContent(listing: ListingRow): string {
 
   return [
     `🔥 ${String(listing.title || "CHO THUÊ BẤT ĐỘNG SẢN").trim()}`,
-    listing.district ? `📍 ${listing.district}` : "",
+    listing.district ? `ðŸ“ ${listing.district}` : "",
     dimensions ? `📐 Diện tích: ${dimensions}` : "",
     structure.length ? `🏢 ${structure.join(" – ")}` : "",
     listing.price
@@ -1055,7 +1055,7 @@ async function repairLegacyActiveBatches(
 
   if (repaired > 0) {
     console.log(
-      `[NEXT-JOB] Đã chuyển ${repaired} batch active cũ về pending`,
+      `[NEXT-JOB] Đã chuyỒn ${repaired} batch active cũ về pending`,
     );
   }
 
@@ -1085,7 +1085,7 @@ async function materializeNextBatch(input: {
   for (const batch of (batches ?? []) as unknown as BatchRow[]) {
     /*
      * Chỉ một request được quyền chuyển batch sang processing.
-     * Request khác update 0 dòng và chuyển sang batch kế tiếp.
+     * Request khác update 0 dòng và chuyỒn sang batch kế tiếp.
      */
     const { data: claimedBatch, error: claimBatchError } = await db
       .from("social_post_batches")
@@ -1398,3 +1398,4 @@ export async function POST(request: Request) {
     }),
   );
 }
+

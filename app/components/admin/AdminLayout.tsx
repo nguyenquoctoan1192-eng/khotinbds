@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import type { ReactNode } from "react";
 import Link from "next/link";
@@ -31,7 +31,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         minHeight: "100vh",
         background: "#f5f7fb",
         color: "#0f172a",
-        fontFamily: "Arial, sans-serif",
+        fontFamily: "var(--font-inter)",
       }}
     >
       <header
@@ -77,7 +77,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 fontSize: 22,
               }}
             >
-              ⌂
+              âŒ‚
             </span>
             <strong style={{ fontSize: 22 }}>BDS</strong>
           </Link>
@@ -157,3 +157,4 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     </div>
   );
 }
+

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import {
@@ -407,7 +407,7 @@ export default function FindHomePage() {
             <h3>{canSeeRawListing ? listing.title : publicListing.publicTitle}</h3>
 
             <p style={{ fontWeight: 700 }}>
-              Điểm phù hợp: {item.score}
+              ĐiỒm phù hợp: {item.score}
             </p>
 
             {reasonLabels.length > 0 && (
@@ -415,7 +415,7 @@ export default function FindHomePage() {
                 <p>Reasons:</p>
                 <ul>
                   {reasonLabels.map((reason) => (
-                    <li key={reason}>✓ {reason}</li>
+                    <li key={reason}>âœ“ {reason}</li>
                   ))}
                 </ul>
               </div>
@@ -581,3 +581,4 @@ export default function FindHomePage() {
     </>
   );
 }
+

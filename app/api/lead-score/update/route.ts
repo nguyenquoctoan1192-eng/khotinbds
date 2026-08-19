@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { calculateLeadScore } from "@/lib/leadScore";
 import { getAccess } from "@/lib/access";
@@ -19,7 +19,7 @@ if (!access) {
     const body = await req.json();
     const customerId = body?.customerId;
 
-    // 🚨 1. validate input
+    // ðŸš¨ 1. validate input
     if (!customerId) {
       return NextResponse.json(
         {
@@ -30,7 +30,7 @@ if (!access) {
       );
     }
 
-    // 🚨 2. get customer
+    // ðŸš¨ 2. get customer
     const { data: customer, error: customerError } = await supabase
       .from("customers")
       .select("*")
@@ -47,7 +47,7 @@ if (!access) {
       );
     }
 
-    // 🚨 3. get events (safe fallback)
+    // ðŸš¨ 3. get events (safe fallback)
     const { data: events, error: eventsError } = await supabase
       .from("customer_events")
       .select("*")
@@ -55,16 +55,16 @@ if (!access) {
 
     const safeEvents = events ?? [];
 
-    // 🚨 4. calculate score safely
+    // ðŸš¨ 4. calculate score safely
     const score = calculateLeadScore(safeEvents, customer);
 
-    // 🚨 5. status mapping
+    // ðŸš¨ 5. status mapping
     let status: "cold" | "warm" | "hot" = "cold";
 
     if (score > 80) status = "hot";
     else if (score > 50) status = "warm";
 
-    // 🚨 6. update customer
+    // ðŸš¨ 6. update customer
     const { error: updateError } = await supabase
       .from("customers")
       .update({
@@ -84,7 +84,7 @@ if (!access) {
       );
     }
 
-    // 🚨 7. response
+    // ðŸš¨ 7. response
     return NextResponse.json({
       success: true,
       score,
@@ -103,3 +103,4 @@ if (!access) {
     );
   }
 }
+

@@ -1,30 +1,31 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { createBotToken, sha256 } from "@/lib/bot/security";
 import { getSocialAdminClient } from "@/lib/socialSupabase";
 
 export const dynamic = "force-dynamic";
 
-function clean(value: unknown): string {
-  return String(value ?? "").trim();
-}
-
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const licenseKey = clean(body?.licenseKey);
-    const deviceUid = clean(body?.deviceUid);
-    const deviceName = clean(body?.deviceName) || "Máy tính Windows";
-    const platform = clean(body?.platform) || "windows";
-    const appVersion = clean(body?.appVersion) || null;
+    const licenseKey = String(body?.licenseKey ?? "").trim();
+    const deviceUid = String(body?.deviceUid ?? "").trim();
+    const deviceName = String(body?.deviceName ?? "Máy tính Windows").trim();
+    const platform = String(body?.platform ?? "windows").trim();
+    const appVersion = body?.appVersion
+      ? String(body.appVersion).trim()
+      : null;
 
     if (!licenseKey || !deviceUid) {
       return NextResponse.json(
         { error: "Thiếu licenseKey hoặc deviceUid" },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
     const db = getSocialAdminClient();
+
+    console.log("License nhập:", licenseKey);
+    console.log("Hash tạo ra:", sha256(licenseKey));
 
     const { data: license, error: licenseError } = await db
       .from("bot_licenses")
@@ -32,14 +33,20 @@ export async function POST(request: Request) {
       .eq("license_key_hash", sha256(licenseKey))
       .maybeSingle();
 
+    console.log("License tìm thấy:", license);
+    console.log("License error:", licenseError);
+
     if (licenseError) {
-      return NextResponse.json({ error: licenseError.message }, { status: 500 });
+      return NextResponse.json(
+        { error: licenseError.message },
+        { status: 500 }
+      );
     }
 
     if (!license?.is_active) {
       return NextResponse.json(
         { error: "License không hợp lệ hoặc đã bị khóa" },
-        { status: 401 },
+        { status: 401 }
       );
     }
 
@@ -49,62 +56,25 @@ export async function POST(request: Request) {
     ) {
       return NextResponse.json(
         { error: "License đã hết hạn" },
-        { status: 401 },
+        { status: 401 }
       );
     }
 
-    const { data: brokerProfile, error: brokerError } = await db
-      .from("bot_broker_profiles")
-      .select("id,license_id,agent_user_id,default_contact_phone,is_active")
-      .eq("license_id", license.id)
-      .maybeSingle();
-
-    if (brokerError) {
-      return NextResponse.json({ error: brokerError.message }, { status: 500 });
-    }
-
-    if (!brokerProfile) {
-      return NextResponse.json(
-        {
-          error: "Key KTB chưa được gắn với tài khoản môi giới trên web",
-          code: "LICENSE_NOT_LINKED",
-        },
-        { status: 403 },
-      );
-    }
-
-    if (brokerProfile.is_active === false) {
-      return NextResponse.json(
-        {
-          error: "Tài khoản môi giới đã bị khóa",
-          code: "BROKER_DISABLED",
-        },
-        { status: 403 },
-      );
-    }
-
-    const { data: existingDevice, error: existingDeviceError } = await db
+    const { data: existing, error: existingError } = await db
       .from("bot_devices")
       .select("id,is_active")
       .eq("license_id", license.id)
       .eq("device_uid", deviceUid)
       .maybeSingle();
 
-    if (existingDeviceError) {
+    if (existingError) {
       return NextResponse.json(
-        { error: existingDeviceError.message },
-        { status: 500 },
+        { error: existingError.message },
+        { status: 500 }
       );
     }
 
-    if (existingDevice && !existingDevice.is_active) {
-      return NextResponse.json(
-        { error: "Thiết bị này đã bị khóa" },
-        { status: 403 },
-      );
-    }
-
-    if (!existingDevice) {
+    if (!existing) {
       const { count, error: countError } = await db
         .from("bot_devices")
         .select("id", { count: "exact", head: true })
@@ -114,31 +84,32 @@ export async function POST(request: Request) {
       if (countError) {
         return NextResponse.json(
           { error: countError.message },
-          { status: 500 },
+          { status: 500 }
         );
       }
 
       if ((count ?? 0) >= Number(license.max_devices ?? 1)) {
         return NextResponse.json(
-          {
-            error: "License đã đạt giới hạn thiết bị",
-            code: "DEVICE_LIMIT_REACHED",
-          },
-          { status: 403 },
+          { error: "License đã đạt giới hạn thiết bị" },
+          { status: 403 }
         );
       }
+    } else if (!existing.is_active) {
+      return NextResponse.json(
+        { error: "Thiết bị này đã bị khóa" },
+        { status: 403 }
+      );
     }
 
     const token = createBotToken();
     const nowIso = new Date().toISOString();
     const tokenExpiresAt = new Date(
-      Date.now() + 30 * 24 * 60 * 60 * 1000,
+      Date.now() + 30 * 24 * 60 * 60 * 1000
     ).toISOString();
-
     const payload = {
       license_id: license.id,
       device_uid: deviceUid,
-      device_name: deviceName,
+      device_name: deviceName || null,
       platform,
       app_version: appVersion,
       token_hash: sha256(token),
@@ -175,11 +146,6 @@ export async function POST(request: Request) {
         maxFacebookAccounts: license.max_facebook_accounts,
       },
       device,
-      broker: {
-        profileId: brokerProfile.id,
-        userId: brokerProfile.agent_user_id,
-        defaultContactPhone: brokerProfile.default_contact_phone,
-      },
     });
   } catch (error) {
     return NextResponse.json(
@@ -189,7 +155,8 @@ export async function POST(request: Request) {
             ? error.message
             : "Không đăng nhập được Bot MG",
       },
-      { status: 400 },
+      { status: 400 }
     );
   }
 }
+

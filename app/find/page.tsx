@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import RentedStamp from "@/app/components/rented-stamp";
@@ -131,3 +131,4 @@ export default function FindPage() {
     </RoleGate>
   );
 }
+

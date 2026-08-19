@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
@@ -152,7 +152,7 @@ function ListingLibraryContent({
   };
 
   if (roleLoading) {
-    return <div style={{ padding: 20 }}>Đang kiểm tra quyền truy cập...</div>;
+    return <div style={{ padding: 20 }}>Đang kiỒm tra quyền truy cập...</div>;
   }
 
   if (!canAccessLibrary) {
@@ -215,7 +215,7 @@ function ListingLibraryContent({
                   {item.chotot_title || item.facebook_title || item.title || "Tin đã lưu"}
                 </h2>
                 <p style={styles.cardMeta}>
-                  {[item.street, item.district, item.price, item.phone].filter(Boolean).join(" • ")}
+                  {[item.street, item.district, item.price, item.phone].filter(Boolean).join(" â¬¢ ")}
                 </p>
                 <p style={styles.preview}>{item.primary_content}</p>
                 <p style={styles.date}>{formatDate(item.created_at)}</p>
@@ -325,7 +325,7 @@ const styles: Record<string, CSSProperties> = {
     maxWidth: 1120,
     margin: "0 auto",
     padding: 24,
-    fontFamily: "Arial, sans-serif",
+    fontFamily: "var(--font-inter)",
   },
   header: {
     display: "flex",
@@ -522,3 +522,4 @@ const styles: Record<string, CSSProperties> = {
     whiteSpace: "pre-wrap",
   },
 };
+

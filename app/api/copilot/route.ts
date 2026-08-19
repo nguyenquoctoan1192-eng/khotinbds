@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { authorizeRequest } from "@/lib/auth";
 
@@ -47,8 +47,8 @@ export async function POST(req: Request) {
       let score = 0;
 
       if (q.includes(item.district?.toLowerCase())) score += 30;
-      if (q.includes("phÃ²ng") && item.bedrooms >= 1) score += 20;
-      if (q.includes("tá»·") && item.price) score += 20;
+      if (q.includes("phÒ²ng") && item.bedrooms >= 1) score += 20;
+      if (q.includes("tỷ") && item.price) score += 20;
 
       return { ...item, score };
     });
@@ -59,8 +59,8 @@ export async function POST(req: Request) {
 
     const suggestReply =
       topListings.length > 0
-        ? `MÃ¬nh tÃ¬m Ä‘Æ°á»£c ${topListings.length} cÄƒn phÃ¹ há»£p cho báº¡n.`
-        : "Báº¡n cho mÃ¬nh thÃªm ngÃ¢n sÃ¡ch hoáº·c khu vá»±c nhÃ©.";
+        ? `Mình tìm được ${topListings.length} căn phù hợp cho bạn.`
+        : "Bạn cho mҬnh thҪm ngҢn sҡch hoặc khu vực nhҩ.";
 
     // save AI reply (fake system)
     await supabase.from("conversations").insert([
@@ -86,3 +86,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

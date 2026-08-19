@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import dynamic from "next/dynamic";
 import type { PropertyMapListing } from "@/types/map";
@@ -20,3 +20,4 @@ type Props = {
 export default function RelatedListingsMap(props: Props) {
   return <RelatedListingsMapClient {...props} />;
 }
+

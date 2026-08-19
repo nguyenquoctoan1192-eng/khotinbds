@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import RentedStamp from "@/app/components/rented-stamp";
@@ -133,20 +133,26 @@ export default function ListingCard({
 
   return (
     <article
-      style={{
-        display: "grid",
-        gridTemplateColumns: isMobile ? "1fr" : "220px minmax(0,1fr) 190px",
-        gap: 18,
-        background: "#fff",
-        border: "1px solid #e2e8f0",
-        borderRadius: 14,
-        padding: 14,
-        alignItems: "stretch",
-        width: "100%",
-        boxSizing: "border-box",
-        boxShadow: "0 5px 18px rgba(15,23,42,0.05)",
-      }}
-    >
+  style={{
+    display: "grid",
+    gridTemplateColumns: isMobile
+      ? "1fr"
+      : "220px minmax(0,1fr) 190px",
+    gap: 18,
+    background: "#fff",
+    border: "1px solid #e2e8f0",
+    borderRadius: 14,
+    padding: 14,
+    alignItems: "stretch",
+    width: "100%",
+    boxSizing: "border-box",
+    boxShadow: "0 5px 18px rgba(15,23,42,0.05)",
+
+    // FONT GIỐNG KIỂU ADMIN
+    fontFamily:
+      "var(--font-inter)",
+  }}
+>
       <div
         style={{
           position: "relative",
@@ -211,37 +217,61 @@ export default function ListingCard({
         </h3>
 
         <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 7,
-            marginBottom: 12,
-          }}
-        >
-          {[
-            publicListing.area || (listing.area ? `${listing.area}m²` : ""),
-            publicListing.structure || "",
-            listing.bedrooms ? `${listing.bedrooms} PN` : "",
-            listing.district || "",
-            "Mặt tiền",
-          ]
-            .filter(Boolean)
-            .map((label) => (
-              <span
-                key={String(label)}
-                style={{
-                  borderRadius: 999,
-                  padding: "5px 9px",
-                  background: "#f1f5f9",
-                  color: "#475569",
-                  fontSize: 12,
-                  border: "1px solid #e2e8f0",
-                }}
-              >
-                {String(label)}
-              </span>
-            ))}
-        </div>
+  style={{
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 7,
+    marginBottom: 12,
+  }}
+>
+  {[
+    (() => {
+      const width = Number(listing.width || 0);
+      const length = Number(listing.length || 0);
+      const area = Number(listing.area || 0);
+
+      if (width > 0 && length > 0) {
+        return `${width}x${length}`;
+      }
+
+      if (area > 0) {
+        return `${area.toLocaleString("vi-VN")} m²`;
+      }
+
+      if (publicListing.area) {
+        return String(publicListing.area);
+      }
+
+      return "";
+    })(),
+
+    publicListing.structure || "",
+
+    listing.bedrooms
+      ? `${listing.bedrooms} PN`
+      : "",
+
+    listing.district || "",
+
+    "Mặt tiền",
+  ]
+    .filter(Boolean)
+    .map((label) => (
+      <span
+        key={String(label)}
+        style={{
+          borderRadius: 999,
+          padding: "5px 9px",
+          background: "#f1f5f9",
+          color: "#475569",
+          fontSize: 12,
+          border: "1px solid #e2e8f0",
+        }}
+      >
+        {String(label)}
+      </span>
+    ))}
+</div>
 
         {search.trim() && (
           <div
@@ -253,7 +283,7 @@ export default function ListingCard({
               color: "#1e3a8a",
             }}
           >
-            <strong>Điểm phù hợp: {String(item.score ?? 0)}</strong>
+            <strong>ĐiỒm phù hợp: {String(item.score ?? 0)}</strong>
             {getReasonLabels(item).length > 0 && (
               <div style={{ marginTop: 5, fontSize: 13 }}>
                 {getReasonLabels(item).join(" · ")}
@@ -438,3 +468,4 @@ export default function ListingCard({
     </article>
   );
 }
+

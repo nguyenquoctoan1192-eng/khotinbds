@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 const PAGE_SIZE = 20;
@@ -59,3 +59,4 @@ export async function GET(req: Request) {
     );
   }
 }
+

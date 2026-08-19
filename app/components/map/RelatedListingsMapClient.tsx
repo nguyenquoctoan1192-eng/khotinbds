@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo } from "react";
 import L from "leaflet";
@@ -128,3 +128,4 @@ export default function RelatedListingsMapClient({
     </MapContainer>
   );
 }
+

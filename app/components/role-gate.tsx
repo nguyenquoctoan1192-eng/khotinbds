@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
@@ -21,8 +21,9 @@ export default function RoleGate({
   }, [allowed, roleLoading, router]);
 
   if (roleLoading || !allowed) {
-    return <div style={{ padding: 20 }}>Đang kiểm tra quyền truy cập...</div>;
+    return <div style={{ padding: 20 }}>Đang kiỒm tra quyền truy cập...</div>;
   }
 
   return children;
 }
+

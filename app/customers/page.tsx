@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -1310,7 +1310,7 @@ function CustomersContent() {
   };
 
   return (
-    <div style={{ fontFamily: "Arial", minHeight: "100vh", background: "#f3f4f6" }}>
+    <div style={{ fontFamily: "var(--font-inter)", minHeight: "100vh", background: "#f3f4f6" }}>
       <div style={{ background: "#111827", color: "#fff", padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <Link href="/" style={{ color: "#fff", textDecoration: "none", fontSize: 24, fontWeight: 700 }}>
           BDS
@@ -1566,3 +1566,4 @@ export default function CustomersPage() {
     </RoleGate>
   );
 }
+

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import dynamic from "next/dynamic";
 import type { PropertyMapListing } from "@/types/map";
@@ -11,3 +11,4 @@ const HomeAreaMapClient = dynamic(() => import("./HomeAreaMapClient"), {
 export default function HomeAreaMap({ listings }: { listings: PropertyMapListing[] }) {
   return <HomeAreaMapClient listings={listings} />;
 }
+

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSocialAdminClient } from "@/lib/socialSupabase";
 
 export const dynamic = "force-dynamic";
@@ -108,3 +108,4 @@ export async function DELETE(request: Request) {
     ? NextResponse.json({ error: error.message }, { status: 500 })
     : NextResponse.json({ success: true, removedGroupId: id });
 }
+

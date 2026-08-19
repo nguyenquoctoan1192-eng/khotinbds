@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import HomeListingsSection from "@/app/components/home/HomeListingsSection";
 import type { HomeListingItem } from "@/app/components/home/HomeHorizontalListingCard";
@@ -20,3 +20,4 @@ export default function PublicHomeContent({ listings, isSearching, buildHref }: 
     </div>
   );
 }
+

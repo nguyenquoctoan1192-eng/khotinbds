@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -32,7 +32,7 @@ export default function FavoritesPage() {
       {/* NAV */}
       <div style={styles.nav}>
         <h2 onClick={() => router.push("/")} style={{ cursor: "pointer" }}>
-          🏠 BDS
+          ðŸ  BDS
         </h2>
 
         <button onClick={() => router.push("/")} style={styles.btn}>
@@ -79,7 +79,7 @@ export default function FavoritesPage() {
                   </p>
 
                   {canSeeRawListing ? (
-                    <p>📍 {item.district}</p>
+                    <p>ðŸ“ {item.district}</p>
                   ) : (
                     <>
                       <p>Diện tích: {publicListing.area || "Đang cập nhật"}</p>
@@ -117,7 +117,7 @@ export default function FavoritesPage() {
 /* STYLE */
 const styles: any = {
   page: {
-    fontFamily: "Arial",
+    fontFamily: "var(--font-inter)",
     background: "#f3f4f6",
     minHeight: "100vh",
   },
@@ -210,3 +210,4 @@ const styles: any = {
     cursor: "pointer",
   },
 };
+

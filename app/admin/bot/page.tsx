@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+﻿import { redirect } from "next/navigation";
 import BotAdminClient from "./BotAdminClient";
 import { getServerProfile } from "@/lib/serverAuth";
 
@@ -17,3 +17,4 @@ export default async function BotAdminPage() {
 
   return <BotAdminClient />;
 }
+

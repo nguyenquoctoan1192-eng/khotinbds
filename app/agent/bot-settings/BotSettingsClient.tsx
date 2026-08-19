@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import styles from "./page.module.css";
@@ -58,3 +58,4 @@ export default function BotSettingsClient(){
     <section className={styles.panel}><div className={styles.panelHeader}><div><span className={styles.eyebrow}>NHẬT KÝ</span><h2>Hoạt động gần đây</h2></div></div><div className={styles.tableWrap}><table><thead><tr><th>Thời gian</th><th>Tin đăng</th><th>Trạng thái</th><th>Ghi chú</th></tr></thead><tbody>{(data.recentJobs||[]).length?(data.recentJobs||[]).map(j=><tr key={j.id}><td>{fmt(j.posted_at||j.created_at)}</td><td>{j.listing_id?`Tin ${j.listing_id.slice(0,8)}`:"Không rõ tin"}</td><td><span className={styles.statusBadge}>{labelStatus(j.status)}</span></td><td>{j.last_error||`Lần thử: ${j.attempt_count||0}`}</td></tr>):<tr><td colSpan={4} className={styles.empty}>Chưa có hoạt động đăng bài.</td></tr>}</tbody></table></div></section>
   </div>;
 }
+

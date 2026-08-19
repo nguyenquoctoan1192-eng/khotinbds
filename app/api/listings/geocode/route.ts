@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getAccess } from "@/lib/access";
 import { getDistrictCenter } from "@/lib/map/districtCenters";
@@ -191,3 +191,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSocialAdminClient } from "@/lib/socialSupabase";
 
 type Body = { accountId: string; healthStatus: "healthy"|"warming_up"|"checkpoint"|"captcha"|"rate_limited"|"paused"|"disabled"; pausedUntil?: string|null; message?: string };
@@ -18,3 +18,4 @@ export async function POST(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ success: true, account: data });
 }
+

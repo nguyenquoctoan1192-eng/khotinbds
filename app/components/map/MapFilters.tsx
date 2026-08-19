@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import type { MapFilterState, MapFrontageType, MapPriceRange } from "@/types/map";
 
@@ -148,3 +148,4 @@ export default function MapFilters({
     </section>
   );
 }
+

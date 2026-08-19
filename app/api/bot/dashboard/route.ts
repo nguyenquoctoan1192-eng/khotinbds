@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getServerProfile } from "@/lib/serverAuth";
 import { getSocialAdminClient } from "@/lib/socialSupabase";
 
@@ -119,3 +119,4 @@ export async function GET() {
     serverTime: new Date().toISOString(),
   });
 }
+

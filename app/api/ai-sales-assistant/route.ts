@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 
 type CustomerPurpose = "ở" | "kinh doanh" | "văn phòng";
 
@@ -457,3 +457,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

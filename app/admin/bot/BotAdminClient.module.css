@@ -1,4 +1,4 @@
-.shell {
+﻿.shell {
   --sidebar: #07152e;
   --sidebar-soft: #0c2147;
   --blue: #2563eb;
@@ -210,3 +210,4 @@
   .activityRow { grid-template-columns: 45px 24px minmax(0,1fr); }
   .activityRow > :last-child { display: none; }
 }
+

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { authorizeRequest } from "@/lib/auth";
 import { calculateLeadScoring } from "@/lib/leadScoring";
@@ -184,7 +184,7 @@ function buildExplainMatchReply(matches: Array<Record<string, unknown>>) {
   return [
     `Căn đầu tiên phù hợp vì đạt ${first.score || 0} điểm theo matching hiện tại.`,
     reasons.length > 0 ? `Lý do chính: ${reasons.slice(0, 3).join(", ")}.` : "",
-    warnings.length > 0 ? `Cần kiểm tra thêm: ${warnings.slice(0, 2).join(", ")}.` : "",
+    warnings.length > 0 ? `Cần kiỒm tra thêm: ${warnings.slice(0, 2).join(", ")}.` : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -347,3 +347,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

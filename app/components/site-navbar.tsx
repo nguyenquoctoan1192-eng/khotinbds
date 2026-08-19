@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -116,7 +116,7 @@ export default function SiteNavbar() {
           aria-label={isOpen ? "Đóng menu" : "Mở menu"}
           onClick={() => setIsOpen((current) => !current)}
         >
-          {isOpen ? "✕" : "☰"}
+          {isOpen ? "âœ•" : "â˜°"}
         </button>
 
         <nav
@@ -166,3 +166,4 @@ export default function SiteNavbar() {
     </header>
   );
 }
+

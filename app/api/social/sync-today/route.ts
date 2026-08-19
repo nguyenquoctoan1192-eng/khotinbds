@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import {
   addRandomMinutes,
   selectCrosspostGroups,
@@ -162,7 +162,7 @@ function buildBaseContents(listing: ListingRow): string[] {
   return [
     [
       `🔥 ${listing.title || "CHO THUÊ BẤT ĐỘNG SẢN"}`,
-      listing.district ? `📍 ${listing.district}` : "",
+      listing.district ? `ðŸ“ ${listing.district}` : "",
       dimensions ? `📐 Diện tích: ${dimensions}` : "",
       structure.length
         ? `🏢 ${structure.join(" – ")}`
@@ -660,3 +660,4 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   return POST(request);
 }
+

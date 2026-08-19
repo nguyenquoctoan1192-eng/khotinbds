@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getAccess } from "@/lib/access";
 import { getCustomers } from "@/lib/services/customerService";
 
@@ -23,3 +23,4 @@ export async function GET(req: Request) {
 
   return NextResponse.json(data);
 }
+

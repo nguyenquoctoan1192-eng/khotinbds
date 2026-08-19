@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl =
@@ -177,3 +177,4 @@ export async function POST(
     );
   }
 }
+

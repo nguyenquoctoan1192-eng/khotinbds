@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import RentedStamp from "@/app/components/rented-stamp";
 import { getMatchLevel } from "@/lib/map/coordinates";
@@ -101,3 +101,4 @@ export default function MapListingCard({
     </article>
   );
 }
+

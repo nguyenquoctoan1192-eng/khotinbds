@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import RentedStamp from "@/app/components/rented-stamp";
@@ -163,7 +163,7 @@ export default function HomeHorizontalListingCard({ item, href, isSearching }: P
           className="home-horizontal-card__favorite"
           aria-label="Lưu tin yêu thích"
         >
-          ♡
+          â™¡
         </button>
       </div>
 
@@ -194,3 +194,4 @@ export default function HomeHorizontalListingCard({ item, href, isSearching }: P
     </article>
   );
 }
+

@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+﻿import { redirect } from "next/navigation";
 import AgentsManager from "@/app/admin/agents/agents-manager";
 import { getServerProfile } from "@/lib/serverAuth";
 
@@ -23,3 +23,4 @@ export default async function AdminAgentsPage() {
     </div>
   );
 }
+

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getServerProfile } from "@/lib/serverAuth";
 import { getSocialAdminClient } from "@/lib/socialSupabase";
 import { normalizeVietnamPhone } from "@/lib/socialContent";
@@ -212,3 +212,4 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Không lưu được cài đặt Bot" }, { status: 500 });
   }
 }
+

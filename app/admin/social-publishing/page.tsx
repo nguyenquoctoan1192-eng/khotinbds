@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -380,7 +380,7 @@ export default function SocialPublishingPage() {
         maxWidth: 1500,
         margin: "0 auto",
         padding: 24,
-        fontFamily: "Arial, sans-serif",
+        fontFamily: "var(--font-inter)",
         color: "#0f172a",
       }}
     >
@@ -500,7 +500,7 @@ export default function SocialPublishingPage() {
                   >
                     {isLive
                       ? "🟢 LIVE – tin tới là đăng ngay"
-                      : "🕒 Scheduled"}
+                      : "ðŸ•’ Scheduled"}
                   </div>
                 </div>
                 <div style={{ fontWeight: 700 }}>
@@ -1019,8 +1019,8 @@ export default function SocialPublishingPage() {
                               : job.status}
                       </td>
 
-                     
-                    
+
+
                       <td
                         align="right"
                         style={{
@@ -1231,3 +1231,4 @@ export default function SocialPublishingPage() {
     </main>
   );
 }
+

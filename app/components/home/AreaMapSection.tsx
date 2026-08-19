@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import HomeAreaMap from "@/app/components/home/HomeAreaMap";
@@ -24,3 +24,4 @@ export default function AreaMapSection({ mapListings, districtCounts }: Props) {
     </section>
   );
 }
+

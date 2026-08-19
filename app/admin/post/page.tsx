@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, type DragEvent } from "react";
 import { createClient } from "@supabase/supabase-js";
@@ -84,7 +84,7 @@ function DraggableImage({
           cursor: "pointer",
         }}
       >
-        ✕
+        âœ•
       </button>
 
       <button
@@ -165,7 +165,7 @@ function PostContent() {
   const [district, setDistrict] =
     useState("");
 
-    
+
 
   const [address, setAddress] =
   useState("");
@@ -189,19 +189,19 @@ const [contactPhone, setContactPhone] =
   useState("");
 
 const [amenities, setAmenities] =
-  useState<string[]>([]);  
+  useState<string[]>([]);
 
   const [bedrooms, setBedrooms] =
     useState("");
 
   const [bathrooms, setBathrooms] =
     useState("");
-    
+
   const [description, setDescription] =
     useState("");
 
   const [zaloText, setZaloText] =
-  useState("");  
+  useState("");
 
   const [images, setImages] =
     useState<string[]>([]);
@@ -425,7 +425,7 @@ const [amenities, setAmenities] =
 
 
 
-  
+
 
   const toggleAmenity = (
   value: string
@@ -652,8 +652,8 @@ const autoFillFromZalo = () => {
 
     return [
       [
-        `🔥 ${aiContent?.facebook_title || title}`,
-        location ? `📍 ${location}` : "",
+        `ðŸ”¥ ${aiContent?.facebook_title || title}`,
+        location ? `ðŸ“ ${location}` : "",
         dimensions ? `📐 Diện tích: ${dimensions}` : "",
         structureParts.length ? `🏢 ${structureParts.join(" – ")}` : "",
         `💰 Giá thuê: ${displayPrice}`,
@@ -676,17 +676,17 @@ const autoFillFromZalo = () => {
         location ? `Vị trí: ${location}` : "",
         dimensions ? `Không gian: ${dimensions}` : "",
         structureParts.length ? structureParts.join(" – ") : "",
-        `💵 ${displayPrice}`,
+        `ðŸ’µ ${displayPrice}`,
         "",
         "Phù hợp khách cần thuê nhà nguyên căn, mặt bằng kinh doanh hoặc văn phòng.",
-        contactPhone ? `☎️ ${contactPhone}` : "",
+        contactPhone ? `â˜Žï¸ ${contactPhone}` : "",
       ],
       [
-        `✨ ${title}`,
-        district ? `📍 ${district}` : "",
-        dimensions ? `📐 ${dimensions}` : "",
+        `âœ¨ ${title}`,
+        district ? `ðŸ“ ${district}` : "",
+        dimensions ? `ðŸ“ ${dimensions}` : "",
         structureParts.length ? `🏢 ${structureParts.join(" – ")}` : "",
-        `💰 ${displayPrice}`,
+        `ðŸ’° ${displayPrice}`,
         "",
         baseDescription,
         contactPhone ? `Nhắn hoặc gọi: ${contactPhone}` : "",
@@ -945,7 +945,7 @@ console.log("ERROR =", error);
       {/* FORM */}
       <div className="container" style={styles.container}>
         <div className="form" style={styles.form}>
-          
+
           <h1>Đăng tin bất động sản</h1>
 
           {/* ZALO INPUT */}
@@ -1273,7 +1273,7 @@ const styles: any = {
     width: "100%",
     overflowX: "hidden",
     background: "#f3f4f6",
-    fontFamily: "Arial",
+    fontFamily: "var(--font-inter)",
   },
 
   nav: {
@@ -1611,3 +1611,4 @@ export default function PostPage() {
     </RoleGate>
   );
 }
+

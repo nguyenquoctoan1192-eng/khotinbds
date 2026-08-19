@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
@@ -33,7 +33,10 @@ export default function LoginPage() {
     let timedOut = false;
 
     const clearLoginSession = async () => {
-      await Promise.allSettled([authClient.auth.signOut(), syncServerSession()]);
+      await Promise.allSettled([
+        authClient.auth.signOut(),
+        syncServerSession(),
+      ]);
     };
 
     const timeoutId = window.setTimeout(() => {
@@ -56,7 +59,11 @@ export default function LoginPage() {
         return;
       }
 
-      if (authError || !authData.user || !authData.session?.access_token) {
+      if (
+        authError ||
+        !authData.user ||
+        !authData.session?.access_token
+      ) {
         setMessage("Email hoặc mật khẩu không đúng.");
         return;
       }
@@ -65,8 +72,14 @@ export default function LoginPage() {
         authData.session.access_token,
         controller.signal
       )
-        .then((response) => ({ response, error: null as unknown }))
-        .catch((error: unknown) => ({ response: null, error }));
+        .then((response) => ({
+          response,
+          error: null as unknown,
+        }))
+        .catch((error: unknown) => ({
+          response: null,
+          error,
+        }));
 
       const profileResult = await authClient
         .from("profiles")
@@ -87,7 +100,9 @@ export default function LoginPage() {
         controller.abort();
         await sessionPromise;
         await clearLoginSession();
-        setMessage("Không thể tải hồ sơ tài khoản. Vui lòng liên hệ Admin.");
+        setMessage(
+          "Không thể tải hồ sơ tài khoản. Vui lòng liên hệ Admin."
+        );
         return;
       }
 
@@ -98,7 +113,9 @@ export default function LoginPage() {
         controller.abort();
         await sessionPromise;
         await clearLoginSession();
-        setMessage("Tài khoản chưa được phân quyền. Vui lòng liên hệ Admin.");
+        setMessage(
+          "Tài khoản chưa được phân quyền. Vui lòng liên hệ Admin."
+        );
         return;
       }
 
@@ -106,8 +123,10 @@ export default function LoginPage() {
         controller.abort();
         await sessionPromise;
         await clearLoginSession();
+
         setMessage(
-          STATUS_MESSAGES[status] || "Tài khoản của bạn chưa được phê duyệt."
+          STATUS_MESSAGES[status] ||
+            "Tài khoản của bạn chưa được phê duyệt."
         );
         return;
       }
@@ -119,9 +138,14 @@ export default function LoginPage() {
         return;
       }
 
-      if (sessionResult.error || !sessionResult.response?.ok) {
+      if (
+        sessionResult.error ||
+        !sessionResult.response?.ok
+      ) {
         await clearLoginSession();
-        setMessage("Không thể tạo phiên đăng nhập. Vui lòng thử lại.");
+        setMessage(
+          "Không thể tạo phiên đăng nhập. Vui lòng thử lại."
+        );
         return;
       }
 
@@ -141,12 +165,20 @@ export default function LoginPage() {
       router.refresh();
     } catch (error) {
       if (timedOut) return;
+
       console.error("Đăng nhập thất bại:", error);
+
       await clearLoginSession();
-      setMessage("Không thể đăng nhập. Vui lòng thử lại.");
+
+      setMessage(
+        "Không thể đăng nhập. Vui lòng thử lại."
+      );
     } finally {
       window.clearTimeout(timeoutId);
-      if (!timedOut) setLoading(false);
+
+      if (!timedOut) {
+        setLoading(false);
+      }
     }
   };
 
@@ -158,15 +190,21 @@ export default function LoginPage() {
         <form onSubmit={login} style={styles.form}>
           <div>
             <h1 style={styles.title}>Đăng nhập</h1>
-            <p style={styles.subtitle}>Dành cho quản trị viên và môi giới.</p>
+
+            <p style={styles.subtitle}>
+              Dành cho quản trị viên và môi giới.
+            </p>
           </div>
 
           <label style={styles.label}>
             Email
+
             <input
               type="email"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={(event) =>
+                setEmail(event.target.value)
+              }
               autoComplete="email"
               required
               style={styles.input}
@@ -175,28 +213,47 @@ export default function LoginPage() {
 
           <label style={styles.label}>
             Mật khẩu
+
             <input
               type="password"
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={(event) =>
+                setPassword(event.target.value)
+              }
               autoComplete="current-password"
               required
               style={styles.input}
             />
           </label>
 
-          {message && <div style={styles.error}>{message}</div>}
+          {message && (
+            <div style={styles.error}>
+              {message}
+            </div>
+          )}
 
-          <button type="submit" disabled={loading} style={styles.button}>
-            {loading ? "Đang đăng nhập..." : "Đăng nhập"}
+          <button
+            type="submit"
+            disabled={loading}
+            style={styles.button}
+          >
+            {loading
+              ? "Đang đăng nhập..."
+              : "Đăng nhập"}
           </button>
 
           <p style={styles.registerHint}>
-            Chưa có tài khoản? <Link href="/register">Đăng ký môi giới</Link>
+            Chưa có tài khoản?{" "}
+            <Link href="/register">
+              Đăng ký môi giới
+            </Link>
           </p>
+
           <p style={styles.registerHint}>
-  <Link href="/forgot-password">Quên mật khẩu?</Link>
-</p>
+            <Link href="/forgot-password">
+              Quên mật khẩu?
+            </Link>
+          </p>
         </form>
       </main>
     </div>
@@ -204,7 +261,11 @@ export default function LoginPage() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  page: { minHeight: "100vh", background: "#f3f4f6" },
+  page: {
+    minHeight: "100vh",
+    background: "#f3f4f6",
+  },
+
   main: {
     minHeight: "calc(100vh - 64px)",
     display: "flex",
@@ -212,6 +273,7 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "center",
     padding: 20,
   },
+
   form: {
     width: "100%",
     maxWidth: 420,
@@ -220,13 +282,34 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 18,
     background: "white",
     borderRadius: 16,
-    boxShadow: "0 10px 28px rgba(15, 23, 42, 0.1)",
+    boxShadow:
+      "0 10px 28px rgba(15, 23, 42, 0.1)",
     padding: 28,
   },
-  title: { margin: 0, fontSize: 28 },
-  subtitle: { margin: "6px 0 0", color: "#64748b" },
-  label: { display: "flex", flexDirection: "column", gap: 7, fontWeight: 700 },
-  input: { border: "1px solid #cbd5e1", borderRadius: 9, padding: 12 },
+
+  title: {
+    margin: 0,
+    fontSize: 28,
+  },
+
+  subtitle: {
+    margin: "6px 0 0",
+    color: "#64748b",
+  },
+
+  label: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 7,
+    fontWeight: 700,
+  },
+
+  input: {
+    border: "1px solid #cbd5e1",
+    borderRadius: 9,
+    padding: 12,
+  },
+
   error: {
     border: "1px solid #fecaca",
     borderRadius: 9,
@@ -234,6 +317,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#991b1b",
     padding: 11,
   },
+
   button: {
     border: "none",
     borderRadius: 9,
@@ -243,5 +327,11 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     padding: 13,
   },
-  registerHint: { margin: 0, textAlign: "center", color: "#64748b" },
+
+  registerHint: {
+    margin: 0,
+    textAlign: "center",
+    color: "#64748b",
+  },
 };
+

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { authenticateBot } from "@/lib/bot/security";
 import { getSocialAdminClient } from "@/lib/socialSupabase";
 
@@ -48,3 +48,4 @@ export async function POST(request: Request) {
     ? NextResponse.json({ error: error.message }, { status: 500 })
     : NextResponse.json({ success: true, serverTime: now, licenseActive: true, deviceId: auth.device.id });
 }
+

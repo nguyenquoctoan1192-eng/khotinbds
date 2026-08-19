@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getSocialAdminClient } from "@/lib/socialSupabase";
 
 export const dynamic = "force-dynamic";
@@ -123,3 +123,4 @@ export async function GET(request: Request) {
     );
   }
 }
+

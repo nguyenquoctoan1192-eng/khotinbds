@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { authorizeRequest } from "@/lib/auth";
 import {
@@ -122,3 +122,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

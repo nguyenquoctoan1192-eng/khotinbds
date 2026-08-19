@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getAccess } from "@/lib/access";
 import { AGENT_AREAS, isProfileStatus } from "@/lib/agentProfile";
@@ -76,3 +76,4 @@ if (!access) {
 
   return NextResponse.json({ success: true, agent: data });
 }
+

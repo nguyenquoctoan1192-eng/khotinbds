@@ -209,8 +209,8 @@ function normalizeText(value: unknown): string {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/đ/g, "d")
     .replace(/Đ/g, "d")
+    .replace(/đ/g, "d")
     .replace(/Ä‘/g, "d")
-    .replace(/Ã„â€˜/g, "d")
     .replace(/[^a-z0-9&\s.-]/g, " ")
     .replace(/\s+/g, " ")
     .trim();

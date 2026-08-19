@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+﻿import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { AUTH_COOKIE_NAME } from "@/lib/serverAuth";
@@ -76,3 +76,4 @@ export async function DELETE() {
   (await cookies()).delete(AUTH_COOKIE_NAME);
   return NextResponse.json({ success: true });
 }
+

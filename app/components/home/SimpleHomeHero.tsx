@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import type { CSSProperties } from "react";
 import HeroFeaturedListing from "@/app/components/home/HeroFeaturedListing";
@@ -41,3 +41,4 @@ export default function SimpleHomeHero({ featuredListing, featuredHref }: Props)
     </section>
   );
 }
+

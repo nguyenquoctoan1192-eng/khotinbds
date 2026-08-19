@@ -75,7 +75,7 @@ function EditContent() {
 
   console.log("PARAMS =", params);
   console.log("ID =", id);
-  
+
   const [loading, setLoading] =
     useState(false);
 
@@ -122,7 +122,7 @@ const [contactPhone, setContactPhone] =
   useState("");
 
 const [amenities, setAmenities] =
-  useState<string[]>([]);  
+  useState<string[]>([]);
 
   const [bedrooms, setBedrooms] =
     useState("");
@@ -1027,7 +1027,7 @@ const styles: any = {
   width: "100%",
   overflowX: "hidden",
   background: "#f3f4f6",
-  fontFamily: "Arial",
+  fontFamily: "var(--font-inter)",
 },
 
   nav: {
