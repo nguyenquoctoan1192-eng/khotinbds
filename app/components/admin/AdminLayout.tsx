@@ -77,7 +77,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 fontSize: 22,
               }}
             >
-              âŒ‚
+              ⌂
             </span>
             <strong style={{ fontSize: 22 }}>BDS</strong>
           </Link>

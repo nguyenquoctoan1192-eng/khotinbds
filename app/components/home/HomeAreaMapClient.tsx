@@ -46,7 +46,7 @@ export default function HomeAreaMapClient({
     return (
       <div className="home-area-map-empty">
         <span className="home-area-map-empty__icon" aria-hidden>
-          âŒ–
+          ⌖
         </span>
         <strong>Đang cập nhật vị trí bất động sản.</strong>
         <span>Dữ liệu tọa độ sẽ hiển thị tại đây khi được bổ sung.</span>

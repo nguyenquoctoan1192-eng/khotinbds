@@ -351,7 +351,7 @@ function KpiCards({ cards }: { cards: KpiCard[] }) {
             <div>
               <div className="kpi-label">{card.label}</div>
               <strong className="kpi-value">{card.value}</strong>
-              <div className="kpi-change">â†‘ {card.change}</div>
+              <div className="kpi-change">↑ {card.change}</div>
             </div>
           </Link>
         );
@@ -549,7 +549,7 @@ function AIInsight({
 
   return (
     <section className="card insight-card">
-      <h3>âœ¨ AI Insight</h3>
+      <h3>✨ AI Insight</h3>
       <div className="insight-list">
         {insights.map((item, index) => (
           <Link key={item.text} href={aiInsightLinks[index]} className="insight-item">
@@ -558,7 +558,7 @@ function AIInsight({
               <strong>{item.text}</strong>
               <p>{item.sub}</p>
             </div>
-            <em>â¬º</em>
+            <em>⬺</em>
           </Link>
         ))}
       </div>
@@ -672,7 +672,7 @@ export default async function DashboardPage() {
           </div>
           <div className="header-actions">
             <div className="search-box">⌕ <span>Tìm khách hàng, SĐT, nhu cầu, dự án...</span><kbd>⌘K</kbd></div>
-            <div className="bell">ðŸ””<sup>12</sup></div>
+            <div className="bell">🔔<sup>12</sup></div>
             <div className="user-chip">
               <div className="avatar">T</div>
               <div><strong>Toàn</strong><span>Sales</span></div>
@@ -695,7 +695,7 @@ export default async function DashboardPage() {
                 tone="red"
                 items={highPriorityItems}
                 badgeBuilder={(item) => `${Math.min(99, Math.max(10, getLeadScore(item.lead)))}%`}
-                actionIcon="â˜Ž"
+                actionIcon="☎"
                 viewAllHref="/admin/customers?filter=high_priority"
               />
               <ActionColumn
@@ -704,7 +704,7 @@ export default async function DashboardPage() {
                 tone="orange"
                 items={todaysActions}
                 badgeBuilder={(item) => item.nextBestAction.priority}
-                actionIcon="âœ‰"
+                actionIcon="✉"
                 viewAllHref="/admin/customers?filter=today"
               />
               <ActionColumn
@@ -713,7 +713,7 @@ export default async function DashboardPage() {
                 tone="blue"
                 items={newMatchItems}
                 badgeBuilder={() => "Mới"}
-                actionIcon="â¬º"
+                actionIcon="⬺"
                 viewAllHref="/admin/customers?filter=new_matches"
               />
               <ActionColumn
@@ -722,7 +722,7 @@ export default async function DashboardPage() {
                 tone="purple"
                 items={followUpItems}
                 badgeBuilder={(item) => `${getDaysSince(item.latestActivity?.created_at || item.lead.created_at)} ngày`}
-                actionIcon="ðŸ’¬"
+                actionIcon="💬"
                 viewAllHref="/admin/customers?filter=follow_up"
               />
             </div>

@@ -32,7 +32,7 @@ export default function HeroFeaturedListing({ listing, href }: Props) {
       )}
       <div className="hero-featured-listing__bottom">
         <strong>{publicListing.price}</strong>
-        <Link href={href}>Xem ngay â†’</Link>
+        <Link href={href}>Xem ngay →</Link>
       </div>
     </aside>
   );

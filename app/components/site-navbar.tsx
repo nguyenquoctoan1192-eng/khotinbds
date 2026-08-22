@@ -116,7 +116,7 @@ export default function SiteNavbar() {
           aria-label={isOpen ? "Đóng menu" : "Mở menu"}
           onClick={() => setIsOpen((current) => !current)}
         >
-          {isOpen ? "âœ•" : "â˜°"}
+          {isOpen ? "✕" : "☰"}
         </button>
 
         <nav

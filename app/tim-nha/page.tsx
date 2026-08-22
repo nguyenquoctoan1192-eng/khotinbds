@@ -415,7 +415,7 @@ export default function FindHomePage() {
                 <p>Reasons:</p>
                 <ul>
                   {reasonLabels.map((reason) => (
-                    <li key={reason}>âœ“ {reason}</li>
+                    <li key={reason}>✓ {reason}</li>
                   ))}
                 </ul>
               </div>

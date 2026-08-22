@@ -1025,7 +1025,7 @@ return labels;
             zIndex: 9999
           }}
         >
-          â†‘
+          ↑
         </button>
       )}
 

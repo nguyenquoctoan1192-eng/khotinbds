@@ -162,7 +162,7 @@ function buildBaseContents(listing: ListingRow): string[] {
   return [
     [
       `🔥 ${listing.title || "CHO THUÊ BẤT ĐỘNG SẢN"}`,
-      listing.district ? `ðŸ“ ${listing.district}` : "",
+      listing.district ? `📍 ${listing.district}` : "",
       dimensions ? `📐 Diện tích: ${dimensions}` : "",
       structure.length
         ? `🏢 ${structure.join(" – ")}`

@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 type CustomerPurpose = "ở" | "kinh doanh" | "văn phòng";
 
@@ -104,7 +104,7 @@ const formatBudget = (rawAmount: string, hasLimit: boolean) => {
   return hasLimit ? `dưới ${amountLabel} triệu` : `${amountLabel} triệu`;
 };
 
-export const extractCustomerFacts = (message: string): CustomerFacts => {
+const extractCustomerFacts = (message: string): CustomerFacts => {
   const normalized = normalizeText(message);
   const facts: CustomerFacts = {};
 
@@ -182,7 +182,7 @@ export const extractCustomerFacts = (message: string): CustomerFacts => {
   return facts;
 };
 
-export const mergeCustomerContext = (
+const mergeCustomerContext = (
   oldContext: CustomerContext,
   newFacts: CustomerFacts
 ): CustomerContext => {
@@ -217,7 +217,7 @@ export const mergeCustomerContext = (
   return merged;
 };
 
-export const shouldAskQuestion = (
+const shouldAskQuestion = (
   context: CustomerContext,
   fieldName: keyof CustomerContext | "sizeOrFrontageOrStreet"
 ) => {
@@ -237,7 +237,7 @@ export const shouldAskQuestion = (
   return context[fieldName] === undefined || context[fieldName] === null || context[fieldName] === "";
 };
 
-export const buildCustomerContextPrompt = (
+const buildCustomerContextPrompt = (
   context: CustomerContext,
   conversationHistory: ConversationMessage[],
   message: string

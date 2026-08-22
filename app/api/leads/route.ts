@@ -707,7 +707,7 @@ export async function POST(req: Request) {
       keywordSearch,
       detected_intent,
       mode, // 👈 THÊM MODE
-      query, // ðŸ‘ˆ SEARCH MODE
+      query, // 👈 SEARCH MODE
     } = body;
 
     console.log("lead-match-debug mode:", mode);
@@ -718,7 +718,7 @@ export async function POST(req: Request) {
     const listingPagination = getListingPagination(body);
 
     // =================================================
-    // ðŸŸ£ MODE: CUSTOMER RAW
+    // 🟣 MODE: CUSTOMER RAW
     // Giữ nguyên 100% rawText. Chỉ nhận diện contact.
     // Không parse/ghi quận, giá, diện tích, phòng ngủ...
     // =================================================
@@ -1095,7 +1095,7 @@ export async function POST(req: Request) {
     }
 
     // =================================================
-    // ðŸ”µ MODE 2: SEARCH BAR (LEVEL 2 UI SEARCH)
+    // 🔵 MODE 2: SEARCH BAR (LEVEL 2 UI SEARCH)
     // =================================================
     if (mode === "search") {
       const listings = await fetchRoughListingsForScoring(requestRequirement);

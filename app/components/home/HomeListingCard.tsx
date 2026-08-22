@@ -95,7 +95,7 @@ export default function HomeListingCard({
             event.stopPropagation();
           }}
         >
-          â™¡
+          ♡
         </button>
       </div>
       <div className="home-listing-card__body">

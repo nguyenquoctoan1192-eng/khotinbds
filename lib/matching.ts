@@ -210,7 +210,7 @@ function normalizeText(value: unknown): string {
     .replace(/đ/g, "d")
     .replace(/Đ/g, "d")
     .replace(/đ/g, "d")
-    .replace(/Ä‘/g, "d")
+    .replace(/đ/g, "d")
     .replace(/[^a-z0-9&\s.-]/g, " ")
     .replace(/\s+/g, " ")
     .trim();

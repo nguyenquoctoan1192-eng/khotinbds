@@ -211,7 +211,7 @@ function ListingLibraryContent() {
                   {item.chotot_title || item.facebook_title || item.title || "Tin đã lưu"}
                 </h2>
                 <p style={styles.cardMeta}>
-                  {[item.street, item.district, item.price, item.phone].filter(Boolean).join(" â¬¢ ")}
+                  {[item.street, item.district, item.price, item.phone].filter(Boolean).join(" ⬢ ")}
                 </p>
                 <p style={styles.preview}>{item.primary_content}</p>
                 <p style={styles.date}>{formatDate(item.created_at)}</p>

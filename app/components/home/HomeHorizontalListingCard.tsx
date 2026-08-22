@@ -163,7 +163,7 @@ export default function HomeHorizontalListingCard({ item, href, isSearching }: P
           className="home-horizontal-card__favorite"
           aria-label="Lưu tin yêu thích"
         >
-          â™¡
+          ♡
         </button>
       </div>
 

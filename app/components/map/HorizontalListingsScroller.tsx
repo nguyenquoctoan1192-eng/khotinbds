@@ -149,7 +149,7 @@ export default function HorizontalListingsScroller({
           tabIndex={-1}
           onClick={() => goToIndex(activeIndex - 1, true)}
         >
-          â¬¹
+          ⬹
         </button>
         <button
           type="button"
@@ -161,7 +161,7 @@ export default function HorizontalListingsScroller({
             setInteractionPaused(false);
           }}
         >
-          {manualPaused || reducedMotion ? "â–¶" : "â…¡"}
+          {manualPaused || reducedMotion ? "▶" : "Ⅱ"}
         </button>
         <button
           type="button"
@@ -169,7 +169,7 @@ export default function HorizontalListingsScroller({
           tabIndex={-1}
           onClick={() => goToIndex(activeIndex + 1, true)}
         >
-          â¬º
+          ⬺
         </button>
         <span>
           {activeIndex + 1} / {listings.length}

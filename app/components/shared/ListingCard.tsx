@@ -61,8 +61,12 @@ export default function ListingCard({
   const isRented = listing.status === "rented";
   const showFacebookQueueButton = mode === "admin" && canManageListing;
 
-  async function enqueueFacebook() {
-    if (isRented || queueState === "loading" || queueState === "queued") {
+    async function enqueueFacebook() {
+    if (
+      isRented ||
+      queueState === "loading" ||
+      queueState === "queued"
+    ) {
       return;
     }
 
@@ -70,53 +74,85 @@ export default function ListingCard({
     setQueueMessage("");
 
     try {
-      const response = await fetch("/api/social/sync-today", {
+      /*
+       * Gửi thẳng vào API enqueue chính.
+       * Không đi qua /api/social/sync-today nữa vì frontend
+       * trước đây đang đọc sai cấu trúc response của API đó.
+       */
+      const contentParts = [
+        listing.title || "",
+        listing.description || "",
+      ]
+        .map((value) => String(value).trim())
+        .filter(Boolean);
+
+      const content =
+        contentParts.join("\n\n") ||
+        String(listing.title || "Tin cho thuê bất động sản").trim();
+
+      const response = await fetch("/api/social/enqueue", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+        },
         body: JSON.stringify({
-          listingIds: [listing.id],
-          force: false,
+          listingId: listing.id,
+          district: listing.district || undefined,
+          contents: [content],
         }),
       });
 
       const data = await response.json().catch(() => ({}));
-      const results = Array.isArray(data?.results) ? data.results : [];
-      const currentResult = results.find(
-        (result: { listingId?: string }) => result?.listingId === listing.id,
-      );
-      const reason = String(currentResult?.reason || data?.message || "");
 
       if (!response.ok) {
-        throw new Error(data?.error || reason || "Không đưa được tin vào hàng chờ");
-      }
-
-      const alreadyQueued = /đã có lịch|đã có trong hàng chờ|pending|processing/i.test(
-        reason,
-      );
-
-      const created =
-        Number(data?.createdJobs || 0) > 0 ||
-        Number(data?.queuedListings || 0) > 0 ||
-        currentResult?.queued === true ||
-        alreadyQueued;
-
-      if (!created) {
         throw new Error(
-          reason ||
-            "Tin chưa được đưa vào hàng chờ. Kiểm tra tài khoản và nhóm Facebook.",
+          data?.error ||
+            "Không đưa được tin vào hàng chờ Facebook.",
         );
       }
 
-      setQueueState("queued");
-      setQueueMessage(
-        alreadyQueued
-          ? "Tin đã có trong hàng chờ Facebook"
-          : "Đã đưa tin vào hàng chờ Facebook",
+      /*
+       * API enqueue trả success=true + jobs[] khi tạo thành công.
+       */
+      if (
+        data?.success === true &&
+        Array.isArray(data?.jobs) &&
+        data.jobs.length > 0
+      ) {
+        setQueueState("queued");
+        setQueueMessage(
+          `Đã đưa tin vào hàng chờ Facebook (${data.jobs.length} nhóm)`,
+        );
+        return;
+      }
+
+      /*
+       * Trường hợp API báo tin đã tồn tại trong hàng chờ.
+       */
+      if (data?.skipped === true) {
+        setQueueState("queued");
+        setQueueMessage(
+          data?.message ||
+            "Tin đã có trong hàng chờ Facebook",
+        );
+        return;
+      }
+
+      /*
+       * Trường hợp backend trả success nhưng không có jobs.
+       * Không báo thành công giả.
+       */
+      throw new Error(
+        data?.message ||
+          data?.error ||
+          "Tin chưa được tạo lịch đăng Facebook.",
       );
     } catch (error) {
       setQueueState("error");
       setQueueMessage(
-        error instanceof Error ? error.message : "Không đưa được tin vào hàng chờ",
+        error instanceof Error
+          ? error.message
+          : "Không đưa được tin vào hàng chờ Facebook.",
       );
     }
   }

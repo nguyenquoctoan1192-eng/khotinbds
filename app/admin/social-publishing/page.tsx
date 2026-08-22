@@ -500,7 +500,7 @@ export default function SocialPublishingPage() {
                   >
                     {isLive
                       ? "🟢 LIVE – tin tới là đăng ngay"
-                      : "ðŸ•’ Scheduled"}
+                      : "🕒 Scheduled"}
                   </div>
                 </div>
                 <div style={{ fontWeight: 700 }}>

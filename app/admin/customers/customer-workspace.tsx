@@ -441,7 +441,7 @@ có thể ký hợp đồng dài hạn.`}
         {message ? (
           <div
             className={
-              message.startsWith("âœ“")
+              message.startsWith("✓")
                 ? "sidebar-message success"
                 : "sidebar-message error"
             }
@@ -460,7 +460,7 @@ có thể ký hợp đồng dài hạn.`}
           </div>
 
           <div className="search-box">
-            <span>âŒ•</span>
+            <span>⌕</span>
 
             <input
               value={search}
@@ -534,7 +534,7 @@ có thể ký hợp đồng dài hạn.`}
                       onSelect(lead.id);
                     }}
                   >
-                    â—‰
+                    ◉
                   </button>
 
                   <button
@@ -546,7 +546,7 @@ có thể ký hợp đồng dài hạn.`}
                       void deleteFromSidebar(lead);
                     }}
                   >
-                    ðŸ—‘
+                    🗑
                   </button>
                 </span>
               </span>
@@ -647,7 +647,7 @@ function ProfileHeader({
           disabled={deleting}
           onClick={onDelete}
         >
-          ðŸ—‘{" "}
+          🗑{" "}
           <span>
             {deleting
               ? "Đang xóa..."
@@ -678,44 +678,44 @@ function CustomerInfo({ lead }: { lead: Lead }) {
 
       <div className="info-grid">
         <Info
-          icon="ðŸ‘¤"
+          icon="👤"
           label="Họ tên"
           value={lead.fullname || "Chưa có"}
         />
 
         <Info
-          icon="ðŸ“ž"
+          icon="📞"
           label="Số điện thoại"
           value={lead.phone || "Chưa có SĐT"}
         />
 
         <Info
-          icon="ðŸ’¬"
+          icon="💬"
           label="Zalo"
           value={lead.zalo || "Chưa có"}
         />
 
         <Info
-          icon="â“•"
+          icon="ⓕ"
           label="Facebook"
           value={lead.facebook || "Chưa có"}
         />
 
         <Info
-          icon="â—·"
+          icon="◷"
           label="Ngày tạo"
           value={formatDate(lead.created_at)}
         />
 
         <Info
-          icon="â—"
+          icon="●"
           label="Trạng thái"
           value={lead.status || "Khách mới"}
           highlight
         />
 
         <Info
-          icon="â™§"
+          icon="♧"
           label="Nguồn"
           value={getCustomerSource(lead)}
         />
@@ -804,62 +804,62 @@ function Requirement({ lead }: { lead: Lead }) {
     value: unknown;
   }> = [
     {
-      icon: "ðŸ“",
+      icon: "📍",
       label: "Khu vực",
       value: details.location,
     },
     {
-      icon: "âŒ‚",
+      icon: "⌂",
       label: "Loại hình",
       value: details.propertyType,
     },
     {
-      icon: "ðŸ’µ",
+      icon: "💵",
       label: "Ngân sách",
       value: details.budget,
     },
     {
-      icon: "ðŸ›",
+      icon: "🛏",
       label: "Phòng ngủ",
       value: lead.bedrooms ?? "Chưa có thông tin",
     },
     {
-      icon: "â™¨",
+      icon: "♨",
       label: "Phòng vệ sinh",
       value: lead.bathrooms ?? "Chưa có thông tin",
     },
     {
-      icon: "ðŸ“",
+      icon: "📐",
       label: "Diện tích",
       value: details.area,
     },
     {
-      icon: "â†”",
+      icon: "↔",
       label: "Ngang",
       value: details.width,
     },
     {
-      icon: "ðŸ›‹",
+      icon: "🛋",
       label: "Nội thất",
       value: detailRecord.furniture,
     },
     {
-      icon: "ðŸ“„",
+      icon: "📄",
       label: "Hợp đồng",
       value: detailRecord.contract,
     },
     {
-      icon: "â­",
+      icon: "⭐",
       label: "Ưu tiên",
       value: details.extraNote,
     },
     {
-      icon: "ðŸŽ¯",
+      icon: "🎯",
       label: "Mục đích",
       value: details.purpose,
     },
     {
-      icon: "ðŸ“",
+      icon: "📝",
       label: "Ghi chú",
       value: detailRecord.extraNote,
     },
@@ -937,7 +937,7 @@ function Matches({
 
       {fallbackWarning ? (
         <div className="match-warning">
-          âš  {fallbackWarning}
+          ⚠ {fallbackWarning}
         </div>
       ) : null}
 
@@ -978,7 +978,7 @@ function Matches({
                     <span>
                       {index === 0
                         ? "🏆 Phù hợp nhất"
-                        : `â­ ${
+                        : `⭐ ${
                             index + 1
                           } phù hợp`}
                     </span>
@@ -997,7 +997,7 @@ function Matches({
                       />
                     ) : (
                       <div className="no-image">
-                        <span>ðŸ </span>
+                        <span>🏠</span>
                         Chưa có ảnh
                       </div>
                     )}
@@ -1014,7 +1014,7 @@ function Matches({
                     </h3>
 
                     <p className="listing-location">
-                      ðŸ“{" "}
+                      📍{" "}
                       {listing.district ||
                         listing.address ||
                         "Đang cập nhật"}
@@ -1029,13 +1029,13 @@ function Matches({
 
                       {listing.bedrooms ? (
                         <span>
-                          ðŸ› {listing.bedrooms} PN
+                          🛏 {listing.bedrooms} PN
                         </span>
                       ) : null}
 
                       {listing.bathrooms ? (
                         <span>
-                          ðŸš¿ {listing.bathrooms} WC
+                          🚿 {listing.bathrooms} WC
                         </span>
                       ) : null}
                     </div>
@@ -1046,7 +1046,7 @@ function Matches({
                           .slice(0, 4)
                           .map((reason) => (
                             <span key={reason}>
-                              âœ“ {reason}
+                              ✓ {reason}
                             </span>
                           ))}
                       </div>
@@ -1114,7 +1114,7 @@ function Matches({
                       />
                     ) : (
                       <div className="no-image">
-                        ðŸ 
+                        🏠
                       </div>
                     )}
                   </div>
@@ -1166,7 +1166,7 @@ function Matches({
       {matches.length === 0 ? (
         <div className="empty-matches">
           <span className="empty-match-icon">
-            ðŸ 
+            🏠
           </span>
 
           <strong>
@@ -1202,7 +1202,7 @@ function AISummary({ lead }: { lead: Lead }) {
         </div>
 
         <span className="ai-badge">
-          âœ¨ AI
+          ✨ AI
         </span>
       </div>
 
@@ -1210,7 +1210,7 @@ function AISummary({ lead }: { lead: Lead }) {
         <ul className="summary-list">
           {items.map((item, index) => (
             <li key={`${item}-${index}`}>
-              <span>âœ“</span>
+              <span>✓</span>
 
               <p>{item}</p>
             </li>
@@ -1248,7 +1248,7 @@ function AssignmentPanel({
 
       <div className="assignment-box">
         <div className="assignment-avatar">
-          ðŸ‘¤
+          👤
         </div>
 
         <div>
@@ -1417,7 +1417,7 @@ function CarePanel({
             }
           }}
         >
-          <span>ðŸ“ž</span>
+          <span>📞</span>
           <small>Gọi điện</small>
         </a>
 
@@ -1441,7 +1441,7 @@ function CarePanel({
             }
           }}
         >
-          <span>ðŸ’¬</span>
+          <span>💬</span>
           <small>Zalo</small>
         </a>
 
@@ -1461,7 +1461,7 @@ function CarePanel({
             }
           }}
         >
-          <span>â“•</span>
+          <span>ⓕ</span>
           <small>Facebook</small>
         </a>
       </div>
@@ -2002,7 +2002,7 @@ Toàn bộ hồ sơ khách sẽ bị xóa khỏi CRM.`
       <div className="customer-workspace error-state">
         <div className="error-card">
           <span className="error-icon">
-            âš ï¸
+            ⚠️
           </span>
 
           <strong>
@@ -2046,7 +2046,7 @@ Toàn bộ hồ sơ khách sẽ bị xóa khỏi CRM.`
         <main className="customer-detail empty-detail">
           <div className="empty-detail-card">
             <div className="empty-detail-icon">
-              ðŸ‘¤
+              👤
             </div>
 
             <h2>
@@ -2096,7 +2096,7 @@ Toàn bộ hồ sơ khách sẽ bị xóa khỏi CRM.`
 
         {error ? (
           <div className="inline-error">
-            âš  {error}
+            ⚠ {error}
           </div>
         ) : null}
 

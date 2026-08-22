@@ -32,7 +32,7 @@ export default function FavoritesPage() {
       {/* NAV */}
       <div style={styles.nav}>
         <h2 onClick={() => router.push("/")} style={{ cursor: "pointer" }}>
-          ðŸ  BDS
+          🏠 BDS
         </h2>
 
         <button onClick={() => router.push("/")} style={styles.btn}>
@@ -79,7 +79,7 @@ export default function FavoritesPage() {
                   </p>
 
                   {canSeeRawListing ? (
-                    <p>ðŸ“ {item.district}</p>
+                    <p>📍 {item.district}</p>
                   ) : (
                     <>
                       <p>Diện tích: {publicListing.area || "Đang cập nhật"}</p>

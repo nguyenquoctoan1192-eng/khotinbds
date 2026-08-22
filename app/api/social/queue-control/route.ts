@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getSocialAdminClient } from "@/lib/socialSupabase";
 
 export const dynamic = "force-dynamic";
@@ -18,29 +18,63 @@ type QueueUnit = {
   scheduledAt: Date;
 };
 
+const RESETTABLE_STATUSES = [
+  "pending",
+  "failed",
+  "processing",
+];
+
 function randomDelayMs(): number {
-  return (1 + Math.floor(Math.random() * 6)) * 60 * 1000;
+  const min = 3 * 60 * 1000;
+  const max = 12 * 60 * 1000;
+
+  return (
+    min +
+    Math.floor(Math.random() * (max - min + 1))
+  );
 }
 
-function queueKey(job: QueueJobRow): string {
+function firstScheduleTime(): Date {
+  return new Date(
+    Date.now() + 30 * 1000,
+  );
+}
+
+function queueKey(
+  job: QueueJobRow,
+): string {
   return job.batch_id
     ? `batch:${job.batch_id}`
     : `listing:${job.listing_id}`;
 }
 
-function buildQueueUnits(rows: QueueJobRow[]): QueueUnit[] {
-  const units = new Map<string, QueueUnit>();
+function buildQueueUnits(
+  rows: QueueJobRow[],
+): QueueUnit[] {
+  const units = new Map<
+    string,
+    QueueUnit
+  >();
 
   for (const row of rows) {
     const key = queueKey(row);
-    const parsed = new Date(row.scheduled_at);
-    const scheduledAt = Number.isNaN(parsed.getTime())
-      ? new Date()
-      : parsed;
+
+    const parsed = new Date(
+      row.scheduled_at,
+    );
+
+    const scheduledAt =
+      Number.isNaN(parsed.getTime())
+        ? new Date()
+        : parsed;
 
     const current = units.get(key);
 
-    if (!current || scheduledAt < current.scheduledAt) {
+    if (
+      !current ||
+      scheduledAt.getTime() <
+        current.scheduledAt.getTime()
+    ) {
       units.set(key, {
         key,
         batchId: row.batch_id,
@@ -51,40 +85,83 @@ function buildQueueUnits(rows: QueueJobRow[]): QueueUnit[] {
   }
 
   return [...units.values()].sort(
-    (a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime(),
+    (a, b) =>
+      a.scheduledAt.getTime() -
+      b.scheduledAt.getTime(),
   );
 }
 
+/**
+ * Lấy TOÀN BỘ job còn nằm trong hàng chờ.
+ *
+ * Bao gồm:
+ * pending
+ * failed
+ * processing
+ *
+ * Không lọc theo ngày.
+ */
 async function loadResettableJobs() {
-  const db = getSocialAdminClient();
+  const db =
+    getSocialAdminClient();
 
   const { data, error } = await db
     .from("social_post_jobs")
-    .select("id,batch_id,listing_id,scheduled_at,status")
-    .in("status", ["pending", "failed"])
-    .order("scheduled_at", { ascending: true })
+    .select(
+      "id,batch_id,listing_id,scheduled_at,status",
+    )
+    .in(
+      "status",
+      RESETTABLE_STATUSES,
+    )
+    .order("scheduled_at", {
+      ascending: true,
+    })
     .limit(5000);
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    throw new Error(
+      error.message,
+    );
+  }
 
   return {
     db,
-    rows: (data ?? []) as QueueJobRow[],
+    rows:
+      (data ?? []) as QueueJobRow[],
   };
 }
 
+/**
+ * Cập nhật toàn bộ job thuộc listing/batch.
+ *
+ * QUAN TRỌNG:
+ * Không còn .in("status", ["pending", "failed"])
+ * ở đây.
+ *
+ * Vì Reset phải xử lý cả processing.
+ */
 async function updateUnit(input: {
-  db: ReturnType<typeof getSocialAdminClient>;
+  db: ReturnType<
+    typeof getSocialAdminClient
+  >;
   unit: QueueUnit;
   scheduledAt: Date;
 }) {
-  const { db, unit, scheduledAt } = input;
+  const {
+    db,
+    unit,
+    scheduledAt,
+  } = input;
 
   let query = db
     .from("social_post_jobs")
     .update({
       status: "pending",
-      scheduled_at: scheduledAt.toISOString(),
+
+      scheduled_at:
+        scheduledAt.toISOString(),
+
       next_retry_at: null,
       claimed_at: null,
       attempt_count: 0,
@@ -92,38 +169,98 @@ async function updateUnit(input: {
       error_code: null,
       error_type: null,
     })
-    .in("status", ["pending", "failed"]);
+    .in(
+      "status",
+      RESETTABLE_STATUSES,
+    );
 
-  query = unit.batchId
-    ? query.eq("batch_id", unit.batchId)
-    : query.eq("listing_id", unit.listingId);
+  if (unit.batchId) {
+    query = query.eq(
+      "batch_id",
+      unit.batchId,
+    );
+  } else {
+    query = query.eq(
+      "listing_id",
+      unit.listingId,
+    );
+  }
 
-  const { error } = await query;
-  if (error) throw new Error(error.message);
+  const {
+    error,
+  } = await query;
 
-  /*
-   * next-job có thể bỏ qua hoặc xử lý sai dữ liệu nếu batch vẫn đang failed.
-   * Reset thời gian phải đưa cả batch trở lại pending, không chỉ đổi giờ job.
+  if (error) {
+    throw new Error(
+      error.message,
+    );
+  }
+
+  /**
+   * Đưa batch về pending.
    */
   if (unit.batchId) {
-    const { error: batchError } = await db
-      .from("social_post_batches")
-      .update({ status: "pending" })
-      .eq("id", unit.batchId)
-      .in("status", ["pending", "failed", "cancelled", "processing"]);
+    const {
+      error: batchError,
+    } = await db
+      .from(
+        "social_post_batches",
+      )
+      .update({
+        status: "pending",
+      })
+      .eq(
+        "id",
+        unit.batchId,
+      )
+      .in("status", [
+        "pending",
+        "failed",
+        "cancelled",
+        "processing",
+      ]);
 
-    if (batchError) throw new Error(batchError.message);
+    if (batchError) {
+      throw new Error(
+        batchError.message,
+      );
+    }
   }
 }
 
+/**
+ * RESET TOÀN BỘ HÀNG CHỜ
+ *
+ * Tin đầu tiên:
+ * hiện tại + 30 giây
+ *
+ * Các tin tiếp:
+ * cách nhau 3–12 phút.
+ */
 async function resetQueue() {
-  const { db, rows } = await loadResettableJobs();
-  const units = buildQueueUnits(rows);
-  let cursor = new Date(Date.now() + 10_000);
+  const {
+    db,
+    rows,
+  } =
+    await loadResettableJobs();
 
-  for (let index = 0; index < units.length; index += 1) {
+  const units =
+    buildQueueUnits(rows);
+
+  let cursor =
+    firstScheduleTime();
+
+  for (
+    let index = 0;
+    index < units.length;
+    index++
+  ) {
     if (index > 0) {
-      cursor = new Date(cursor.getTime() + randomDelayMs());
+      cursor =
+        new Date(
+          cursor.getTime() +
+            randomDelayMs(),
+        );
     }
 
     await updateUnit({
@@ -136,25 +273,75 @@ async function resetQueue() {
   return {
     success: true,
     action: "reset",
-    queueCount: units.length,
+    queueCount:
+      units.length,
+    firstScheduledAt:
+      units.length > 0
+        ? new Date(
+            Date.now() +
+              30 * 1000,
+          ).toISOString()
+        : null,
   };
 }
 
-async function promoteListing(listingId: string) {
-  const { db, rows } = await loadResettableJobs();
-  const units = buildQueueUnits(rows);
-  const target = units.find((unit) => unit.listingId === listingId);
+/**
+ * ĐẨY TIN
+ *
+ * Tin được chọn:
+ * +30 giây
+ *
+ * Các tin còn lại:
+ * +3–12 phút.
+ */
+async function promoteListing(
+  listingId: string,
+) {
+  const {
+    db,
+    rows,
+  } =
+    await loadResettableJobs();
+
+  const units =
+    buildQueueUnits(rows);
+
+  const target =
+    units.find(
+      (unit) =>
+        unit.listingId ===
+        listingId,
+    );
 
   if (!target) {
-    throw new Error("Tin này không còn ở trạng thái chờ hoặc thất bại.");
+    throw new Error(
+      "Tin này không còn ở trạng thái chờ hoặc thất bại.",
+    );
   }
 
-  const ordered = [target, ...units.filter((unit) => unit.key !== target.key)];
-  let cursor = new Date(Date.now() + 5_000);
+  const ordered = [
+    target,
+    ...units.filter(
+      (unit) =>
+        unit.key !==
+        target.key,
+    ),
+  ];
 
-  for (let index = 0; index < ordered.length; index += 1) {
+  let cursor =
+    firstScheduleTime();
+
+  for (
+    let index = 0;
+    index < ordered.length;
+    index++
+  ) {
     if (index > 0) {
-      cursor = new Date(cursor.getTime() + randomDelayMs());
+      cursor =
+        new Date(
+          cursor.getTime() +
+            randomDelayMs(),
+        );
     }
 
     await updateUnit({
@@ -168,36 +355,71 @@ async function promoteListing(listingId: string) {
     success: true,
     action: "promote",
     listingId,
-    queueCount: ordered.length,
+    queueCount:
+      ordered.length,
+    firstScheduledAt:
+      ordered.length > 0
+        ? new Date(
+            Date.now() +
+              30 * 1000,
+          ).toISOString()
+        : null,
   };
 }
 
-export async function POST(request: Request) {
+export async function POST(
+  request: Request,
+) {
   try {
-    const body = (await request.json().catch(() => ({}))) as {
-      action?: string;
-      listingId?: string;
-    };
+    const body =
+      (await request
+        .json()
+        .catch(() => ({}))) as {
+        action?: string;
+        listingId?: string;
+      };
 
-    if (body.action === "reset") {
-      return NextResponse.json(await resetQueue());
+    if (
+      body.action ===
+      "reset"
+    ) {
+      return NextResponse.json(
+        await resetQueue(),
+      );
     }
 
-    if (body.action === "promote") {
-      const listingId = String(body.listingId ?? "").trim();
+    if (
+      body.action ===
+      "promote"
+    ) {
+      const listingId =
+        String(
+          body.listingId ??
+            "",
+        ).trim();
 
       if (!listingId) {
         return NextResponse.json(
-          { error: "Thiếu listingId cần đẩy lên đầu hàng chờ." },
+          {
+            error:
+              "Thiếu listingId cần đẩy lên đầu hàng chờ.",
+          },
           { status: 400 },
         );
       }
 
-      return NextResponse.json(await promoteListing(listingId));
+      return NextResponse.json(
+        await promoteListing(
+          listingId,
+        ),
+      );
     }
 
     return NextResponse.json(
-      { error: "action phải là reset hoặc promote." },
+      {
+        error:
+          "action phải là reset hoặc promote.",
+      },
       { status: 400 },
     );
   } catch (error) {
@@ -212,4 +434,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

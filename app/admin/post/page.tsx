@@ -84,7 +84,7 @@ function DraggableImage({
           cursor: "pointer",
         }}
       >
-        âœ•
+        ✕
       </button>
 
       <button
@@ -652,8 +652,8 @@ const autoFillFromZalo = () => {
 
     return [
       [
-        `ðŸ”¥ ${aiContent?.facebook_title || title}`,
-        location ? `ðŸ“ ${location}` : "",
+        `🔥 ${aiContent?.facebook_title || title}`,
+        location ? `📍 ${location}` : "",
         dimensions ? `📐 Diện tích: ${dimensions}` : "",
         structureParts.length ? `🏢 ${structureParts.join(" – ")}` : "",
         `💰 Giá thuê: ${displayPrice}`,
@@ -676,17 +676,17 @@ const autoFillFromZalo = () => {
         location ? `Vị trí: ${location}` : "",
         dimensions ? `Không gian: ${dimensions}` : "",
         structureParts.length ? structureParts.join(" – ") : "",
-        `ðŸ’µ ${displayPrice}`,
+        `💵 ${displayPrice}`,
         "",
         "Phù hợp khách cần thuê nhà nguyên căn, mặt bằng kinh doanh hoặc văn phòng.",
-        contactPhone ? `â˜Žï¸ ${contactPhone}` : "",
+        contactPhone ? `☎️ ${contactPhone}` : "",
       ],
       [
-        `âœ¨ ${title}`,
-        district ? `ðŸ“ ${district}` : "",
-        dimensions ? `ðŸ“ ${dimensions}` : "",
+        `✨ ${title}`,
+        district ? `📍 ${district}` : "",
+        dimensions ? `📐 ${dimensions}` : "",
         structureParts.length ? `🏢 ${structureParts.join(" – ")}` : "",
-        `ðŸ’° ${displayPrice}`,
+        `💰 ${displayPrice}`,
         "",
         baseDescription,
         contactPhone ? `Nhắn hoặc gọi: ${contactPhone}` : "",
