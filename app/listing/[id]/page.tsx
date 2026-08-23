@@ -358,15 +358,12 @@ const homeHref =
         {/* RIGHT (FIX MOBILE FULL WIDTH) */}
         <div style={styles.right}>
           <button
-            style={styles.btnBlue}
-            onClick={() => setShowPhone(true)}
-          >
-            {showPhone
-              ? `📞 ${canSeeRawListing
-                ? listing.contact_phone || "Chưa có số"
-                : publicListing.contactPhone}`
-              : "📞 Liên hệ"}
-          </button>
+  style={styles.btnBlue}
+  onClick={() => setShowPhone(true)}
+  type="button"
+>
+  {showPhone ? "📞 0924711550" : "📞 Liên hệ"}
+</button>
 
           {canManageListing && (
             <>

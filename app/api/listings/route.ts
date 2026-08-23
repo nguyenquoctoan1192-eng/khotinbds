@@ -1,6 +1,9 @@
 ﻿import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const PAGE_SIZE = 20;
 
 const supabase = createClient(
@@ -21,7 +24,11 @@ function parsePage(value: string | null) {
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
-    const page = parsePage(url.searchParams.get("page"));
+
+    const page = parsePage(
+      url.searchParams.get("page")
+    );
+
     const from = (page - 1) * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
 
@@ -37,15 +44,28 @@ export async function GET(req: Request) {
 
     const total = count || 0;
 
-    return NextResponse.json({
-      listings: data || [],
-      total,
-      page,
-      pageSize: PAGE_SIZE,
-      totalPages: Math.ceil(total / PAGE_SIZE),
-    });
+    return NextResponse.json(
+      {
+        listings: data || [],
+        total,
+        page,
+        pageSize: PAGE_SIZE,
+        totalPages: Math.ceil(total / PAGE_SIZE),
+      },
+      {
+        headers: {
+          "Cache-Control":
+            "no-store, no-cache, must-revalidate, proxy-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      }
+    );
   } catch (err) {
-    console.error(err);
+    console.error(
+      "GET /api/listings ERROR =",
+      err
+    );
 
     return NextResponse.json(
       {
@@ -55,8 +75,12 @@ export async function GET(req: Request) {
         pageSize: PAGE_SIZE,
         totalPages: 0,
       },
-      { status: 500 }
+      {
+        status: 500,
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
     );
   }
 }
-

@@ -1,4 +1,4 @@
-export type SocialListingInput = {
+﻿export type SocialListingInput = {
   id?: string | null;
   title?: string | null;
 
@@ -765,108 +765,8 @@ function getDimensions(
    CHỈ LẤY NHỮNG GÌ TIN GỐC THỰC SỰ ĐỀ CẬP
 ========================================================= */
 
-function getAreaNumber(
-  listing: SocialListingInput,
-  parsed: ParsedListing,
-  raw: string,
-): number | null {
-  const size = raw.match(
-    /(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)/i,
-  );
-
-  if (size) {
-    const w = Number(size[1].replace(",", "."));
-    const l = Number(size[2].replace(",", "."));
-
-    if (Number.isFinite(w) && Number.isFinite(l)) {
-      return Math.round(w * l);
-    }
-  }
-
-  if (parsed.width && parsed.length) {
-    const w = Number(parsed.width);
-    const l = Number(parsed.length);
-
-    if (Number.isFinite(w) && Number.isFinite(l)) {
-      return Math.round(w * l);
-    }
-  }
-
-  if (listing.width && listing.length) {
-    const w = Number(listing.width);
-    const l = Number(listing.length);
-
-    if (Number.isFinite(w) && Number.isFinite(l)) {
-      return Math.round(w * l);
-    }
-  }
-
-  const areaVal = Number(listing.area ?? parsed.area);
-
-  if (Number.isFinite(areaVal) && areaVal > 0) {
-    return Math.round(areaVal);
-  }
-
-  return null;
-}
-
-function getFloorCount(raw: string): number | null {
-  const normalized = normalizeText(raw);
-
-  const floor = normalized.match(/(\d+)\s*l[aầ]u\b/);
-  const floorShort = normalized.match(/(\d+)\s*l\b(?!\w)/);
-
-  const value = floor?.[1] ?? floorShort?.[1];
-
-  return value ? Number(value) : null;
-}
-
-/**
- * Gợi ý ngành nghề PHÙ HỢP dựa trên đặc điểm vật lý căn nhà
- * (mặt tiền/hẻm, diện tích, số tầng) — bổ sung thêm cho phần
- * "phù hợp" đã có, KHÔNG thay thế các gợi ý từ từ khóa thật
- * trong nội dung gốc.
- */
-function suggestIndustriesByAttributes(
-  prefix: string,
-  areaM2: number | null,
-  floorCount: number | null,
-): string[] {
-  const result: string[] = [];
-  const isMatTien = /mặt tiền|mặt bằng|góc/i.test(prefix);
-
-  if (isMatTien) {
-    if ((areaM2 && areaM2 >= 100) || (floorCount && floorCount >= 3)) {
-      result.push("🏬 Showroom / trưng bày sản phẩm");
-      result.push("🏢 Văn phòng công ty");
-      result.push("🍜 Nhà hàng / quán ăn quy mô lớn");
-    } else if (areaM2 && areaM2 >= 50) {
-      result.push("🛍️ Cửa hàng / bán lẻ");
-      result.push("💆 Spa / nail / salon / thẩm mỹ");
-      result.push("🏢 Văn phòng nhỏ");
-    } else {
-      result.push("🛍️ Cửa hàng kinh doanh nhỏ");
-      result.push("☕ Quán café / trà sữa nhỏ");
-    }
-  } else {
-    if (/xe hơi|xe tải/i.test(prefix)) {
-      result.push("🏢 Văn phòng nhỏ / xưởng nhẹ");
-      result.push("📦 Kho chứa hàng");
-    }
-
-    result.push("🏠 Gia đình / ở lâu dài");
-  }
-
-  if (floorCount && floorCount >= 3) {
-    result.push("🛏️ Tiềm năng cho thuê từng tầng / căn hộ dịch vụ");
-  }
-
-  return result;
-}
-
 function buildSuitableFor(
   raw: string,
-  attrs: { prefix: string; areaM2: number | null; floorCount: number | null },
 ): string[] {
   const normalized =
     normalizeText(raw);
@@ -1001,13 +901,7 @@ function buildSuitableFor(
     );
   }
 
-  const attributeSuggestions = suggestIndustriesByAttributes(
-    attrs.prefix,
-    attrs.areaM2,
-    attrs.floorCount,
-  );
-
-  return [...new Set([...result, ...attributeSuggestions])];
+  return [...new Set(result)];
 }
 
 /* =========================================================
@@ -1199,11 +1093,7 @@ export function buildSocialListingContent(
     getExtras(raw);
 
   const suitableFor =
-    buildSuitableFor(raw, {
-      prefix,
-      areaM2: getAreaNumber(listing, parsed, raw),
-      floorCount: getFloorCount(raw),
-    });
+    buildSuitableFor(raw);
 
   const price =
     formatPrice(

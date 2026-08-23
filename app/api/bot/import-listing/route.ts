@@ -715,7 +715,7 @@ export async function GET(
     service:
       "khotinbds-folder-bot",
     target:
-      "listing_library",
+      "listings",
     syncTarget:
       "listing_library+listings",
   });

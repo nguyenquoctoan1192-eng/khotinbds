@@ -157,7 +157,9 @@ export default function ListingCard({
     }
   }
 
-  const title = publicListing.publicTitle || listing.title || "Bất động sản";
+  const title = canSeeRawListing
+    ? listing.title || "Bất động sản"
+    : publicListing.publicTitle;
 
   const displayPrice = canSeeRawListing
     ? Number(listing.price || 0) > 0
@@ -250,43 +252,61 @@ export default function ListingCard({
           {title}
         </h3>
 
-        {(publicListing.area || publicListing.structure) && (
-  <div
-    style={{
-      display: "flex",
-      flexWrap: "wrap",
-      alignItems: "center",
-      gap: 8,
-      marginBottom: 12,
-      color: "#475569",
-      fontSize: 14,
-      fontWeight: 600,
-    }}
-  >
-    {publicListing.area && (
-      <span>{publicListing.area}</span>
-    )}
-
-    {publicListing.area && publicListing.structure && (
-      <span style={{ color: "#cbd5e1" }}>·</span>
-    )}
-
-    {publicListing.structure && (
-      <span>{publicListing.structure}</span>
-    )}
-  </div>
-)}
-
         <div
   style={{
     display: "flex",
     flexWrap: "wrap",
-    alignItems: "center",
     gap: 7,
     marginBottom: 12,
   }}
 >
-  
+  {[
+    (() => {
+      const width = Number(listing.width || 0);
+      const length = Number(listing.length || 0);
+      const area = Number(listing.area || 0);
+
+      if (width > 0 && length > 0) {
+        return `${width}x${length}`;
+      }
+
+      if (area > 0) {
+        return `${area.toLocaleString("vi-VN")} m²`;
+      }
+
+      if (publicListing.area) {
+        return String(publicListing.area);
+      }
+
+      return "";
+    })(),
+
+    publicListing.structure || "",
+
+    listing.bedrooms
+      ? `${listing.bedrooms} PN`
+      : "",
+
+    listing.district || "",
+
+    "Mặt tiền",
+  ]
+    .filter(Boolean)
+    .map((label) => (
+      <span
+        key={String(label)}
+        style={{
+          borderRadius: 999,
+          padding: "5px 9px",
+          background: "#f1f5f9",
+          color: "#475569",
+          fontSize: 12,
+          border: "1px solid #e2e8f0",
+        }}
+      >
+        {String(label)}
+      </span>
+    ))}
 </div>
 
         {search.trim() && (
@@ -352,30 +372,19 @@ export default function ListingCard({
         )}
 
         <div
-  style={{
-    display: "flex",
-    flexWrap: "wrap",
-    alignItems: "center",
-    gap: 14,
-    marginTop: 12,
-    color: "#64748b",
-    fontSize: 12,
-  }}
->
-  <span>
-    <b>Đăng:</b>{" "}
-    {listing.created_at
-      ? new Date(String(listing.created_at)).toLocaleDateString("vi-VN")
-      : "Chưa cập nhật"}
-  </span>
-
-  {listing.updated_at && (
-    <span>
-      <b>Cập nhật:</b>{" "}
-      {new Date(String(listing.updated_at)).toLocaleDateString("vi-VN")}
-    </span>
-  )}
-</div>
+          style={{
+            marginTop: 12,
+            color: "#64748b",
+            fontSize: 12,
+          }}
+        >
+          Đăng:{" "}
+          {listing.updated_at || listing.created_at
+            ? new Date(
+                String(listing.updated_at || listing.created_at),
+              ).toLocaleString("vi-VN")
+            : "Chưa cập nhật"}
+        </div>
 
         {queueMessage && (
           <div
