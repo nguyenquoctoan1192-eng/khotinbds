@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import RelatedListingHorizontalCard from "@/app/components/map/RelatedListingHorizontalCard";
-import type { Listing } from "@/types/listing";
+import type { PropertyMapListing } from "@/types/map";
 
 type Props = {
-  listings: Listing[];
+  listings: PropertyMapListing[];
   selectedId: string | null;
   hoveredId: string | null;
   activeIndex: number;
@@ -30,10 +30,15 @@ export default function HorizontalListingsScroller({
 }: Props) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const resumeTimerRef = useRef<number | null>(null);
+
   const [manualPaused, setManualPaused] = useState(false);
   const [interactionPaused, setInteractionPaused] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
-  const isPaused = manualPaused || interactionPaused || reducedMotion;
+
+  const isPaused =
+    manualPaused ||
+    interactionPaused ||
+    reducedMotion;
 
   const clearResumeTimer = () => {
     if (resumeTimerRef.current !== null) {
@@ -44,6 +49,7 @@ export default function HorizontalListingsScroller({
 
   const scrollToIndex = (index: number) => {
     const scroller = scrollerRef.current;
+
     const card = scroller?.querySelector<HTMLElement>(
       `[data-related-index="${index}"]`
     );
@@ -56,9 +62,14 @@ export default function HorizontalListingsScroller({
     });
   };
 
-  const goToIndex = (index: number, userInitiated = false) => {
+  const goToIndex = (
+    index: number,
+    userInitiated = false
+  ) => {
     if (listings.length === 0) return;
-    const nextIndex = (index + listings.length) % listings.length;
+
+    const nextIndex =
+      (index + listings.length) % listings.length;
 
     onActiveIndexChange(nextIndex);
     scrollToIndex(nextIndex);
@@ -66,9 +77,13 @@ export default function HorizontalListingsScroller({
     if (userInitiated) {
       setInteractionPaused(true);
       clearResumeTimer();
+
       if (!manualPaused) {
         resumeTimerRef.current = window.setTimeout(
-          () => setInteractionPaused(false),
+          () => {
+            setInteractionPaused(false);
+            resumeTimerRef.current = null;
+          },
           RESUME_DELAY_MS
         );
       }
@@ -82,9 +97,13 @@ export default function HorizontalListingsScroller({
 
   const resumeAfterInteraction = () => {
     clearResumeTimer();
+
     if (!manualPaused) {
       resumeTimerRef.current = window.setTimeout(
-        () => setInteractionPaused(false),
+        () => {
+          setInteractionPaused(false);
+          resumeTimerRef.current = null;
+        },
         RESUME_DELAY_MS
       );
     }
@@ -96,41 +115,80 @@ export default function HorizontalListingsScroller({
   };
 
   useEffect(() => {
-    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReducedMotion(query.matches);
+    const query = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    );
+
+    const update = () => {
+      setReducedMotion(query.matches);
+    };
 
     update();
     query.addEventListener("change", update);
 
-    return () => query.removeEventListener("change", update);
+    return () => {
+      query.removeEventListener("change", update);
+    };
   }, []);
 
   useEffect(() => {
     const handleVisibility = () => {
-      setInteractionPaused(document.visibilityState !== "visible");
+      setInteractionPaused(
+        document.visibilityState !== "visible"
+      );
     };
 
-    document.addEventListener("visibilitychange", handleVisibility);
+    document.addEventListener(
+      "visibilitychange",
+      handleVisibility
+    );
+
     handleVisibility();
 
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
+    return () => {
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibility
+      );
+    };
   }, []);
 
   useEffect(() => {
-    if (isPaused || listings.length <= 1) return undefined;
+    if (
+      isPaused ||
+      listings.length <= 1
+    ) {
+      return undefined;
+    }
 
     const interval = window.setInterval(() => {
       goToIndex(activeIndex + 1);
     }, AUTOPLAY_MS);
 
-    return () => window.clearInterval(interval);
-  }, [activeIndex, isPaused, listings.length]);
-
-  useEffect(() => () => clearResumeTimer(), []);
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [
+    activeIndex,
+    isPaused,
+    listings.length,
+  ]);
 
   useEffect(() => {
-    const selectedIndex = listings.findIndex((listing) => listing.id === selectedId);
-    if (selectedIndex >= 0 && selectedIndex !== activeIndex) {
+    return () => {
+      clearResumeTimer();
+    };
+  }, []);
+
+  useEffect(() => {
+    const selectedIndex = listings.findIndex(
+      (listing) => listing.id === selectedId
+    );
+
+    if (
+      selectedIndex >= 0 &&
+      selectedIndex !== activeIndex
+    ) {
       onActiveIndexChange(selectedIndex);
       scrollToIndex(selectedIndex);
     }
@@ -146,31 +204,45 @@ export default function HorizontalListingsScroller({
         <button
           type="button"
           aria-label="Xem căn trước"
-          tabIndex={-1}
-          onClick={() => goToIndex(activeIndex - 1, true)}
+          onClick={() =>
+            goToIndex(activeIndex - 1, true)
+          }
         >
           ⬹
         </button>
+
         <button
           type="button"
-          aria-label={manualPaused ? "Phát tự động" : "Tạm dừng tự động"}
-          tabIndex={-1}
+          aria-label={
+            manualPaused
+              ? "Phát tự động"
+              : "Tạm dừng tự động"
+          }
           onClick={() => {
             clearResumeTimer();
-            setManualPaused((current) => !current);
+
+            setManualPaused(
+              (current) => !current
+            );
+
             setInteractionPaused(false);
           }}
         >
-          {manualPaused || reducedMotion ? "▶" : "Ⅱ"}
+          {manualPaused || reducedMotion
+            ? "▶"
+            : "Ⅱ"}
         </button>
+
         <button
           type="button"
           aria-label="Xem căn tiếp theo"
-          tabIndex={-1}
-          onClick={() => goToIndex(activeIndex + 1, true)}
+          onClick={() =>
+            goToIndex(activeIndex + 1, true)
+          }
         >
           ⬺
         </button>
+
         <span>
           {activeIndex + 1} / {listings.length}
         </span>
@@ -188,19 +260,24 @@ export default function HorizontalListingsScroller({
         onTouchEnd={resumeAfterInteraction}
         onScroll={handleScrollInteraction}
       >
-        {listings.map((listing, index) => (
+        {listings.map((item, index) => (
           <div
-            key={listing.id}
+            key={item.id}
             data-related-index={index}
             className="related-horizontal-scroller__item"
           >
             <RelatedListingHorizontalCard
-              listing={listing}
-              active={selectedId === listing.id || activeIndex === index}
-              hovered={hoveredId === listing.id}
+              item={item}
+              active={
+                selectedId === item.id ||
+                activeIndex === index
+              }
+              hovered={
+                hoveredId === item.id
+              }
               onHover={onHover}
-              onSelect={(listingId) => {
-                onSelect(listingId);
+              onSelect={(itemId) => {
+                onSelect(itemId);
                 goToIndex(index, true);
               }}
               onOpen={onOpen}
@@ -211,4 +288,3 @@ export default function HorizontalListingsScroller({
     </div>
   );
 }
-
