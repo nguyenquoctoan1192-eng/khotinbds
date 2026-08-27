@@ -856,8 +856,9 @@ if (oldPosts?.length) {
   description,
   images,
 
-  created_at: new Date().toISOString(),   // ✔ NGÀY ĐĂNG
-  updated_at: new Date().toISOString(),   // ✔ NGÀY CẬP NHẬT
+  created_at: new Date().toISOString(),
+  published_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
 };
 
 console.log("PAYLOAD =", payload);

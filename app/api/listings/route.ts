@@ -33,10 +33,11 @@ export async function GET(req: Request) {
     const to = from + PAGE_SIZE - 1;
 
     const { data, error, count } = await supabase
-      .from("listings")
-      .select("*", { count: "exact" })
-      .order("created_at", { ascending: false })
-      .range(from, to);
+  .from("listings")
+  .select("*", { count: "exact" })
+  .order("published_at", { ascending: false, nullsFirst: false })
+  .order("created_at", { ascending: false })
+  .range(from, to);
 
     if (error) {
       throw error;

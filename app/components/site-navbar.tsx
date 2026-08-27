@@ -15,15 +15,7 @@ const publicMenuItems: MenuItem[] = [
   { href: "/login", label: "Đăng nhập" },
 ];
 
-const adminMenuItems: MenuItem[] = [
-  { href: "/admin", label: "Trang chủ" },
-  { href: "/admin/dashboard", label: "Dashboard" },
-  { href: "/admin/social-publishing", label: "AI Đăng Tin" },
-  { href: "/admin/post", label: "Đăng tin" },
-  { href: "/admin/customers", label: "Khách hàng" },
-  { href: "/admin/listing-library", label: "Kho tin đăng" },
-  { href: "/admin/agents", label: "Quản lý môi giới" },
-];
+
 
 const agentMenuItems: MenuItem[] = [
   { href: "/agent", label: "Trang chủ" },
@@ -73,11 +65,9 @@ export default function SiteNavbar() {
     };
   }, [isAgentArea]);
 
-  const menuItems = isAdminArea
-    ? adminMenuItems
-    : isAgentArea
-      ? agentMenuItems
-      : publicMenuItems;
+  const menuItems = isAgentArea
+  ? agentMenuItems
+  : publicMenuItems;
 
   const brandHref = isAdminArea ? "/admin" : isAgentArea ? "/agent" : "/";
   const showLogout = isAdminArea || isAgentArea;
@@ -90,78 +80,25 @@ export default function SiteNavbar() {
     return pathname === href || pathname.startsWith(`${href}/`);
   };
 
-  const logout = async () => {
-    await Promise.allSettled([authClient.auth.signOut(), syncServerSession()]);
+    const logout = async () => {
+    await Promise.allSettled([
+      authClient.auth.signOut(),
+      syncServerSession(),
+    ]);
 
     setIsOpen(false);
     router.replace("/");
     router.refresh();
   };
 
+  if (isAdminArea) {
+    return null;
+  }
+
   return (
     <header className="site-navbar">
       <div className="site-navbar__inner">
-        <Link
-          href={brandHref}
-          className="site-navbar__brand"
-          onClick={() => setIsOpen(false)}
-        >
-          BDS
-        </Link>
-
-        <button
-          type="button"
-          className="site-navbar__toggle"
-          aria-expanded={isOpen}
-          aria-label={isOpen ? "Đóng menu" : "Mở menu"}
-          onClick={() => setIsOpen((current) => !current)}
-        >
-          {isOpen ? "✕" : "☰"}
-        </button>
-
-        <nav
-          className={`site-navbar__links${
-            isOpen ? " site-navbar__links--open" : ""
-          }`}
-          aria-label="Điều hướng chính"
-        >
-          {menuItems.map((item) => {
-            const active = isActive(item.href);
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`site-navbar__link${
-                  active ? " site-navbar__link--active" : ""
-                }`}
-                aria-current={active ? "page" : undefined}
-                onClick={() => setIsOpen(false)}
-              >
-                <span>{item.label}</span>
-                {isAgentArea && item.href === "/agent/bot-settings" && (
-                  <span
-                    className={`site-navbar__status-dot ${
-                      agentBotOnline ? "site-navbar__status-dot--online" : "site-navbar__status-dot--offline"
-                    }`}
-                    title={agentBotOnline ? "Bot đang online" : "Bot đang offline"}
-                    aria-label={agentBotOnline ? "Bot đang online" : "Bot đang offline"}
-                  />
-                )}
-              </Link>
-            );
-          })}
-
-          {showLogout && (
-            <button
-              type="button"
-              className="site-navbar__logout"
-              onClick={logout}
-            >
-              Đăng xuất
-            </button>
-          )}
-        </nav>
+        ...
       </div>
     </header>
   );

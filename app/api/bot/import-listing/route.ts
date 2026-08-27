@@ -1382,6 +1382,9 @@ export async function POST(
 
       images:
         imageUrls,
+      
+      published_at:
+  new Date().toISOString(),
 
       status:
         "available",

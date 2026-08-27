@@ -61,6 +61,12 @@ export default function ListingCard({
   const isRented = listing.status === "rented";
   const showFacebookQueueButton = mode === "admin" && canManageListing;
 
+  // getReasonLabels và search vẫn được giữ trong props (ListingsHome vẫn
+  // truyền vào, dùng để soạn tin gửi khách ở nơi khác), chỉ không còn
+  // hiển thị khối "Điểm phù hợp" trên card nữa.
+  void getReasonLabels;
+  void search;
+
     async function enqueueFacebook() {
     if (
       isRented ||
@@ -286,27 +292,8 @@ export default function ListingCard({
     marginBottom: 12,
   }}
 >
-  
-</div>
 
-        {search.trim() && (
-          <div
-            style={{
-              marginBottom: 10,
-              padding: 10,
-              borderRadius: 9,
-              background: "#eff6ff",
-              color: "#1e3a8a",
-            }}
-          >
-            <strong>ĐiỒm phù hợp: {String(item.score ?? 0)}</strong>
-            {getReasonLabels(item).length > 0 && (
-              <div style={{ marginTop: 5, fontSize: 13 }}>
-                {getReasonLabels(item).join(" · ")}
-              </div>
-            )}
-          </div>
-        )}
+</div>
 
         {canSeeRawListing && listing.description && (
           <p
@@ -364,9 +351,13 @@ export default function ListingCard({
 >
   <span>
     <b>Đăng:</b>{" "}
-    {listing.created_at
-      ? new Date(String(listing.created_at)).toLocaleDateString("vi-VN")
-      : "Chưa cập nhật"}
+    {(listing.published_at || listing.created_at)
+  ? new Date(
+      String(
+        listing.published_at || listing.created_at
+      )
+    ).toLocaleDateString("vi-VN")
+  : ""}
   </span>
 
   {listing.updated_at && (
@@ -495,4 +486,3 @@ export default function ListingCard({
     </article>
   );
 }
-

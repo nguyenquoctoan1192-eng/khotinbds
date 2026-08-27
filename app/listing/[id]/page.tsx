@@ -7,6 +7,7 @@ import { useParams, useSearchParams } from "next/navigation";
 
 import RelatedListingsMapSection from "@/app/components/map/RelatedListingsMapSection";
 import RentedStamp from "@/app/components/rented-stamp";
+import AIConsultantWidget from "@/app/components/shared/AIConsultantWidget";
 import { formatPublicListing } from "@/lib/publicListingFormatter";
 import { useUserRole } from "@/lib/userRole";
 import type { Listing } from "@/types/listing";
@@ -64,10 +65,7 @@ export default function ListingDetail() {
   const [showImageModal, setShowImageModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
-  const [showChatModal, setShowChatModal] = useState(false);
-  const [chatName, setChatName] = useState("");
-  const [chatPhone, setChatPhone] = useState("");
-  const [chatMessage, setChatMessage] = useState("");
+  const [showAiChatWidget, setShowAiChatWidget] = useState(false);
   const [shareMessage, setShareMessage] = useState("");
   const [darkMode, setDarkMode] = useState(false);
 
@@ -782,17 +780,41 @@ const suitableBusinessTypes = getSuitableBusinessTypes();
   // =========================================================
 
   const refreshPost = async () => {
-    if (!listing) return;
+  try {
+    const response = await fetch("/api/listings/refresh", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: listing.id,
+      }),
+    });
 
-    await supabase
-      .from("listings")
-      .update({
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", listing.id);
+    const result = await response.json();
 
-    location.reload();
-  };
+    if (!response.ok || !result.success) {
+      console.error("REFRESH LISTING ERROR:", result);
+
+      alert(
+        result?.message ||
+          "Không thể làm mới tin."
+      );
+
+      return;
+    }
+
+    alert("✓ Đã làm mới tin đăng.");
+
+    window.location.reload();
+  } catch (error) {
+    console.error("REFRESH REQUEST ERROR:", error);
+
+    alert(
+      "Không thể kết nối với máy chủ để làm mới tin."
+    );
+  }
+};
 
   return (
     <div className={`ld-page ${darkMode ? "dark-mode" : ""}`}>
@@ -964,7 +986,7 @@ const suitableBusinessTypes = getSuitableBusinessTypes();
               <button
                 type="button"
                 className="ld-action chat"
-                onClick={() => setShowChatModal(true)}
+                onClick={() => setShowAiChatWidget(true)}
               >
                 <span>💬</span>
                 <b>Chat</b>
@@ -1276,62 +1298,14 @@ const suitableBusinessTypes = getSuitableBusinessTypes();
       )}
 
       {/* ========================================================
-          CHAT / CONSULTATION MODAL
+          AI CONSULTANT WIDGET (thay cho modal tư vấn cũ)
       ======================================================== */}
 
-      {showChatModal && (
-        <div className="ld-chat-overlay" onClick={() => setShowChatModal(false)}>
-          <div className="ld-chat-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="ld-modal-x" onClick={() => setShowChatModal(false)}>
-              ×
-            </button>
-
-            <div className="ld-chat-icon">💬</div>
-
-            <h3>Tư vấn nhanh</h3>
-            <p className="ld-chat-sub">
-              Để lại thông tin, {agentName} sẽ liên hệ tư vấn cho bạn sớm nhất.
-            </p>
-
-            <form
-              className="ld-chat-form"
-              onSubmit={(e) => {
-                e.preventDefault();
-                setShowChatModal(false);
-                notify("✓ Đã gửi yêu cầu tư vấn");
-                setChatName("");
-                setChatPhone("");
-                setChatMessage("");
-              }}
-            >
-              <input
-                type="text"
-                placeholder="Họ và tên"
-                value={chatName}
-                onChange={(e) => setChatName(e.target.value)}
-                required
-              />
-
-              <input
-                type="tel"
-                placeholder="Số điện thoại"
-                value={chatPhone}
-                onChange={(e) => setChatPhone(e.target.value)}
-                required
-              />
-
-              <textarea
-                placeholder="Nội dung cần tư vấn (không bắt buộc)"
-                value={chatMessage}
-                onChange={(e) => setChatMessage(e.target.value)}
-                rows={3}
-              />
-
-              <button type="submit">Gửi yêu cầu tư vấn</button>
-            </form>
-          </div>
-        </div>
-      )}
+      <AIConsultantWidget
+        hideTrigger
+        open={showAiChatWidget}
+        onOpenChange={setShowAiChatWidget}
+      />
 
       {/* ========================================================
           IMAGE MODAL
@@ -2355,81 +2329,6 @@ const suitableBusinessTypes = getSuitableBusinessTypes();
           background: var(--border);
           color: var(--text);
           font-size: 20px;
-          cursor: pointer;
-        }
-
-        .ld-chat-overlay {
-          position: fixed;
-          inset: 0;
-          z-index: 30000;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 20px;
-          background: rgba(0, 0, 0, 0.55);
-        }
-
-        .ld-chat-modal {
-          width: min(430px, 100%);
-          position: relative;
-          padding: 24px;
-          border-radius: 17px;
-          background: var(--surface);
-          color: var(--text);
-          box-shadow: 0 25px 80px rgba(0, 0, 0, 0.3);
-          text-align: center;
-        }
-
-        .ld-chat-icon {
-          font-size: 38px;
-        }
-
-        .ld-chat-modal h3 {
-          margin: 10px 0 6px;
-        }
-
-        .ld-chat-sub {
-          margin: 0 0 18px;
-          color: var(--muted);
-          font-size: 12.5px;
-          line-height: 1.6;
-        }
-
-        .ld-chat-form {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-          text-align: left;
-        }
-
-        .ld-chat-form input,
-        .ld-chat-form textarea {
-          width: 100%;
-          padding: 11px 13px;
-          border-radius: 9px;
-          border: 1px solid var(--border);
-          background: var(--bg);
-          color: var(--text);
-          font-size: 13px;
-          font-family: inherit;
-          resize: vertical;
-        }
-
-        .ld-chat-form input:focus,
-        .ld-chat-form textarea:focus {
-          outline: none;
-          border-color: var(--msg);
-        }
-
-        .ld-chat-form button {
-          min-height: 46px;
-          margin-top: 4px;
-          border: 0;
-          border-radius: 9px;
-          background: var(--msg);
-          color: #fff;
-          font-weight: 800;
-          font-size: 13px;
           cursor: pointer;
         }
 
