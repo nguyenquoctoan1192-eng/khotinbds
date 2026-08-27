@@ -14,10 +14,36 @@ const asNumber = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+// Offset (~200m) cho approximate location để tránh marker chồng lên nhau
+const APPROXIMATE_OFFSET_DEGREES = 0.0018;
+
+function seededRandom(seed: string): () => number {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    const chr = seed.charCodeAt(i);
+    hash = ((hash << 5) - hash) + chr;
+    hash |= 0;
+  }
+  return () => {
+    hash = (hash * 1664525 + 1013904223) | 0;
+    return Math.abs(hash) / 0x7fffffff;
+  };
+}
+
+function adjustApproximateCoordinates(
+  latitude: number,
+  longitude: number,
+  listingId: string
+): { latitude: number; longitude: number } {
+  const rand = seededRandom(listingId);
+  const dLat = (rand() - 0.5) * APPROXIMATE_OFFSET_DEGREES * 2;
+  const dLng = (rand() - 0.5) * APPROXIMATE_OFFSET_DEGREES * 2;
+  return { latitude: latitude + dLat, longitude: longitude + dLng };
+}
+
 export const isValidCoordinatePair = (latitude: unknown, longitude: unknown) => {
   const lat = asNumber(latitude);
   const lng = asNumber(longitude);
-
   if (lat === null || lng === null) return false;
   return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
 };
@@ -47,14 +73,11 @@ export function parsePriceValue(value: unknown) {
     if (!Number.isFinite(value) || value <= 0) return null;
     return value < 1000 ? value * 1000000 : value;
   }
-
   const text = asText(value).toLowerCase().replace(/\./g, "").replace(/,/g, ".");
   const match = text.match(/(\d+(?:\.\d+)?)/);
   if (!match) return null;
-
   const amount = Number(match[1]);
   if (!Number.isFinite(amount) || amount <= 0) return null;
-
   if (/tỷ|ty|tỉ|ti/.test(text)) return amount * 1000000000;
   if (/tr|triệu|trieu/.test(text)) return amount * 1000000;
   return amount < 1000 ? amount * 1000000 : amount;
@@ -65,10 +88,8 @@ export function formatPricePill(priceValue: number | null, fallback: unknown) {
     const text = asText(fallback);
     return text && !/^\d+$/.test(text) ? text : "Thỏa thuận";
   }
-
   const million = priceValue / 1000000;
   if (million < 1000) return `${Math.round(million)}tr`;
-
   const billion = priceValue / 1000000000;
   return `${Number.isInteger(billion) ? billion : billion.toFixed(1)}tỷ`;
 }
@@ -125,7 +146,6 @@ const firstReasonList = (item: MapListingMeta) => {
   if (Array.isArray(item.breakdown?.reasons)) {
     return item.breakdown.reasons.filter((reason): reason is string => typeof reason === "string");
   }
-
   return [];
 };
 
@@ -135,6 +155,14 @@ export function normalizeListingForMap(item: Listing & MapListingMeta): Property
 
   if (!coordinate) return null;
 
+  // Thêm offset ngẫu nhiên dựa trên listing ID cho approximate location
+  const finalLat = coordinate.approximateLocation
+    ? adjustApproximateCoordinates(coordinate.latitude, coordinate.longitude, listing.id).latitude
+    : coordinate.latitude;
+  const finalLng = coordinate.approximateLocation
+    ? adjustApproximateCoordinates(coordinate.latitude, coordinate.longitude, listing.id).longitude
+    : coordinate.longitude;
+
   const publicListing = formatPublicListing(listing);
   const priceValue = parsePriceValue(listing.price ?? publicListing.price);
   const rawScore = Number(item.score ?? item.breakdown?.final_score ?? item.breakdown?.total_score);
@@ -143,7 +171,7 @@ export function normalizeListingForMap(item: Listing & MapListingMeta): Property
   const bedroomsValue = asNumber(listing.bedrooms);
   const streetLabel = sanitizePublicStreet(listing.street || listing.address || publicListing.publicTitle);
 
-  return {
+    return {
     id: listing.id,
     listing,
     item,
@@ -153,14 +181,14 @@ export function normalizeListingForMap(item: Listing & MapListingMeta): Property
     priceValue,
     areaLabel: publicListing.area || (listing.area ? `${listing.area}m²` : "Đang cập nhật"),
     areaValue,
+    bedroomsValue,
     structureLabel: publicListing.structure || asText(listing.structure) || "Đang cập nhật",
     bedroomsLabel: listing.bedrooms ? `${listing.bedrooms} PN` : "Chưa rõ PN",
-    bedroomsValue,
     districtLabel: asText(listing.district) || getDistrictCenter(listing.address)?.label || defaultHcmCenter.label,
     streetLabel: streetLabel || "Khu vực đang cập nhật",
     frontageLabel: getFrontageLabel(listing),
-    latitude: coordinate.latitude,
-    longitude: coordinate.longitude,
+    latitude: finalLat,
+    longitude: finalLng,
     approximateLocation: coordinate.approximateLocation,
     matchScore,
     matchReasons: firstReasonList(item),
@@ -169,6 +197,7 @@ export function normalizeListingForMap(item: Listing & MapListingMeta): Property
 }
 
 export function isListingInsideBounds(listing: PropertyMapListing, bounds: { north: number; south: number; east: number; west: number }) {
+
   return (
     listing.latitude <= bounds.north &&
     listing.latitude >= bounds.south &&

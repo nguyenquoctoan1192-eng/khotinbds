@@ -715,7 +715,7 @@ export async function GET(
     service:
       "khotinbds-folder-bot",
     target:
-      "listing_library",
+      "listings",
     syncTarget:
       "listing_library+listings",
   });
@@ -1382,6 +1382,9 @@ export async function POST(
 
       images:
         imageUrls,
+      
+      published_at:
+  new Date().toISOString(),
 
       status:
         "available",
