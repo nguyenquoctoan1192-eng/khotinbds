@@ -373,6 +373,47 @@ button {
   white-space: nowrap;
 }
 
+.site-navbar__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  color: #fff;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.site-navbar__brand-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: #10b981;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.22);
+}
+
+.site-navbar__brand-text {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+}
+
+.site-navbar__bot-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  color: #d1d5db;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 .site-navbar__links {
   flex: 1 1 auto;
   min-width: 0;
