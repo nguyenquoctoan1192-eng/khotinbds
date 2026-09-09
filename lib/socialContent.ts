@@ -1,14 +1,19 @@
+import {
+  parseZaloListingText,
+} from "@/lib/zaloListingParser";
+
+/* =========================================================
+   TYPES
+========================================================= */
+
 export type SocialListingInput = {
   id?: string | null;
   title?: string | null;
-
   address?: string | null;
   street?: string | null;
   ward?: string | null;
   district?: string | null;
-
   description?: string | null;
-
   price?: number | string | null;
   area?: number | string | null;
   width?: number | string | null;
@@ -16,7 +21,6 @@ export type SocialListingInput = {
   floors?: number | string | null;
   bedrooms?: number | string | null;
   bathrooms?: number | string | null;
-
   contact_phone?: string | null;
   contact_phone_override?: string | null;
 };
@@ -44,6 +48,10 @@ export type SocialListingContentResult = {
   extras: string[];
   nearbyPlaces: NearbyPlace[];
 };
+
+type ParsedListing = ReturnType<
+  typeof parseZaloListingText
+>;
 
 /* =========================================================
    TEXT
@@ -79,10 +87,11 @@ function titleCaseVietnamese(value: string): string {
    PHONE
 ========================================================= */
 
-const PHONE_REGEX = /(?:\+?84|0)(?:[ .-]?\d){9,10}/g;
+const PHONE_REGEX =
+  /(?:\+?84|0)(?:[ .-]?\d){9,10}/g;
 
 const CONTACT_LINE_REGEX =
-  /^.*(?:liên hệ|lien he|hotline|zalo|sđt|sdt|điện thoại|dien thoai).*$/gimu;
+  /^\s*(?:liên hệ|lien he|hotline|zalo|sđt|sdt|điện thoại|dien thoai)\s*:?.*$/gimu;
 
 const HASHTAG_LINE_REGEX =
   /^\s*(?:#[\p{L}\p{N}_]+\s*)+$/gimu;
@@ -90,7 +99,10 @@ const HASHTAG_LINE_REGEX =
 export function normalizeVietnamPhone(
   value: unknown,
 ): string | null {
-  const digits = String(value ?? "").replace(/\D/g, "");
+  const digits = String(value ?? "").replace(
+    /\D/g,
+    "",
+  );
 
   if (!digits) {
     return null;
@@ -145,11 +157,29 @@ export function districtSlug(
     return "tphcm";
   }
 
-  if (/^(q|quan)\d+$/.test(raw)) {
+  /*
+   * Q1 / Q.1 / Quận 1
+   * Sau slug:
+   * Q1 -> q1
+   * Quận 1 -> quan1
+   */
+  if (/^q\d+$/.test(raw)) {
     return `quan${raw.replace(/\D/g, "")}`;
   }
 
-  return raw.replace(/^quan/, "quan");
+  if (/^quan\d+$/.test(raw)) {
+    return raw;
+  }
+
+  /*
+   * Phú Nhuận
+   * -> quanphunhuan
+   */
+  if (raw.startsWith("quan")) {
+    return raw;
+  }
+
+  return `quan${raw}`;
 }
 
 function detectTypeHashtags(
@@ -167,8 +197,15 @@ function detectTypeHashtags(
 
   const tags = new Set<string>();
 
+  /*
+   * 2MT / mặt tiền / mặt bằng / showroom
+   * -> matbang
+   */
   if (
     source.includes("mattien") ||
+    source.includes("matbang") ||
+    source.includes("2mt") ||
+    source.includes("2mb") ||
     source.includes("showroom")
   ) {
     tags.add("matbang");
@@ -202,7 +239,9 @@ function detectTypeHashtags(
 export function buildDistrictHashtags(
   listing: SocialListingInput,
 ): string[] {
-  const d = districtSlug(listing.district);
+  const d = districtSlug(
+    listing.district,
+  );
 
   const tags = new Set<string>([
     "#nhachothue",
@@ -211,7 +250,9 @@ export function buildDistrictHashtags(
     `#nha${d}`,
   ]);
 
-  for (const type of detectTypeHashtags(listing)) {
+  for (const type of detectTypeHashtags(
+    listing,
+  )) {
     tags.add(`#${type}${d}`);
   }
 
@@ -233,6 +274,13 @@ export function stripContactAndHashtags(
     .trim();
 }
 
+/*
+ * Default chung của hệ thống.
+ *
+ * Facebook bên dưới vẫn dùng riêng:
+ * 0924711550
+ */
+
 export const ADMIN_DEFAULT_CONTACT_PHONE =
   normalizeVietnamPhone(
     process.env.ADMIN_DEFAULT_CONTACT_PHONE,
@@ -245,62 +293,71 @@ export function resolveContactPhone(input: {
   adminDefault?: unknown;
   requireBrokerPhone?: boolean;
 }): string {
-  const override = normalizeVietnamPhone(
-    input.listingOverride,
-  );
+  const override =
+    normalizeVietnamPhone(
+      input.listingOverride,
+    );
 
   if (override) {
     return override;
   }
 
-  const brokerDefault = normalizeVietnamPhone(
-    input.brokerDefault,
-  );
+  const brokerDefault =
+    normalizeVietnamPhone(
+      input.brokerDefault,
+    );
 
   if (brokerDefault) {
     return brokerDefault;
   }
 
   if (input.requireBrokerPhone) {
-    throw new Error("BROKER_PHONE_REQUIRED");
+    throw new Error(
+      "BROKER_PHONE_REQUIRED",
+    );
   }
 
-  const listingPhone = normalizeVietnamPhone(
-    input.listingPhone,
-  );
+  const listingPhone =
+    normalizeVietnamPhone(
+      input.listingPhone,
+    );
 
   if (listingPhone) {
     return listingPhone;
   }
 
   const adminDefault =
-    normalizeVietnamPhone(input.adminDefault) ??
-    ADMIN_DEFAULT_CONTACT_PHONE;
+    normalizeVietnamPhone(
+      input.adminDefault,
+    ) ?? ADMIN_DEFAULT_CONTACT_PHONE;
 
   if (adminDefault) {
     return adminDefault;
   }
 
-  throw new Error("CONTACT_PHONE_REQUIRED");
+  throw new Error(
+    "CONTACT_PHONE_REQUIRED",
+  );
 }
 
 /* =========================================================
    ADDRESS
-   QUAN TRỌNG:
-   FACEBOOK KHÔNG ĐƯỢC LỘ SỐ NHÀ / SỐ HẺM / ĐỊA CHỈ RIÊNG
 ========================================================= */
 
 const ADDRESS_PREFIXES = [
   {
-    regex: /\bgoc\s*2\s*mt\b|\bgoc\s*2mt\b/i,
+    regex:
+      /\bgoc\s*2\s*mt\b|\bgoc\s*2mt\b/i,
     label: "Góc Hai Mặt Tiền",
   },
   {
-    regex: /\bgoc\s*2\s*mb\b|\bgoc\s*2mb\b/i,
+    regex:
+      /\bgoc\s*2\s*mb\b|\bgoc\s*2mb\b/i,
     label: "Góc Hai Mặt Bằng",
   },
   {
-    regex: /\b2\s*mb\s*truoc\s*sau\b/i,
+    regex:
+      /\b2\s*mb\s*truoc\s*sau\b/i,
     label: "Hai Mặt Bằng Trước Sau",
   },
   {
@@ -317,32 +374,32 @@ const ADDRESS_PREFIXES = [
   },
   {
     regex:
-      /\bhxh\b|hem\s*xe\s*hoi|hẻm\s*xe\s*hơi/i,
+      /\bhxh\b|hem\s*xe\s*hoi/i,
     label: "Hẻm Xe Hơi",
   },
   {
     regex:
-      /\bhxt\b|hem\s*xe\s*tai|hẻm\s*xe*tải/i,
+      /\bhxt\b|hem\s*xe\s*tai/i,
     label: "Hẻm Xe Tải",
   },
   {
     regex:
-      /\bhxm\b|hem\s*xe\s*may|hẻm\s*xe\s*máy/i,
+      /\bhxm\b|hem\s*xe\s*may/i,
     label: "Hẻm Xe Máy",
   },
   {
     regex:
-      /\bh3g\b|hem\s*ba\s*gac|hẻm\s*ba\s*gác/i,
+      /\bh3g\b|hem\s*ba\s*gac/i,
     label: "Hẻm Ba Gác",
   },
   {
     regex:
-      /\bmb\b|mat\s*bang|mặt\s*bằng/i,
+      /\bmb\b|mat\s*bang/i,
     label: "Mặt Bằng",
   },
   {
     regex:
-      /\bmt\b|mat\s*tien|mặt\s*tiền/i,
+      /\bmt\b|mat\s*tien/i,
     label: "Mặt Tiền",
   },
 ];
@@ -350,7 +407,8 @@ const ADDRESS_PREFIXES = [
 function detectAddressPrefix(
   raw: string,
 ): string {
-  const normalized = normalizeText(raw);
+  const normalized =
+    normalizeText(raw);
 
   for (const item of ADDRESS_PREFIXES) {
     if (item.regex.test(normalized)) {
@@ -366,21 +424,30 @@ function detectAddressPrefix(
     : "Mặt Tiền";
 }
 
-/**
- * Chỉ lấy TÊN ĐƯỜNG.
- *
- * Ví dụ:
- *  "215 Thành Công, P.14, Q.Tân Bình"
- *       -> "Thành Công"
- *
- *  "24 Hoàng Văn Thụ, P.4, Q.Tân Bình"
- *       -> "Hoàng Văn Thụ"
- *
- *  "Nguyễn Văn Trỗi, Phú Nhuận"
- *       -> "Nguyễn Văn Trỗi"
- *
- * Tuyệt đối không trả lại số nhà.
- */
+/* =========================================================
+   PUBLIC STREET
+========================================================= */
+
+function isValidPublicStreet(
+  value: string | null,
+): value is string {
+  const normalized = clean(value);
+
+  if (!normalized) {
+    return false;
+  }
+
+  if (
+    !/[A-Za-zÀ-ỹĐđ]/u.test(
+      normalized,
+    )
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 function extractPublicStreet(
   raw: string,
 ): string | null {
@@ -393,62 +460,177 @@ function extractPublicStreet(
     return null;
   }
 
-  // Bỏ các prefix loại mặt bằng / hẻm.
+  /*
+   * Bỏ prefix:
+   * 2MT
+   * 2MB
+   * Góc
+   * HXM
+   * HXT
+   * HXH
+   * H3G
+   * MT
+   * MB
+   */
   value = value.replace(
     /^\s*(?:góc\s*2\s*mt|góc\s*2\s*mb|2\s*mt|2\s*mb|góc|hxh|hxt|hxm|h3g|mb|mt)\s*/i,
     "",
   );
 
-  // Bỏ số nhà / số hẻm đầu chuỗi.
+  /*
+   * Bỏ số nhà / số hẻm đầu chuỗi.
+   *
+   * Ví dụ:
+   * 200 Hồ Văn Huê
+   * 215A Thành Công
+   * 12/5 Nguyễn Trãi
+   */
   value = value.replace(
-    /^\s*\d+(?:[a-zA-Z]|\s*\/\s*\d+)?(?:[-./]\d+)*\s+/i,
+    /^\s*\d+(?:[A-Za-z])?(?:\s*\/\s*\d+)?(?:[-.]\d+)?\s+/i,
     "",
   );
 
-  // Bỏ P./Phường/Q./Quận phía sau.
+  /*
+   * Bỏ P./Phường/Q./Quận.
+   */
   value = value.replace(
-    /,?\s*(?:P\.?\s*\w+|Phường\s+[^,]+|Q\.?\s*\w+|Quận\s+[^,]+).*$/iu,
+    /,?\s*(?:P\.?\s*\d+|Phường\s+[^,]+|Q\.?\s*[^,\n]+|Quận\s+[^,\n]+).*$/iu,
     "",
   );
 
-  // Chỉ lấy phần trước dấu phẩy.
+  /*
+   * Chỉ lấy phần trước dấu phẩy.
+   */
   value = value
     .split(",")[0]
     .trim();
 
-  // Nếu vẫn còn số nhà ở đầu thì bỏ lần cuối.
+  /*
+   * Nếu vẫn còn số đầu chuỗi thì bỏ.
+   */
   value = value.replace(
-    /^\d+(?:[a-zA-Z]|\s*\/\s*\d+)?\s+/,
+    /^\s*\d+(?:[A-Za-z])?(?:\s*\/\s*\d+)?\s+/,
     "",
   );
 
-  return value
-    ? titleCaseVietnamese(value)
-    : null;
+  value = clean(value);
+
+  if (
+    !isValidPublicStreet(value)
+  ) {
+    return null;
+  }
+
+  return titleCaseVietnamese(
+    value,
+  );
 }
 
 /* =========================================================
-   PARSE ZALO
+   PUBLIC DISTRICT
 ========================================================= */
-
-import {
-  parseZaloListingText,
-} from "@/lib/zaloListingParser";
-
-type ParsedListing = ReturnType<
-  typeof parseZaloListingText
->;
 
 function getPublicDistrict(
   listing: SocialListingInput,
   parsed: ParsedListing,
+  rawText: string,
 ): string | null {
-  return (
+  /*
+   * Ưu tiên district đã parse từ listing.
+   */
+  const direct =
     clean(listing.district) ||
-    clean(parsed.district) ||
-    null
-  );
+    clean(parsed.district);
+
+  if (direct) {
+    return formatPublicDistrict(
+      direct,
+    );
+  }
+
+  /*
+   * Fallback lấy trực tiếp từ raw text:
+   *
+   * Q.Phú Nhuận
+   * Q.1
+   * Quận Phú Nhuận
+   */
+  const normalizedRaw =
+    clean(rawText);
+
+  const match =
+    normalizedRaw.match(
+      /(?:^|[, ]+)(?:Q\.?\s*|Quận\s+)([^,\n]+)/iu,
+    );
+
+  if (match?.[1]) {
+    return formatPublicDistrict(
+      match[1],
+    );
+  }
+
+  return null;
 }
+
+function formatPublicDistrict(
+  district: string | null,
+): string | null {
+  const value = clean(district);
+
+  if (!value) {
+    return null;
+  }
+
+  const normalized =
+    normalizeText(value);
+
+  /*
+   * Q.1 / Q1
+   */
+  const qNumber =
+    normalized.match(
+      /^q\.?\s*(\d+)$/,
+    );
+
+  if (qNumber?.[1]) {
+    return `Quận ${qNumber[1]}`;
+  }
+
+  /*
+   * Quận 1
+   */
+  const quanNumber =
+    normalized.match(
+      /^quan\s*(\d+)$/,
+    );
+
+  if (quanNumber?.[1]) {
+    return `Quận ${quanNumber[1]}`;
+  }
+
+  /*
+   * Nếu đã có chữ Quận
+   */
+  if (
+    normalized.startsWith("quan ")
+  ) {
+    return titleCaseVietnamese(
+      value,
+    );
+  }
+
+  /*
+   * Phú Nhuận
+   * -> Quận Phú Nhuận
+   */
+  return `Quận ${titleCaseVietnamese(
+    value,
+  )}`;
+}
+
+/* =========================================================
+   PUBLIC WARD
+========================================================= */
 
 function getPublicWard(
   listing: SocialListingInput,
@@ -465,7 +647,9 @@ function getPublicWard(
       );
 
     if (match) {
-      return `P.${Number(match[1])}`;
+      return `P.${Number(
+        match[1],
+      )}`;
     }
 
     return listingWard;
@@ -476,12 +660,15 @@ function getPublicWard(
     rawText || "",
   ].join("\n");
 
-  const match = source.match(
-    /\b(?:p|phường)\.?\s*(\d{1,2})\b/iu,
-  );
+  const match =
+    source.match(
+      /\b(?:p|phường)\.?\s*(\d{1,2})\b/iu,
+    );
 
   if (match) {
-    return `P.${Number(match[1])}`;
+    return `P.${Number(
+      match[1],
+    )}`;
   }
 
   return null;
@@ -491,231 +678,240 @@ function getPublicWard(
    STRUCTURE
 ========================================================= */
 
-function getStructure(raw: string): string {
+function getStructure(
+  raw: string,
+): string {
   const normalized =
     normalizeText(raw);
 
   const parts: string[] = [];
 
   const basement =
-    /\bh[aà]m\b/.test(normalized);
+    /\bham\b/.test(normalized);
 
   const mezzanine =
-    /\bl[uử]ng\b|\bmezzanine\b/.test(
+    /\blung\b|\bmezzanine\b/.test(
       normalized,
     );
 
   const tret =
-    normalized.match(
-      /(\d+)?\s*tr[eệ]t\b/,
-    );
+    /\btret\b/.test(normalized);
 
+  /*
+   * 2 lầu
+   * 3 lầu
+   */
   const floor =
     normalized.match(
-      /(\d+)\s*l[aầ]u\b/,
+      /(\d+)\s*lau\b/,
     );
 
+  /*
+   * 2L
+   * 3L
+   */
   const floorShort =
     normalized.match(
       /(\d+)\s*l\b(?!\w)/,
     );
 
+  /*
+   * Chỉ có "lầu"
+   *
+   * Ví dụ:
+   * trệt lầu
+   *
+   * => 1 Lầu
+   */
+  const hasPlainFloor =
+    /\blau\b/.test(normalized);
+
   const st =
-    /\bst\b|\bs[aâ]n\s*th[uư]ợng\b/.test(
+    /\bst\b|\bsan\s*thuong\b/.test(
       normalized,
     );
 
-  const rooms =
+  /*
+   * 3PN
+   * 3 PN
+   * 3 phòng
+   * 3 phòng ngủ
+   */
+  const bedrooms =
     normalized.match(
-      /(\d+)\s*(?:p\b|ph[oò]ng\b)/,
+      /(\d+)\s*(?:pn\b|phong(?:\s*ngu)?\b)/,
+    );
+
+  /*
+   * 2WC
+   * 2 WC
+   * 2 phòng WC
+   * 2 phòng vệ sinh
+   */
+  const bathrooms =
+    normalized.match(
+      /(\d+)\s*(?:wc\b|phong\s*wc\b|phong\s*ve\s*sinh\b)/,
     );
 
   if (basement) {
     parts.push("Hầm");
   }
 
-  if (tret) {
-    parts.push(`${tret[1] ?? "1"} Trệt`);
+  /*
+   * QUAN TRỌNG:
+   *
+   * "Trệt lầu"
+   * => "Trệt 1 Lầu"
+   *
+   * "Trệt 2 lầu"
+   * => "Trệt 2 Lầu"
+   */
+  if (
+    tret &&
+    (floor?.[1] ||
+      floorShort?.[1])
+  ) {
+    const floorNumber =
+      floor?.[1] ??
+      floorShort?.[1];
+
+    parts.push(
+      `Trệt ${floorNumber} Lầu`,
+    );
+  } else if (
+    tret &&
+    hasPlainFloor
+  ) {
+    parts.push(
+      "Trệt 1 Lầu",
+    );
+  } else if (tret) {
+    parts.push("Trệt");
+  } else if (floor?.[1]) {
+    parts.push(
+      `${floor[1]} Lầu`,
+    );
+  } else if (
+    floorShort?.[1]
+  ) {
+    parts.push(
+      `${floorShort[1]} Lầu`,
+    );
+  } else if (
+    hasPlainFloor
+  ) {
+    parts.push("1 Lầu");
   }
 
   if (mezzanine) {
     parts.push("Lửng");
   }
 
-  if (floor?.[1]) {
-    parts.push(
-      `${floor[1]} Lầu`,
-    );
-  } else if (floorShort?.[1]) {
-    parts.push(
-      `${floorShort[1]} Lầu`,
-    );
-  }
-
   if (st) {
     parts.push("Sân Thượng");
   }
 
-  if (rooms?.[1]) {
+  if (bedrooms?.[1]) {
     parts.push(
-      `${rooms[1]} Phòng`,
+      `${bedrooms[1]} Phòng`,
     );
   }
 
-  return parts.join(" ");
+  if (bathrooms?.[1]) {
+    parts.push(
+      `${bathrooms[1]}WC`,
+    );
+  }
+
+  return parts.join(" - ");
 }
 
 /* =========================================================
    EXTRAS
 ========================================================= */
 
-function getExtras(raw: string): string[] {
+function getExtras(
+  raw: string,
+): string[] {
   const normalized =
     normalizeText(raw);
 
   const extras: string[] = [];
 
   if (
-    /\bfull\s*nt\b/.test(normalized) ||
+    /\bfull\s*nt\b/.test(
+      normalized,
+    ) ||
     /\bfull\s*noi\s*that\b/.test(
       normalized,
     )
   ) {
-    extras.push("Full Nội Thất");
+    extras.push(
+      "Full Nội Thất",
+    );
   }
 
   if (
-    /\bntcb\b/.test(normalized) ||
+    /\bntcb\b/.test(
+      normalized,
+    ) ||
     /\bnoi\s*that\s*co\s*ban\b/.test(
       normalized,
     )
   ) {
-    extras.push("Nội Thất Cơ Bản");
+    extras.push(
+      "Nội Thất Cơ Bản",
+    );
   }
 
   if (
-    /\bco\s*nt\b/.test(normalized) ||
+    /\bco\s*nt\b/.test(
+      normalized,
+    ) ||
     /\bco\s*noi\s*that\b/.test(
       normalized,
     )
   ) {
-    extras.push("Có Nội Thất");
+    extras.push(
+      "Có Nội Thất",
+    );
   }
 
-  if (/\bpccc\b/.test(normalized)) {
+  if (
+    /\bpccc\b/.test(
+      normalized,
+    )
+  ) {
     extras.push("PCCC");
   }
 
   if (
-    /\bktm\b/.test(normalized) ||
+    /\bktm\b/.test(
+      normalized,
+    ) ||
     /\bkhong\s*thang\s*may\b/.test(
       normalized,
     )
   ) {
-    extras.push("Không Thang Máy");
+    extras.push(
+      "Không Thang Máy",
+    );
   } else if (
-    /\btm\b/.test(normalized) ||
+    /\btm\b/.test(
+      normalized,
+    ) ||
     /\bthang\s*may\b/.test(
       normalized,
     )
   ) {
-    extras.push("Có Thang Máy");
-  }
-
-  return [...new Set(extras)];
-}
-
-/* =========================================================
-   BEDROOM / WC
-========================================================= */
-
-function getBedrooms(
-  raw: string,
-  listing: SocialListingInput,
-  parsed: ParsedListing,
-): number | null {
-  const match =
-    normalizeText(raw).match(
-      /(\d+)\s*(?:pn|ph[oò]ng\s*ng[uủ])/,
+    extras.push(
+      "Có Thang Máy",
     );
-
-  if (match?.[1]) {
-    return Number(match[1]);
   }
 
-  const value = Number(
-    listing.bedrooms ??
-      parsed.bedrooms ??
-      0,
-  );
-
-  return value > 0 ? value : null;
-}
-
-function getBathrooms(
-  raw: string,
-  listing: SocialListingInput,
-  parsed: ParsedListing,
-): number | null {
-  const match =
-    normalizeText(raw).match(
-      /(\d+)\s*(?:wc|toilet|nh[aà]\s*v[eệ]\s*sinh)/,
-    );
-
-  if (match?.[1]) {
-    return Number(match[1]);
-  }
-
-  const value = Number(
-    listing.bathrooms ??
-      parsed.bathrooms ??
-      0,
-  );
-
-  return value > 0 ? value : null;
-}
-
-/* =========================================================
-   PRICE
-========================================================= */
-
-function formatPrice(
-  value: unknown,
-): string {
-  const number = Number(value);
-
-  if (
-    !Number.isFinite(number) ||
-    number <= 0
-  ) {
-    return "";
-  }
-
-  if (number >= 1_000_000_000) {
-    const billions =
-      number / 1_000_000_000;
-
-    return `${
-      Number.isInteger(billions)
-        ? billions
-        : billions.toFixed(1)
-    } tỷ`;
-  }
-
-  if (number >= 1_000_000) {
-    const millions =
-      number / 1_000_000;
-
-    return `${
-      Number.isInteger(millions)
-        ? millions
-        : millions.toFixed(1)
-    }tr`;
-  }
-
-  return number.toLocaleString(
-    "vi-VN",
-  );
+  return [
+    ...new Set(extras),
+  ];
 }
 
 /* =========================================================
@@ -733,7 +929,13 @@ function getDimensions(
     );
 
   if (size) {
-    return `${size[1].replace(",", ".")}x${size[2].replace(",", ".")}`;
+    return `${size[1].replace(
+      ",",
+      ".",
+    )}x${size[2].replace(
+      ",",
+      ".",
+    )}`;
   }
 
   if (
@@ -761,8 +963,7 @@ function getDimensions(
 }
 
 /* =========================================================
-   PHÙ HỢP
-   CHỈ LẤY NHỮNG GÌ TIN GỐC THỰC SỰ ĐỀ CẬP
+   AREA
 ========================================================= */
 
 function getAreaNumber(
@@ -770,346 +971,480 @@ function getAreaNumber(
   parsed: ParsedListing,
   raw: string,
 ): number | null {
-  const size = raw.match(
-    /(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)/i,
-  );
+  const size =
+    raw.match(
+      /(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)/i,
+    );
 
   if (size) {
-    const w = Number(size[1].replace(",", "."));
-    const l = Number(size[2].replace(",", "."));
+    const w = Number(
+      size[1].replace(
+        ",",
+        ".",
+      ),
+    );
 
-    if (Number.isFinite(w) && Number.isFinite(l)) {
+    const l = Number(
+      size[2].replace(
+        ",",
+        ".",
+      ),
+    );
+
+    if (
+      Number.isFinite(w) &&
+      Number.isFinite(l)
+    ) {
       return Math.round(w * l);
     }
   }
 
-  if (parsed.width && parsed.length) {
-    const w = Number(parsed.width);
-    const l = Number(parsed.length);
+  if (
+    parsed.width &&
+    parsed.length
+  ) {
+    const w = Number(
+      parsed.width,
+    );
 
-    if (Number.isFinite(w) && Number.isFinite(l)) {
+    const l = Number(
+      parsed.length,
+    );
+
+    if (
+      Number.isFinite(w) &&
+      Number.isFinite(l)
+    ) {
       return Math.round(w * l);
     }
   }
 
-  if (listing.width && listing.length) {
-    const w = Number(listing.width);
-    const l = Number(listing.length);
+  if (
+    listing.width &&
+    listing.length
+  ) {
+    const w = Number(
+      listing.width,
+    );
 
-    if (Number.isFinite(w) && Number.isFinite(l)) {
+    const l = Number(
+      listing.length,
+    );
+
+    if (
+      Number.isFinite(w) &&
+      Number.isFinite(l)
+    ) {
       return Math.round(w * l);
     }
   }
 
-  const areaVal = Number(listing.area ?? parsed.area);
+  const areaVal = Number(
+    listing.area ??
+      parsed.area,
+  );
 
-  if (Number.isFinite(areaVal) && areaVal > 0) {
-    return Math.round(areaVal);
+  if (
+    Number.isFinite(areaVal) &&
+    areaVal > 0
+  ) {
+    return Math.round(
+      areaVal,
+    );
   }
 
   return null;
 }
 
-function getFloorCount(raw: string): number | null {
-  const normalized = normalizeText(raw);
+/* =========================================================
+   FLOOR COUNT
+========================================================= */
 
-  const floor = normalized.match(/(\d+)\s*l[aầ]u\b/);
-  const floorShort = normalized.match(/(\d+)\s*l\b(?!\w)/);
+function getFloorCount(
+  raw: string,
+): number | null {
+  const normalized =
+    normalizeText(raw);
 
-  const value = floor?.[1] ?? floorShort?.[1];
+  const floor =
+    normalized.match(
+      /(\d+)\s*lau\b/,
+    );
 
-  return value ? Number(value) : null;
+  const floorShort =
+    normalized.match(
+      /(\d+)\s*l\b(?!\w)/,
+    );
+
+  /*
+   * "lầu" không có số
+   * được tính là 1 lầu.
+   */
+  const hasPlainFloor =
+    /\blau\b/.test(normalized);
+
+  if (floor?.[1]) {
+    return Number(
+      floor[1],
+    );
+  }
+
+  if (floorShort?.[1]) {
+    return Number(
+      floorShort[1],
+    );
+  }
+
+  if (hasPlainFloor) {
+    return 1;
+  }
+
+  return null;
 }
 
-/**
- * Gợi ý ngành nghề PHÙ HỢP dựa trên đặc điểm vật lý căn nhà
- * (mặt tiền/hẻm, diện tích, số tầng) — bổ sung thêm cho phần
- * "phù hợp" đã có, KHÔNG thay thế các gợi ý từ từ khóa thật
- * trong nội dung gốc.
- */
+/* =========================================================
+   PHÙ HỢP
+========================================================= */
+
 function suggestIndustriesByAttributes(
   prefix: string,
   areaM2: number | null,
   floorCount: number | null,
 ): string[] {
   const result: string[] = [];
-  const isMatTien = /mặt tiền|mặt bằng|góc/i.test(prefix);
 
+  const isMatTien =
+    /mặt tiền|mặt bằng|góc/i.test(
+      prefix,
+    );
+
+  /*
+   * Mặt tiền / mặt bằng
+   */
   if (isMatTien) {
-    if ((areaM2 && areaM2 >= 100) || (floorCount && floorCount >= 3)) {
-      result.push("🏬 Showroom / trưng bày sản phẩm");
-      result.push("🏢 Văn phòng công ty");
-      result.push("🍜 Nhà hàng / quán ăn quy mô lớn");
-    } else if (areaM2 && areaM2 >= 50) {
-      result.push("🛍️ Cửa hàng / bán lẻ");
-      result.push("💆 Spa / nail / salon / thẩm mỹ");
-      result.push("🏢 Văn phòng nhỏ");
+    /*
+     * Từ 50m² trở lên:
+     *
+     * Cửa hàng
+     * Bán lẻ
+     * Spa
+     * Nail
+     * Salon
+     * Thẩm mỹ
+     * Văn phòng công ty
+     * Showroom
+     * Trưng bày sản phẩm
+     * Quán café
+     * Trà sữa
+     */
+    if (
+      (areaM2 !== null &&
+        areaM2 >= 50) ||
+      (floorCount !== null &&
+        floorCount >= 3)
+    ) {
+      result.push(
+        "Cửa hàng",
+        "Bán lẻ",
+        "Spa",
+        "Nail",
+        "Salon",
+        "Thẩm mỹ",
+        "Văn phòng công ty",
+        "Showroom",
+        "Trưng bày sản phẩm",
+        "Quán café",
+        "Trà sữa",
+      );
     } else {
-      result.push("🛍️ Cửa hàng kinh doanh nhỏ");
-      result.push("☕ Quán café / trà sữa nhỏ");
+      /*
+       * Mặt tiền nhỏ hơn 50m²
+       */
+      result.push(
+        "Cửa hàng",
+        "Bán lẻ",
+        "Spa",
+        "Nail",
+        "Salon",
+        "Thẩm mỹ",
+        "Quán café",
+        "Trà sữa",
+      );
     }
   } else {
-    if (/xe hơi|xe tải/i.test(prefix)) {
-      result.push("🏢 Văn phòng nhỏ / xưởng nhẹ");
-      result.push("📦 Kho chứa hàng");
+    /*
+     * Hẻm xe hơi / xe tải
+     */
+    if (
+      /xe hơi|xe tải/i.test(
+        prefix,
+      )
+    ) {
+      result.push(
+        "Văn phòng nhỏ",
+        "Xưởng nhẹ",
+        "Kho chứa hàng",
+      );
     }
 
-    result.push("🏠 Gia đình / ở lâu dài");
-  }
-
-  if (floorCount && floorCount >= 3) {
-    result.push("🛏️ Tiềm năng cho thuê từng tầng / căn hộ dịch vụ");
+    result.push(
+      "Gia đình",
+      "Ở lâu dài",
+    );
   }
 
   return result;
 }
 
+/* =========================================================
+   BUILD SUITABLE FOR
+========================================================= */
+
 function buildSuitableFor(
   raw: string,
-  attrs: { prefix: string; areaM2: number | null; floorCount: number | null },
+  attrs: {
+    prefix: string;
+    areaM2: number | null;
+    floorCount: number | null;
+  },
 ): string[] {
   const normalized =
     normalizeText(raw);
 
   const result: string[] = [];
 
+  /*
+   * Nhận diện loại hình được ghi trực tiếp
+   */
   const hasCHDV =
-    /\bchdv\b/.test(normalized) ||
+    /\bchdv\b/.test(
+      normalized,
+    ) ||
     /can\s*ho\s*dich\s*vu/.test(
       normalized,
     ) ||
     /cho\s*thue\s*can\s*ho\s*dich\s*vu/.test(
       normalized,
     ) ||
-    /cho\s*chdv/.test(normalized) ||
-    /lam\s*chdv/.test(normalized);
+    /cho\s*chdv/.test(
+      normalized,
+    ) ||
+    /lam\s*chdv/.test(
+      normalized,
+    );
 
   const hasHomestay =
-    /\bhomestay\b/.test(normalized) ||
-    /cho\s*homestay/.test(normalized);
+    /\bhomestay\b/.test(
+      normalized,
+    ) ||
+    /cho\s*homestay/.test(
+      normalized,
+    );
 
   const hasHotel =
     /\bkhach\s*san\b/.test(
       normalized,
     ) ||
-    /luu\s*tru/.test(normalized) ||
-    /nha\s*nghi/.test(normalized);
+    /luu\s*tru/.test(
+      normalized,
+    ) ||
+    /nha\s*nghi/.test(
+      normalized,
+    );
 
   const hasOffice =
     /\bvan\s*phong\b/.test(
       normalized,
     ) ||
-    /\boffice\b/.test(normalized) ||
-    /cong\s*ty/.test(normalized);
+    /\boffice\b/.test(
+      normalized,
+    ) ||
+    /cong\s*ty/.test(
+      normalized,
+    );
 
   const hasShowroom =
-    /\bshowroom\b/.test(normalized);
+    /\bshowroom\b/.test(
+      normalized,
+    );
 
   const hasShop =
-    /\bshop\b/.test(normalized) ||
-    /cua\s*hang/.test(normalized) ||
-    /ban\s*le/.test(normalized);
+    /\bshop\b/.test(
+      normalized,
+    ) ||
+    /cua\s*hang/.test(
+      normalized,
+    ) ||
+    /ban\s*le/.test(
+      normalized,
+    );
 
   const hasSpa =
-    /\bspa\b/.test(normalized) ||
-    /tham\s*my/.test(normalized) ||
-    /\bnail\b/.test(normalized) ||
-    /\bsalon\b/.test(normalized);
+    /\bspa\b/.test(
+      normalized,
+    ) ||
+    /tham\s*my/.test(
+      normalized,
+    ) ||
+    /\bnail\b/.test(
+      normalized,
+    ) ||
+    /\bsalon\b/.test(
+      normalized,
+    );
 
   const hasClinic =
-    /\bclinic\b/.test(normalized) ||
+    /\bclinic\b/.test(
+      normalized,
+    ) ||
     /phong\s*kham/.test(
       normalized,
     ) ||
-    /nha\s*khoa/.test(normalized);
+    /nha\s*khoa/.test(
+      normalized,
+    );
 
   const hasRestaurant =
-    /nha\s*hang/.test(normalized) ||
-    /quan\s*an/.test(normalized) ||
-    /\bcafe\b/.test(normalized) ||
-    /ca\s*phe/.test(normalized);
+    /nha\s*hang/.test(
+      normalized,
+    ) ||
+    /quan\s*an/.test(
+      normalized,
+    ) ||
+    /\bcafe\b/.test(
+      normalized,
+    ) ||
+    /ca\s*phe/.test(
+      normalized,
+    );
 
   const hasWarehouse =
-    /\bkho\b/.test(normalized) ||
-    /\bxuong\b/.test(normalized);
+    /\bkho\b/.test(
+      normalized,
+    ) ||
+    /\bxuong\b/.test(
+      normalized,
+    );
 
+  /*
+   * Thứ tự cố định
+   */
   if (hasCHDV) {
     result.push(
-      "🛏️ Căn hộ dịch vụ",
+      "Căn hộ dịch vụ",
     );
   }
 
   if (hasHomestay) {
-    result.push("🏠 Homestay");
+    result.push(
+      "Homestay",
+    );
   }
 
   if (hasHotel) {
     result.push(
-      "🏨 Khách sạn / lưu trú / nhà nghỉ",
+      "Khách sạn",
+      "Lưu trú",
+      "Nhà nghỉ",
     );
   }
 
   if (hasOffice) {
     result.push(
-      "🏢 Văn phòng công ty",
+      "Văn phòng công ty",
     );
   }
 
   if (hasShowroom) {
-    result.push("🏬 Showroom");
+    result.push(
+      "Showroom",
+      "Trưng bày sản phẩm",
+    );
   }
 
   if (hasShop) {
     result.push(
-      "🛍️ Cửa hàng / bán lẻ",
+      "Cửa hàng",
+      "Bán lẻ",
     );
   }
 
   if (hasSpa) {
     result.push(
-      "💆 Spa / nail / salon / thẩm mỹ",
+      "Spa",
+      "Nail",
+      "Salon",
+      "Thẩm mỹ",
     );
   }
 
   if (hasClinic) {
     result.push(
-      "🏥 Phòng khám / clinic / nha khoa",
+      "Phòng khám",
+      "Clinic",
+      "Nha khoa",
     );
   }
 
   if (hasRestaurant) {
     result.push(
-      "🍜 Nhà hàng / café / ăn uống",
+      "Nhà hàng",
+      "Café",
+      "Ăn uống",
     );
   }
 
   if (hasWarehouse) {
     result.push(
-      "📦 Kho / xưởng",
+      "Kho",
+      "Xưởng",
     );
   }
 
   if (
-    /gia\s*dinh/.test(normalized) ||
-    /\bo\b/.test(normalized) ||
+    /gia\s*dinh/.test(
+      normalized,
+    ) ||
+    /\bo\b/.test(
+      normalized,
+    ) ||
     /nha\s*nguyen\s*can/.test(
       normalized,
     )
   ) {
     result.push(
-      "🏠 Gia đình / ở lâu dài",
+      "Gia đình",
+      "Ở lâu dài",
     );
   }
 
-  const attributeSuggestions = suggestIndustriesByAttributes(
-    attrs.prefix,
-    attrs.areaM2,
-    attrs.floorCount,
-  );
+  /*
+   * Nếu text không ghi rõ loại hình,
+   * tự suy luận theo mặt tiền + diện tích.
+   */
+  const attributeSuggestions =
+    suggestIndustriesByAttributes(
+      attrs.prefix,
+      attrs.areaM2,
+      attrs.floorCount,
+    );
 
-  return [...new Set([...result, ...attributeSuggestions])];
+  /*
+   * Đưa suggestion lên trước,
+   * sau đó mới tới loại hình ghi trực tiếp.
+   *
+   * Set giữ thứ tự và loại trùng.
+   */
+  return [
+    ...new Set([
+      ...attributeSuggestions,
+      ...result,
+    ]),
+  ];
 }
 
 /* =========================================================
-   XUNG QUANH
-   KHÔNG TỰ BỊA ĐỊA ĐIỂM
-========================================================= */
-
-const PRIORITY_CATEGORY_ORDER = [
-  "university",
-  "school",
-  "hospital",
-  "park",
-  "sports",
-  "market",
-  "mall",
-  "transit",
-  "residential",
-  "commercial",
-];
-
-function cleanNearbyPlaces(
-  places: NearbyPlace[],
-): NearbyPlace[] {
-  const seen = new Set<string>();
-
-  return places
-    .filter(
-      (place) => place?.name,
-    )
-    .sort((a, b) => {
-      const ai =
-        PRIORITY_CATEGORY_ORDER.indexOf(
-          a.category,
-        );
-
-      const bi =
-        PRIORITY_CATEGORY_ORDER.indexOf(
-          b.category,
-        );
-
-      return (
-        (ai === -1 ? 999 : ai) -
-        (bi === -1 ? 999 : bi)
-      );
-    })
-    .filter((place) => {
-      const key = normalizeText(
-        place.name,
-      );
-
-      if (seen.has(key)) {
-        return false;
-      }
-
-      seen.add(key);
-
-      return true;
-    })
-    .slice(0, 5);
-}
-
-function buildNearbySection(
-  street: string | null,
-  district: string | null,
-  places: NearbyPlace[],
-): string {
-  const nearby =
-    cleanNearbyPlaces(places);
-
-  if (!nearby.length) {
-    return `Khu vực ${
-      street ||
-      district ||
-      "trung tâm"
-    }${
-      district
-        ? `, ${district}`
-        : ""
-    } thuận tiện sinh hoạt, di chuyển và tiếp cận các tiện ích dân sinh.`;
-  }
-
-  const names = nearby.map(
-    (place) => place.name,
-  );
-
-  if (names.length === 1) {
-    return `Vị trí gần ${names[0]}, thuận tiện di chuyển và kết nối các tiện ích, khu dân cư và hoạt động kinh doanh xung quanh.`;
-  }
-
-  if (names.length === 2) {
-    return `Vị trí gần ${names[0]} và ${names[1]}, thuận tiện di chuyển, tiếp cận các tiện ích và khu vực dân cư xung quanh.`;
-  }
-
-  return `Vị trí gần ${names
-    .slice(0, -1)
-    .join(", ")} và ${
-    names[names.length - 1]
-  }, thuận tiện di chuyển, nhận diện vị trí và tiếp cận các tiện ích, khu dân cư, trường học và khu vực kinh doanh xung quanh.`;
-}
-
-/* =========================================================
-   BUILD ĐÚNG TEMPLATE FACEBOOK
+   BUILD SOCIAL LISTING CONTENT
 ========================================================= */
 
 export function buildSocialListingContent(
@@ -1145,25 +1480,54 @@ export function buildSocialListingContent(
     detectAddressPrefix(raw);
 
   /*
-   * KHÔNG dùng nguyên listing.address.
+   * KHÔNG công khai:
+   * - số nhà
+   * - số hẻm
+   * - phường
+   *
    * Chỉ lấy tên đường.
    */
-  const publicStreet =
+
+  const listingStreet =
     clean(listing.street)
       ? extractPublicStreet(
-          clean(listing.street) as string,
+          clean(
+            listing.street,
+          ),
         )
-      : extractPublicStreet(
-          listing.address ||
-            raw,
-        );
+      : null;
 
+  const addressStreet =
+    extractPublicStreet(
+      listing.address ||
+        raw,
+    );
+
+  const publicStreet =
+    isValidPublicStreet(
+      listingStreet,
+    )
+      ? listingStreet
+      : isValidPublicStreet(
+          addressStreet,
+        )
+        ? addressStreet
+        : null;
+
+  /*
+   * Quận công khai.
+   */
   const district =
     getPublicDistrict(
       listing,
       parsed,
+      raw,
     );
 
+  /*
+   * Vẫn trả ward trong API,
+   * nhưng KHÔNG render lên Facebook.
+   */
   const ward =
     getPublicWard(
       listing,
@@ -1181,159 +1545,147 @@ export function buildSocialListingContent(
   const structure =
     getStructure(raw);
 
-  const bedrooms =
-    getBedrooms(
-      raw,
-      listing,
-      parsed,
-    );
-
-  const bathrooms =
-    getBathrooms(
-      raw,
-      listing,
-      parsed,
-    );
-
   const extras =
     getExtras(raw);
 
   const suitableFor =
     buildSuitableFor(raw, {
       prefix,
-      areaM2: getAreaNumber(listing, parsed, raw),
-      floorCount: getFloorCount(raw),
+      areaM2:
+        getAreaNumber(
+          listing,
+          parsed,
+          raw,
+        ),
+      floorCount:
+        getFloorCount(raw),
     });
 
-  const price =
-    formatPrice(
-      listing.price ??
-        parsed.price,
-    );
-
   /*
-   * TIÊU ĐỀ:
-   * "Mặt Tiền Thành Công P.14 Tân Bình"
+   * =======================================================
+   * TITLE
    *
-   * Không bao giờ:
-   * "Mặt Tiền 215 Thành Công..."
+   * 🔥 Hai Mặt Tiền - Hồ Văn Huê - Quận Phú Nhuận
+   *
+   * Không có:
+   * - số nhà
+   * - phường
+   * =======================================================
    */
+
   const titleParts = [
     prefix,
     publicStreet,
-    ward,
     district,
   ].filter(Boolean);
 
   const title =
-    titleParts.join(" ");
+    titleParts.length > 0
+      ? `🔥 ${titleParts.join(
+          " - ",
+        )}`
+      : "🔥 Mặt Bằng Cho Thuê";
 
   const nearbyPlaces =
     cleanNearbyPlaces(
       options.nearbyPlaces ?? [],
     );
 
-  const nearbyText =
-    buildNearbySection(
-      publicStreet,
-      district,
-      nearbyPlaces,
-    );
+  /*
+   * =======================================================
+   * FACEBOOK TEMPLATE
+   *
+   * Chỉ có:
+   * - Tiêu đề
+   * - Diện tích
+   * - Kết cấu
+   * - Phù hợp
+   * - Liên hệ
+   *
+   * Không có:
+   * - Giá
+   * - Xung quanh
+   * - Phường
+   * - Số nhà
+   * - Extras
+   * =======================================================
+   */
 
   const lines: string[] = [];
 
   /*
-   * TEMPLATE
+   * TITLE
    */
-  lines.push(
-    title ||
-      "Mặt Bằng Cho Thuê",
-  );
+  lines.push(title);
 
+  /*
+   * Khoảng cách
+   */
   lines.push("");
 
+  /*
+   * DIỆN TÍCH
+   */
   if (dimensions) {
     lines.push(
       `📐 DT: ${dimensions}`,
     );
   }
 
+  /*
+   * KẾT CẤU
+   */
   if (structure) {
     lines.push(
       `🏢 KC: ${structure}`,
     );
   }
 
+  /*
+   * PHÙ HỢP
+   *
+   * QUAN TRỌNG:
+   * Tất cả nằm trên MỘT DÒNG.
+   *
+   * Ví dụ:
+   *
+   * ✅ Phù hợp: Cửa hàng - Bán lẻ - Spa - Nail
+   */
   if (
-    bedrooms ||
-    bathrooms
+    suitableFor.length
   ) {
-    const roomParts: string[] =
-      [];
-
-    if (bedrooms) {
-      roomParts.push(
-        `${bedrooms} Phòng Ngủ`,
-      );
-    }
-
-    if (bathrooms) {
-      roomParts.push(
-        `${bathrooms} WC`,
-      );
-    }
-
-    lines.push(
-      `🚪 ${roomParts.join(" – ")}`,
-    );
-  }
-
-  if (extras.length) {
-    lines.push(
-      `🛡️ ${extras.join(" · ")}`,
-    );
-  }
-
-  if (price) {
-    lines.push(
-      `💰 Giá: ${price}/tháng`,
-    );
-  }
-
-  if (suitableFor.length) {
     lines.push("");
 
-    lines.push(
-      "🔥 PHÙ HỢP:",
-    );
+    const cleanSuitableFor =
+      suitableFor
+        .map((item) =>
+          item
+            .replace(
+              /^[^\p{L}\p{N}]+/u,
+              "",
+            )
+            .trim(),
+        )
+        .filter(Boolean);
 
-    for (const item of suitableFor) {
-      lines.push(item);
-    }
+    lines.push(
+      `✅ Phù hợp: ${cleanSuitableFor.join(
+        " - ",
+      )}`,
+    );
   }
 
+  /*
+   * FACEBOOK CONTACT
+   *
+   * CỐ ĐỊNH:
+   * 0924711550
+   */
   lines.push("");
 
   lines.push(
-    `📍 XUNG QUANH: ${nearbyText}`,
+    "📞 Liên hệ: 0924711550",
   );
-
-  const contactPhone =
-    clean(options.contactPhone);
-
-  if (contactPhone) {
-    lines.push("");
-
-    lines.push(
-      `📞 Liên hệ: ${formatVietnamPhone(
-        contactPhone,
-      )}${
-        options.contactLabel
-          ? ` (${options.contactLabel})`
-          : ""
-      }`,
-    );
-  }
 
   return {
     title,
@@ -1350,8 +1702,74 @@ export function buildSocialListingContent(
 }
 
 /* =========================================================
+   NEARBY PLACES
+========================================================= */
+
+const PRIORITY_CATEGORY_ORDER = [
+  "university",
+  "school",
+  "hospital",
+  "park",
+  "sports",
+  "market",
+  "mall",
+  "transit",
+  "residential",
+  "commercial",
+];
+
+function cleanNearbyPlaces(
+  places: NearbyPlace[],
+): NearbyPlace[] {
+  const seen =
+    new Set<string>();
+
+  return places
+    .filter(
+      (place) => place?.name,
+    )
+    .sort((a, b) => {
+      const ai =
+        PRIORITY_CATEGORY_ORDER.indexOf(
+          a.category,
+        );
+
+      const bi =
+        PRIORITY_CATEGORY_ORDER.indexOf(
+          b.category,
+        );
+
+      return (
+        (ai === -1
+          ? 999
+          : ai) -
+        (bi === -1
+          ? 999
+          : bi)
+      );
+    })
+    .filter((place) => {
+      const key =
+        normalizeText(
+          place.name,
+        );
+
+      if (seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+
+      return true;
+    })
+    .slice(0, 5);
+}
+
+/* =========================================================
    FINAL FACEBOOK CONTENT
-   DÙNG CHUNG CHO sync-today + next-job
+   DÙNG CHUNG:
+   - sync-today
+   - next-job
 ========================================================= */
 
 export function finalizeFacebookContent(
@@ -1368,7 +1786,7 @@ export function finalizeFacebookContent(
   hashtags: string[];
 } {
   /*
-   * KHÔNG lấy baseContent cũ làm template.
+   * Không dùng baseContent cũ làm template.
    *
    * Luôn build lại bằng template chuẩn.
    */
@@ -1376,10 +1794,19 @@ export function finalizeFacebookContent(
     buildSocialListingContent(
       input.listing,
       {
+        /*
+         * Vẫn truyền contactPhone
+         * để không phá cấu trúc API hiện tại.
+         *
+         * Facebook template sử dụng
+         * số cố định 0924711550.
+         */
         contactPhone:
           input.contactPhone,
+
         contactLabel:
           input.contactLabel,
+
         rawText:
           input.rawText ||
           [
@@ -1389,19 +1816,26 @@ export function finalizeFacebookContent(
           ]
             .filter(Boolean)
             .join("\n"),
+
+        /*
+         * Vẫn nhận nearbyPlaces
+         * nhưng không render Facebook.
+         */
         nearbyPlaces:
-          input.nearbyPlaces ?? [],
+          input.nearbyPlaces ??
+          [],
       },
     );
 
   /*
-   * Kiểm tra lần cuối:
-   * không cho số nhà lọt vào nội dung Facebook.
+   * Safety check lần cuối:
+   * Không để số nhà lọt vào Facebook.
    */
-  const safeContent =
+    const safeContent =
     sanitizeFacebookAddress(
       generated.content,
       input.listing,
+      generated.publicStreet,
     );
 
   const hashtags =
@@ -1416,6 +1850,7 @@ export function finalizeFacebookContent(
     ]
       .filter(Boolean)
       .join("\n\n"),
+
     hashtags,
   };
 }
@@ -1427,15 +1862,38 @@ export function finalizeFacebookContent(
 function sanitizeFacebookAddress(
   content: string,
   listing: SocialListingInput,
+  publicStreet: string | null,
 ): string {
   let result = String(
     content ?? "",
   );
 
+  /*
+   * Xóa nguyên địa chỉ private.
+   *
+   * QUAN TRỌNG:
+   * Nhiều listing hiện tại lưu `address`
+   * CHỈ LÀ TÊN ĐƯỜNG TRẦN (không số nhà),
+   * trùng khớp với publicStreet đã hiển thị
+   * hợp lệ trong content.
+   *
+   * Nếu address == publicStreet (sau khi
+   * normalize), TUYỆT ĐỐI không được xóa,
+   * nếu không sẽ xóa nhầm tên đường công khai
+   * hợp lệ ra khỏi bài đăng.
+   */
   const privateAddress =
     clean(listing.address);
 
-  if (privateAddress) {
+  const isSameAsPublicStreet =
+    !!publicStreet &&
+    normalizeText(privateAddress) ===
+      normalizeText(publicStreet);
+
+  if (
+    privateAddress &&
+    !isSameAsPublicStreet
+  ) {
     result = result.replace(
       new RegExp(
         escapeRegExp(
@@ -1448,10 +1906,13 @@ function sanitizeFacebookAddress(
   }
 
   /*
-   * Không cho dạng:
+   * Không cho các dạng:
+   *
    * 215 Thành Công
    * 24 Hoàng Văn Thụ
    * 123A Nguyễn Trãi
+   *
+   * lọt vào content.
    */
   result = result.replace(
     /(^|\n)([^\n]*?)\b\d{1,5}[A-Za-z]?\s+[A-ZÀ-ỸĐ][^\n,]*?(?=\s+P\.|\s+Phường|\s+Q\.|\s+Quận|,|$)/giu,
@@ -1466,11 +1927,49 @@ function sanitizeFacebookAddress(
     "$1 ",
   );
 
+  /*
+   * Xóa dòng XUNG QUANH nếu flow cũ somehow lọt vào.
+   */
+  result = result.replace(
+    /^.*XUNG QUANH.*$/gimu,
+    "",
+  );
+
+  /*
+   * Xóa dòng Giá nếu flow cũ somehow lọt vào.
+   */
+  result = result.replace(
+    /^.*💰\s*Giá:.*$/gimu,
+    "",
+  );
+
+  /*
+   * Xóa dòng Liên hệ cũ để đảm bảo
+   * chỉ còn contact chuẩn.
+   */
+  result = result.replace(
+    CONTACT_LINE_REGEX,
+    "",
+  );
+
+  /*
+   * Dọn whitespace.
+   */
   return result
-    .replace(/[ \t]{2,}/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
+    .replace(
+      /[ \t]{2,}/g,
+      " ",
+    )
+    .replace(
+      /\n{3,}/g,
+      "\n\n",
+    )
     .trim();
 }
+
+/* =========================================================
+   ESCAPE REGEX
+========================================================= */
 
 function escapeRegExp(
   value: string,
