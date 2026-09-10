@@ -1,4 +1,4 @@
-import type { NearbyPlace } from "@/lib/socialListingContent";
+import type { NearbyPlace } from "@/lib/socialContent";
 
 type OSMElement = {
   type: "node" | "way" | "relation";
@@ -189,38 +189,36 @@ out center tags;
       };
 
     return (json.elements ?? [])
-      .map((element) => {
-        const coordinates =
-          getElementCoordinates(element);
+  .map((element): NearbyPlace | null => {
+    const coordinates =
+      getElementCoordinates(element);
 
-        const name =
-          element.tags?.name ||
-          element.tags?.["name:vi"] ||
-          "";
+    const name =
+      element.tags?.name ||
+      element.tags?.["name:vi"] ||
+      "";
 
-        if (!coordinates || !name) {
-          return null;
-        }
+    if (!coordinates || !name) {
+      return null;
+    }
 
-        return {
-          name,
-          category,
-          distanceMeters: Math.round(
-            distanceMeters(
-              latitude,
-              longitude,
-              coordinates.lat,
-              coordinates.lng,
-            ),
-          ),
-        } satisfies NearbyPlace;
-      })
-      .filter(
-        (
-          item,
-        ): item is NearbyPlace =>
-          Boolean(item),
-      );
+    return {
+      name,
+      category,
+      distanceMeters: Math.round(
+        distanceMeters(
+          latitude,
+          longitude,
+          coordinates.lat,
+          coordinates.lng,
+        ),
+      ),
+    };
+  })
+  .filter(
+    (item): item is NearbyPlace =>
+      item !== null,
+  );
   } catch {
     return [];
   } finally {
