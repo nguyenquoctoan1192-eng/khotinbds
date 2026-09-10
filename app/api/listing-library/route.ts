@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { createSupabaseServiceClient } from "@/lib/services/supabaseServer";
 import { getAccess } from "@/lib/access";
 
@@ -260,4 +260,3 @@ export async function GET(req: Request) {
     );
   }
 }
-

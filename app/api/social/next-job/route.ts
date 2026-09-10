@@ -8,6 +8,11 @@ import {
   ADMIN_DEFAULT_CONTACT_PHONE,
   finalizeFacebookContent,
 } from "@/lib/socialContent";
+import {
+  requireBotAuth,
+  unauthorizedResponse,
+  getOwnedFacebookAccount,
+} from "@/lib/bot/readModel";
 
 export const dynamic = "force-dynamic";
 
@@ -185,7 +190,7 @@ function detectCategories(listing: ListingRow): string[] {
 function buildBaseContent(listing: ListingRow): string {
   const dimensions =
     listing.width && listing.length
-      ? `${listing.width}x${listing.length}m`
+      ? `${listing.width}x${listing.length}`
       : listing.area
         ? `${listing.area}m²`
         : "";
@@ -196,15 +201,52 @@ function buildBaseContent(listing: ListingRow): string {
     listing.bathrooms ? `${listing.bathrooms} WC` : "",
   ].filter(Boolean);
 
+  let street = String(listing.address ?? "").trim();
+
+  // Bỏ số nhà ở đầu địa chỉ
+  street = street.replace(/^\d+[A-Za-z]?\s*[-/,]?\s*/, "");
+
+  // Bỏ phần phường/xã/thị trấn
+  street = street.replace(
+    /,?\s*(phường|p\.|xã|x\.|thị trấn|tt\.?)\s+[^,]+/iu,
+    "",
+  );
+
+  street = street
+    .replace(/,\s*$/, "")
+    .trim();
+
+  const locationParts = [
+    street,
+    listing.district,
+  ].filter(Boolean);
+
+  const location = locationParts.length
+    ? locationParts.join(" - ")
+    : "";
+
   return [
-    `🔥 ${String(listing.title || "CHO THUÊ BẤT ĐỘNG SẢN").trim()}`,
-    listing.district ? `📍 ${listing.district}` : "",
-    dimensions ? `📐 Diện tích: ${dimensions}` : "",
-    structure.length ? `🏢 ${structure.join(" – ")}` : "",
-    listing.price
-      ? `💰 Giá thuê: ${Number(listing.price).toLocaleString("vi-VN")} đồng/tháng`
+    `🔥 ${String(
+      listing.title || "CHO THUÊ BẤT ĐỘNG SẢN",
+    ).trim()}${location ? ` - ${location}` : ""}`,
+
+    dimensions
+      ? `📐 DT: ${dimensions}`
       : "",
-    String(listing.description ?? "").trim(),
+
+    structure.length
+      ? `🏢 KC: ${structure.join(" ")}`
+      : "",
+
+    "✅ Phù hợp:",
+    "• Gia đình ở",
+    "• Văn phòng công ty",
+    "• Spa",
+    "• Studio",
+    "• Shop online",
+    "• Kinh doanh sạch",
+
+    "📞 Liên hệ: 0924711550",
   ]
     .filter(Boolean)
     .join("\n")
@@ -217,17 +259,11 @@ function getSingleRelation<T>(value: T | T[] | null | undefined): T | null {
   return value ?? null;
 }
 
-
 function isListingUnavailable(status: unknown): boolean {
   const normalized = normalizeText(status);
 
   if (!normalized) return false;
 
-  /*
-   * Chỉ chặn các trạng thái thật sự đã ngừng đăng.
-   * Không yêu cầu status bắt buộc phải đúng duy nhất là "available",
-   * vì dữ liệu hiện tại có thể dùng active/published/pending/null.
-   */
   return [
     "rented",
     "leased",
@@ -320,17 +356,6 @@ async function loadEligibleGroups(
   db: Db,
   accountId: string,
 ): Promise<FacebookGroupRow[]> {
-  /*
-   * Nhóm quét từ Facebook có thể:
-   * - thuộc đúng facebook_account_id;
-   * - là nhóm dùng chung với facebook_account_id = null;
-   * - hoặc là dữ liệu cũ đã lưu bằng account khác.
-   *
-   * Vì vậy:
-   * 1. Ưu tiên nhóm đúng tài khoản + nhóm dùng chung.
-   * 2. Nếu kết quả rỗng, fallback toàn bộ nhóm đang hoạt động.
-   * Không để next-job báo 0/10 khi bảng facebook_groups thực tế có dữ liệu.
-   */
   const modernColumns =
     "id,name,url,district,districts,category,priority,is_active,group_status,muted_until,daily_post_limit,allowed_start_hour,allowed_end_hour";
 
@@ -385,10 +410,6 @@ async function loadEligibleGroups(
 
   if (result.error) throw new Error(result.error.message);
 
-  /*
-   * Trường hợp query đúng account chạy thành công nhưng trả 0 dòng:
-   * dùng toàn bộ nhóm hoạt động để tương thích dữ liệu đã có từ trước.
-   */
   if (!Array.isArray(result.data) || result.data.length === 0) {
     result = await queryGroups({
       columns: modernColumns,
@@ -409,12 +430,6 @@ async function loadEligibleGroups(
     (result.data ?? []) as unknown as FacebookGroupRow[]
   );
 
-  /*
-   * facebook_groups trên web đã được Admin bật bằng is_active=true.
-   * Không tiếp tục loại nhóm theo group_status, muted_until hoặc khung giờ,
-   * vì dữ liệu quét cũ có thể chứa giá trị không đồng nhất và làm toàn bộ
-   * danh sách bị loại thành 0/10 dù nhóm vẫn đang hoạt động trên web.
-   */
   const eligible = rawGroups.filter((group) => {
     const normalizedName = normalizeGroupName(group.name);
 
@@ -550,11 +565,6 @@ function extractDistrictKeysFromText(value: unknown): string[] {
     if (pattern.test(source)) keys.add(key);
   }
 
-  /*
-   * Nhận diện danh sách quận rút gọn:
-   * "các quận 1,3,5,10", "quận 1 3 5 10".
-   * Không coi mọi số đứng riêng là tên quận.
-   */
   const listMatches = source.matchAll(
     /\b(?:cac\s+)?quan\s+((?:\d{1,2}(?:\s*[,;/|-]\s*|\s+)){1,11}\d{1,2})\b/g,
   );
@@ -616,10 +626,6 @@ function isCitywideGroup(group: FacebookGroupRow): boolean {
 
   if (!broadCityToken) return false;
 
-  /*
-   * Có chữ TP.HCM nhưng đồng thời chỉ rõ một hoặc nhiều quận
-   * thì không phải nhóm toàn thành phố.
-   */
   return groupDistrictKeys(group).length === 0;
 }
 
@@ -710,7 +716,6 @@ async function chooseGroups(
     }
   };
 
-  // Bắt buộc: đúng quận → toàn TP.HCM → quận sát bên.
   append(sameDistrict);
   if (selected.length < TOTAL_GROUPS) append(citywide);
   if (selected.length < TOTAL_GROUPS) append(adjacentDistrict);
@@ -782,11 +787,6 @@ async function cancelSiblingJobs(
 ): Promise<void> {
   if (!job.batch_id) return;
 
-  /*
-   * Dữ liệu cũ từng tạo 10 job cho cùng một batch.
-   * Worker hiện đăng chéo 1 lần vào đủ 10 nhóm, nên 9 job còn lại phải hủy,
-   * nếu không bot sẽ đăng lặp lại cùng một tin 10 lần.
-   */
   const { error } = await db
     .from("social_post_jobs")
     .update({
@@ -887,10 +887,6 @@ async function claimPendingJob(input: {
 
     const currentPrimary = getSingleRelation(raw.facebook_groups);
 
-    /*
-     * Luôn lấy nhóm đầu tiên do chooseGroups xếp hạng.
-     * Không giữ nhóm chính cũ nếu nó thuộc sai quận.
-     */
     const primary = groups[0];
 
     const primaryNameKey = normalizeGroupName(primary.name);
@@ -1027,11 +1023,6 @@ async function repairLegacyActiveBatches(
   db: Db,
   accountId: string,
 ): Promise<number> {
-  /*
-   * Một số batch cũ được lưu với status = active trước khi constraint hiện tại
-   * chỉ còn cho phép pending/processing/completed/cancelled/failed.
-   * Chuyển các batch đó về pending trước khi lấy job.
-   */
   const { data, error } = await db
     .from("social_post_batches")
     .update({ status: "pending" })
@@ -1040,10 +1031,6 @@ async function repairLegacyActiveBatches(
     .select("id");
 
   if (error) {
-    /*
-     * Nếu không còn dữ liệu/schema cũ dùng active thì không làm hỏng next-job.
-     * Các lỗi khác vẫn được ghi ra terminal để kiểm tra.
-     */
     console.warn(
       "[NEXT-JOB] Không thể sửa batch active cũ:",
       error.message,
@@ -1055,7 +1042,7 @@ async function repairLegacyActiveBatches(
 
   if (repaired > 0) {
     console.log(
-      `[NEXT-JOB] Đã chuyỒn ${repaired} batch active cũ về pending`,
+      `[NEXT-JOB] Đã chuyển ${repaired} batch active cũ về pending`,
     );
   }
 
@@ -1083,10 +1070,6 @@ async function materializeNextBatch(input: {
   if (error) throw new Error(error.message);
 
   for (const batch of (batches ?? []) as unknown as BatchRow[]) {
-    /*
-     * Chỉ một request được quyền chuyển batch sang processing.
-     * Request khác update 0 dòng và chuyỒn sang batch kế tiếp.
-     */
     const { data: claimedBatch, error: claimBatchError } = await db
       .from("social_post_batches")
       .update({ status: "processing" })
@@ -1233,12 +1216,30 @@ export async function GET(request: Request) {
   console.log("[NEXT-JOB] Route active-groups-only-v14 đang chạy");
 
   try {
+    const auth = await requireBotAuth(request);
+    if (!auth) return unauthorizedResponse();
+
     const accountId = new URL(request.url).searchParams.get("accountId");
 
     if (!accountId) {
       return NextResponse.json(
         { error: "Thiếu accountId" },
         { status: 400 },
+      );
+    }
+
+    console.log("[NEXT-JOB AUTH]", {
+  licenseId: auth.license.id,
+  deviceId: auth.device.id,
+  deviceUid: auth.device.device_uid,
+  accountId,
+});
+
+    const ownedAccount = await getOwnedFacebookAccount(auth, accountId);
+    if (!ownedAccount) {
+      return NextResponse.json(
+        { error: "Tài khoản Facebook không thuộc license này" },
+        { status: 403 },
       );
     }
 
@@ -1294,7 +1295,6 @@ export async function GET(request: Request) {
       `[NEXT-JOB] account=${accountId} | phone=${defaultContactPhone}`,
     );
 
-
     const dayStart = new Date(now);
     dayStart.setHours(0, 0, 0, 0);
 
@@ -1330,11 +1330,6 @@ export async function GET(request: Request) {
       });
     }
 
-    /*
-     * 1. Ưu tiên lấy job pending đã có.
-     * 2. Nếu chưa có job, lấy một batch thô và tạo đúng một crosspost job.
-     * 3. Claim lại job vừa tạo và trả cho worker.
-     */
     let job = await claimPendingJob({
       db,
       accountId,
@@ -1398,4 +1393,3 @@ export async function POST(request: Request) {
     }),
   );
 }
-

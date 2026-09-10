@@ -1447,10 +1447,21 @@ function buildSuitableFor(
    BUILD SOCIAL LISTING CONTENT
 ========================================================= */
 
+
 export function buildSocialListingContent(
   listing: SocialListingInput,
   options: SocialListingContentOptions = {},
 ): SocialListingContentResult {
+  /*
+   * =======================================================
+   * RAW SOURCE
+   *
+   * Ưu tiên rawText / description nhưng luôn bổ sung
+   * các field cấu trúc trực tiếp từ listing để tránh
+   * mất Phòng / WC / Lầu khi text không chứa chúng.
+   * =======================================================
+   */
+
   const raw =
     clean(options.rawText) ||
     clean(listing.description) ||
@@ -1480,43 +1491,61 @@ export function buildSocialListingContent(
     detectAddressPrefix(raw);
 
   /*
-   * KHÔNG công khai:
+   * =======================================================
+   * PUBLIC STREET
+   *
+   * Không công khai:
    * - số nhà
    * - số hẻm
    * - phường
    *
-   * Chỉ lấy tên đường.
+   * Ưu tiên:
+   * 1. listing.street
+   * 2. listing.address
+   * 3. parsed/raw
+   *
+   * Nếu address chỉ là tên đường thì vẫn giữ nguyên.
+   * =======================================================
    */
 
   const listingStreet =
     clean(listing.street)
       ? extractPublicStreet(
-          clean(
-            listing.street,
-          ),
+          clean(listing.street),
         )
       : null;
 
   const addressStreet =
     extractPublicStreet(
-      listing.address ||
+      clean(listing.address) ||
+        raw,
+    );
+
+  const parsedStreet =
+    extractPublicStreet(
+      parsed.address ||
         raw,
     );
 
   const publicStreet =
-    isValidPublicStreet(
+    [
       listingStreet,
-    )
-      ? listingStreet
-      : isValidPublicStreet(
-          addressStreet,
-        )
-        ? addressStreet
-        : null;
+      addressStreet,
+      parsedStreet,
+    ]
+      .map((value) =>
+        clean(value),
+      )
+      .find((value) =>
+        isValidPublicStreet(value),
+      ) || null;
 
   /*
-   * Quận công khai.
+   * =======================================================
+   * PUBLIC DISTRICT
+   * =======================================================
    */
+
   const district =
     getPublicDistrict(
       listing,
@@ -1525,15 +1554,22 @@ export function buildSocialListingContent(
     );
 
   /*
-   * Vẫn trả ward trong API,
-   * nhưng KHÔNG render lên Facebook.
+   * Ward vẫn lấy cho API nếu cần,
+   * nhưng KHÔNG render Facebook.
    */
+
   const ward =
     getPublicWard(
       listing,
       parsed,
       raw,
     );
+
+  /*
+   * =======================================================
+   * DIMENSIONS
+   * =======================================================
+   */
 
   const dimensions =
     getDimensions(
@@ -1542,34 +1578,115 @@ export function buildSocialListingContent(
       raw,
     );
 
+  /*
+   * =======================================================
+   * STRUCTURE
+   *
+   * getStructure() trước đây chỉ đọc raw.
+   *
+   * Bây giờ bổ sung trực tiếp field listing:
+   * - floors
+   * - bedrooms
+   * - bathrooms
+   *
+   * để không mất thông tin KC.
+   * =======================================================
+   */
+
+  const structureRaw = [
+    raw,
+
+    /*
+     * floors = 2
+     * => Trệt 2 Lầu
+     *
+     * Chỉ bổ sung khi field có giá trị.
+     */
+    listing.floors
+      ? `Trệt ${listing.floors} Lầu`
+      : "",
+
+    /*
+     * bedrooms = 4
+     * => 4 Phòng
+     */
+    listing.bedrooms
+      ? `${listing.bedrooms} Phòng`
+      : "",
+
+    /*
+     * bathrooms = 4
+     * => 4WC
+     */
+    listing.bathrooms
+      ? `${listing.bathrooms}WC`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
   const structure =
-    getStructure(raw);
+    getStructure(
+      structureRaw,
+    );
+
+  /*
+   * =======================================================
+   * EXTRAS
+   *
+   * Vẫn tính nếu flow/API cần,
+   * nhưng KHÔNG render vào Facebook.
+   * =======================================================
+   */
 
   const extras =
     getExtras(raw);
 
+  /*
+   * =======================================================
+   * SUITABLE FOR
+   *
+   * Tất cả nằm trên MỘT DÒNG.
+   * Không bullet.
+   * Không dùng dấu "/".
+   * =======================================================
+   */
+
   const suitableFor =
-    buildSuitableFor(raw, {
-      prefix,
-      areaM2:
-        getAreaNumber(
-          listing,
-          parsed,
-          raw,
-        ),
-      floorCount:
-        getFloorCount(raw),
-    });
+    buildSuitableFor(
+      raw,
+      {
+        prefix,
+
+        areaM2:
+          getAreaNumber(
+            listing,
+            parsed,
+            raw,
+          ),
+
+        floorCount:
+          getFloorCount(
+            structureRaw,
+          ),
+      },
+    );
 
   /*
    * =======================================================
    * TITLE
    *
+   * Format:
+   *
+   * 🔥 Hẻm Ba Gác - Hồ Văn Huê - Quận Phú Nhuận
+   *
+   * hoặc:
+   *
    * 🔥 Hai Mặt Tiền - Hồ Văn Huê - Quận Phú Nhuận
    *
-   * Không có:
-   * - số nhà
-   * - phường
+   * Tuyệt đối không để:
+   *
+   * 🔥 Hẻm Ba Gác - - Quận Phú Nhuận
    * =======================================================
    */
 
@@ -1577,14 +1694,24 @@ export function buildSocialListingContent(
     prefix,
     publicStreet,
     district,
-  ].filter(Boolean);
+  ]
+    .map((value) =>
+      clean(value),
+    )
+    .filter(Boolean);
 
   const title =
     titleParts.length > 0
-      ? `🔥 ${titleParts.join(
-          " - ",
-        )}`
+      ? `🔥 ${titleParts.join(" - ")}`
       : "🔥 Mặt Bằng Cho Thuê";
+
+  /*
+   * =======================================================
+   * NEARBY
+   *
+   * Vẫn nhận dữ liệu nhưng không render Facebook.
+   * =======================================================
+   */
 
   const nearbyPlaces =
     cleanNearbyPlaces(
@@ -1593,16 +1720,16 @@ export function buildSocialListingContent(
 
   /*
    * =======================================================
-   * FACEBOOK TEMPLATE
+   * FACEBOOK CONTENT
    *
-   * Chỉ có:
-   * - Tiêu đề
-   * - Diện tích
-   * - Kết cấu
-   * - Phù hợp
-   * - Liên hệ
+   * Chỉ render:
+   * 1. Tiêu đề
+   * 2. DT
+   * 3. KC
+   * 4. Phù hợp
+   * 5. Liên hệ được xử lý ở flow finalize
    *
-   * Không có:
+   * Không render:
    * - Giá
    * - Xung quanh
    * - Phường
@@ -1624,8 +1751,11 @@ export function buildSocialListingContent(
   lines.push("");
 
   /*
+   * =======================================================
    * DIỆN TÍCH
+   * =======================================================
    */
+
   if (dimensions) {
     lines.push(
       `📐 DT: ${dimensions}`,
@@ -1633,24 +1763,107 @@ export function buildSocialListingContent(
   }
 
   /*
+   * =======================================================
    * KẾT CẤU
+   * =======================================================
    */
-  if (structure) {
+
+    if (structure) {
     lines.push(
       `🏢 KC: ${structure}`,
     );
   }
 
   /*
+   * =======================================================
+   * GIÁ THUÊ
+   * =======================================================
+   */
+
+  const rawPrice =
+    listing.price ??
+    parsed.price;
+
+  if (
+    rawPrice !== null &&
+    rawPrice !== undefined &&
+    String(rawPrice).trim() !== ""
+  ) {
+    let numericPrice: number;
+
+    if (typeof rawPrice === "number") {
+      numericPrice = rawPrice;
+    } else {
+      const priceText =
+        String(rawPrice)
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, " ");
+
+      /*
+       * 13tr
+       * 13 triệu
+       * 13tr/tháng
+       */
+      const millionMatch =
+        priceText.match(
+          /(\d+(?:[.,]\d+)?)\s*(?:triệu|tr|t)\b/i,
+        );
+
+      if (millionMatch) {
+        numericPrice =
+          Number(
+            millionMatch[1].replace(",", "."),
+          ) * 1_000_000;
+      } else {
+        numericPrice =
+          Number(
+            priceText
+              .replace(/[^\d.,]/g, "")
+              .replace(/\./g, "")
+              .replace(",", "."),
+          );
+      }
+    }
+
+    if (
+      Number.isFinite(numericPrice) &&
+      numericPrice > 0
+    ) {
+      const millionValue =
+        numericPrice / 1_000_000;
+
+      const priceDisplay =
+        Number(
+          millionValue.toFixed(2),
+        ).toLocaleString("vi-VN");
+
+      lines.push("");
+
+      lines.push(
+        `💰 Giá thuê: ${priceDisplay} triệu/tháng`,
+      );
+    }
+  }
+
+  /*
+   * =======================================================
    * PHÙ HỢP
    *
-   * QUAN TRỌNG:
-   * Tất cả nằm trên MỘT DÒNG.
+   * Một dòng ngang:
    *
-   * Ví dụ:
+   * ✅ Phù hợp: Gia đình ở - Văn phòng công ty - Spa
    *
-   * ✅ Phù hợp: Cửa hàng - Bán lẻ - Spa - Nail
+   * Không:
+   *
+   * • Gia đình ở
+   * • Văn phòng công ty
+   * • Spa
+   *
+   * Không dùng "/".
+   * =======================================================
    */
+
   if (
     suitableFor.length
   ) {
@@ -1659,7 +1872,7 @@ export function buildSocialListingContent(
     const cleanSuitableFor =
       suitableFor
         .map((item) =>
-          item
+          String(item ?? "")
             .replace(
               /^[^\p{L}\p{N}]+/u,
               "",
@@ -1668,38 +1881,101 @@ export function buildSocialListingContent(
         )
         .filter(Boolean);
 
-    lines.push(
-      `✅ Phù hợp: ${cleanSuitableFor.join(
-        " - ",
-      )}`,
-    );
+    /*
+     * Loại duplicate nhưng vẫn giữ thứ tự.
+     */
+    const uniqueSuitableFor =
+      [
+        ...new Set(
+          cleanSuitableFor,
+        ),
+      ];
+
+    if (
+      uniqueSuitableFor.length
+    ) {
+      lines.push(
+        `✅ Phù hợp: ${uniqueSuitableFor.join(
+          " - ",
+        )}`,
+      );
+    }
   }
 
   /*
-   * FACEBOOK CONTACT
-   *
-   * CỐ ĐỊNH:
-   * 0924711550
+   * =======================================================
+   * FINAL CONTENT
+   * =======================================================
    */
-  lines.push("");
 
-  lines.push(
-    "📞 Liên hệ: 0924711550",
-  );
+  const content =
+    lines
+      .filter(
+        (line, index) =>
+          line !== "" ||
+          (
+            index > 0 &&
+            lines[index - 1] !== ""
+          ),
+      )
+      .join("\n")
+      .trim();
+
+  /*
+   * =======================================================
+   * FACEBOOK ADDRESS SAFETY CHECK
+   *
+   * Không cho số nhà / địa chỉ private lọt ra.
+   *
+   * QUAN TRỌNG:
+   * Nếu listing.address chính là publicStreet,
+   * sanitizeFacebookAddress() sẽ không xóa tên đường.
+   * =======================================================
+   */
+
+  const safeContent =
+    sanitizeFacebookAddress(
+      content,
+      listing,
+      publicStreet,
+    );
+
+  /*
+   * =======================================================
+   * HASHTAGS
+   * =======================================================
+   */
+
+  const hashtags =
+    buildDistrictHashtags(
+      listing,
+    );
+
+  /*
+     /*
+   * =======================================================
+   * RETURN
+   * =======================================================
+   */
 
   return {
-    title,
-    content: lines
-      .join("\n")
-      .trim(),
-    publicStreet,
-    district,
-    ward,
-    suitableFor,
-    extras,
-    nearbyPlaces,
-  };
+  title,
+  content: [
+    safeContent,
+    hashtags.join(" "),
+  ]
+    .filter(Boolean)
+    .join("\n\n"),
+  publicStreet,
+  district,
+  ward,
+  suitableFor,
+  extras,
+  nearbyPlaces,
+};
 }
+
+
 
 /* =========================================================
    NEARBY PLACES
