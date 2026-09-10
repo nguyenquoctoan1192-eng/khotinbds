@@ -486,25 +486,19 @@ const updatePost = async () => {
     title,
     district,
     address,
-
     price: Number(price) || 0,
     area: Number(area) || 0,
     width: Number(width) || 0,
     length: Number(length) || 0,
     floors: Number(floors) || 0,
-
     bedrooms: Number(bedrooms) || 0,
     bathrooms: Number(bathrooms) || 0,
-
     furniture,
     amenities,
-
     contact_phone: contactPhone,
-
     description,
     images,
     status,
-
     primary_content: aiContent?.primary_content || null,
     chotot_title: aiContent?.cho_tot_title || null,
     facebook_title: aiContent?.facebook_title || null,
@@ -512,17 +506,18 @@ const updatePost = async () => {
     seo_description: aiContent?.seo_description || null,
   };
 
-  console.log("ID =", id);
-  console.log("PAYLOAD =", payload);
+  console.log("UPDATE ID:", id);
+  console.log("UPDATE PAYLOAD:", payload);
 
   const { data, error } = await supabase
     .from("listings")
     .update(payload)
     .eq("id", id)
-    .select();
+    .select()
+    .single();
 
-  console.log("DATA =", data);
-  console.log("ERROR =", error);
+  console.log("UPDATE RESULT:", data);
+  console.log("UPDATE ERROR:", error);
 
   setLoading(false);
 
@@ -531,7 +526,12 @@ const updatePost = async () => {
     return;
   }
 
-  alert("Đã cập nhật");
+  if (!data) {
+    alert("Không có tin nào được cập nhật. Kiểm tra ID hoặc quyền Supabase.");
+    return;
+  }
+
+  alert("Đã cập nhật tin thành công.");
 
   router.replace("/admin");
 };

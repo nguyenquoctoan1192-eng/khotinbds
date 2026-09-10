@@ -2499,11 +2499,11 @@ export function formatPublicListing(
    * title có thể là title cũ/sai.
    */
   const addressSource =
-    bestRawAddressLine ||
-    address ||
-    description ||
-    rawInput ||
-    title;
+  title ||
+  bestRawAddressLine ||
+  address ||
+  description ||
+  rawInput;
 
   /**
    * Context quyết định Hẻm / Mặt Tiền.
