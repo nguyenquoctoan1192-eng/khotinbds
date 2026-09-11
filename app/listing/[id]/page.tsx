@@ -206,9 +206,7 @@ export default function ListingDetail() {
 
   const publicListing = formatPublicListing(listing);
 
-  const displayTitle = canSeeRawListing
-    ? listing.title || publicListing?.publicTitle
-    : publicListing?.publicTitle || "Bất động sản cho thuê";
+  const displayTitle = publicListing?.publicTitle || listing.title || "Bất động sản cho thuê";
 
   const publicAddress =
     listing.public_address?.trim() ||
@@ -223,11 +221,7 @@ export default function ListingDetail() {
 
   const propertyType = listing.property_type || "Cho thuê";
 
-  const displayPrice = canSeeRawListing
-    ? Number(listing.price || 0) > 0
-      ? `${Number(listing.price).toLocaleString("vi-VN")} VNĐ`
-      : "Liên hệ"
-    : publicListing?.price || "Liên hệ";
+  const displayPrice = publicListing?.price || "Liên hệ";
 
   const displayArea = publicListing?.area || listing.area || listing.area_m2 || "—";
 

@@ -165,11 +165,7 @@ export default function ListingCard({
 
   const title = publicListing.publicTitle || listing.title || "Bất động sản";
 
-  const displayPrice = canSeeRawListing
-    ? Number(listing.price || 0) > 0
-      ? `${Number(listing.price).toLocaleString("vi-VN")} VNĐ`
-      : "Liên hệ"
-    : publicListing.price;
+  const displayPrice = publicListing.price;
 
   return (
     <article

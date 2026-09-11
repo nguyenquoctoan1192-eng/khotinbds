@@ -2413,7 +2413,7 @@ const formatNumericPrice = (
       ty.toFixed(2),
     ).toLocaleString(
       "vi-VN",
-    )} Tỷ`;
+    )} tỷ`;
   }
 
   if (
@@ -2428,7 +2428,7 @@ const formatNumericPrice = (
       trieu.toFixed(2),
     ).toLocaleString(
       "vi-VN",
-    )} Triệu`;
+    )}tr`;
   }
 
   return `${number.toLocaleString(
