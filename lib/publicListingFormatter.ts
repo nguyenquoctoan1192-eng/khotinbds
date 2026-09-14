@@ -750,7 +750,7 @@ const extractDistrictFromAddress = (
    * Quận Gò Vấp
    */
   const explicitDistrictRegex =
-    /(?:^|[\s,-]+)(Quận\s+(?:\d+|Tân\s+Bình|Tan\s+Binh|Thủ\s+Đức|Thu\s+Duc|Gò\s+Vấp|Go\s+Vap|Bình\s+Thạnh|Binh\s+Thanh|Phú\s+Nhuận|Phu\s+Nhuan|Tân\s+Phú|Tan\s+Phu|Bình\s+Tân|Binh\s+Tan|Bình\s+Chánh|Binh\s+Chanh))\s*$/iu;
+  /(?:^|[\s,-]+)(Quận\s+(?:\d+|Tân\s+Bình|Tan\s+Binh|Thủ\s+Đức|Thu\s+Duc|Gò\s+Vấp|Go\s+Vap|Bình\s+Thạnh|Binh\s+Thanh|Phú\s+Nhuận|Phu\s+Nhuan|Tân\s+Phú|Tan\s+Phu|Bình\s+Tân|Binh\s+Tan|Bình\s+Chánh|Binh\s+Chanh))(?=[\s,.-]|$)/iu;
 
   const explicitMatch =
     value.match(
@@ -807,9 +807,9 @@ const extractDistrictFromAddress = (
       );
 
     const regex = new RegExp(
-      `(?:^|[\\s,-]+)(${escaped})\\s*$`,
-      "iu",
-    );
+  `(?:^|[\\s,-]+)(${escaped})(?=[\\s,.-]|$)`,
+  "iu",
+);
 
     const match =
       value.match(regex);
@@ -862,7 +862,7 @@ const extractWardFromAddress = (
     ).trim();
 
   const wardRegex =
-    /(?:^|[\s,-]+)(P\.\d+)\s*$/iu;
+  /(?:^|[\s,-]+)(P\.\d+)(?=[\s,.-]|$)/iu;
 
   const match =
     value.match(wardRegex);
@@ -2617,15 +2617,31 @@ export function formatPublicListing(
      STRUCTURE PUBLIC
   ======================================================= */
 
-  const publicStructure =
-    formatPublicStructureDisplay(
-      convertUsdPricesInText(
-        sanitizePublicStructure(
-          extractedStructure ||
-            publicStructuredStructure,
-        ),
+  const dbBedrooms = asNumber(listing.bedrooms);
+const dbBathrooms = asNumber(listing.bathrooms ?? listing.wc);
+
+const structureFromFields = [
+  floors !== null && floors >= 0
+    ? floors > 0
+      ? `1 Trệt ${floors} Lầu`
+      : "Trệt"
+    : "",
+  dbBedrooms ? `${dbBedrooms} Phòng Ngủ` : "",
+  dbBathrooms ? `${dbBathrooms} WC` : "",
+]
+  .filter(Boolean)
+  .join(" ");
+
+const publicStructure =
+  formatPublicStructureDisplay(
+    convertUsdPricesInText(
+      sanitizePublicStructure(
+        structureFromFields ||
+          publicStructuredStructure ||
+          extractedStructure,
       ),
-    );
+    ),
+  );
 
   /* =======================================================
      RETURN
@@ -2674,9 +2690,9 @@ export function formatPublicListing(
       ),
 
     area:
-      extractedArea ||
-      dimensions ||
-      structuredArea,
+  structuredArea ||
+  dimensions ||
+  extractedArea,
 
     structure:
       publicStructure,

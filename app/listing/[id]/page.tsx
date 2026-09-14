@@ -5,7 +5,11 @@ import { createClient } from "@supabase/supabase-js";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 
-import RelatedListingsMapSection from "@/app/components/map/RelatedListingsMapSection";
+import {
+  RelatedListingsMapProvider,
+  RelatedListingsMapPanel,
+  RelatedListingsScrollerPanel,
+} from "@/app/components/map/RelatedListingsMapSection";
 import RentedStamp from "@/app/components/rented-stamp";
 import AIConsultantWidget from "@/app/components/shared/AIConsultantWidget";
 import { formatPublicListing } from "@/lib/publicListingFormatter";
@@ -1136,51 +1140,57 @@ const suitableBusinessTypes = getSuitableBusinessTypes();
             MAP
         ====================================================== */}
 
-        <section className="ld-area-section">
-          <div className="ld-area-heading">
-            <div>
-              <div className="ld-area-title">
-                <span>📍</span>
-                <h2>Khu vực xung quanh</h2>
+        <RelatedListingsMapProvider
+          listings={relatedListings}
+          currentListing={listing}
+          viewMode={viewMode}
+        >
+          <section className="ld-area-section">
+            <div className="ld-area-heading">
+              <div>
+                <div className="ld-area-title">
+                  <span>📍</span>
+                  <h2>Khu vực xung quanh</h2>
+                </div>
+
+                <p>Bản đồ bất động sản trong khu vực {listing.district || ""}</p>
               </div>
 
-              <p>Bản đồ bất động sản trong khu vực {listing.district || ""}</p>
+              <button
+                type="button"
+                className="ld-expand-map"
+                onClick={() =>
+                  document
+                    .querySelector(".ld-map-box")
+                    ?.scrollIntoView({ behavior: "smooth", block: "center" })
+                }
+              >
+                Mở rộng bản đồ
+              </button>
             </div>
 
-            <button
-              type="button"
-              className="ld-expand-map"
-              onClick={() =>
-                document
-                  .querySelector(".ld-map-box")
-                  ?.scrollIntoView({ behavior: "smooth", block: "center" })
-              }
-            >
-              Mở rộng bản đồ
-            </button>
+            <div className="ld-map-box">
+              <div className="ld-map">
+                {relatedListings.length === 0 ? (
+                  <div className="ld-map-empty">
+                    Chưa có bất động sản khác trong khu vực này.
+                  </div>
+                ) : (
+                  <RelatedListingsMapPanel />
+                )}
+              </div>
+
+              <div className="ld-map-footer">
+                <span>📍 {listing.district || "Khu vực"}</span>
+                <span>{relatedWithCoords.length} tin có tọa độ</span>
+              </div>
+            </div>
+          </section>
+
+          <div className="related-listings-outside-map">
+            <RelatedListingsScrollerPanel />
           </div>
-
-          <div className="ld-map-box">
-            <div className="ld-map">
-              {relatedListings.length === 0 ? (
-                <div className="ld-map-empty">
-                  Chưa có bất động sản khác trong khu vực này.
-                </div>
-              ) : (
-                <RelatedListingsMapSection
-                  listings={relatedListings}
-                  currentListing={listing}
-                  viewMode={viewMode}
-                />
-              )}
-            </div>
-
-            <div className="ld-map-footer">
-              <span>📍 {listing.district || "Khu vực"}</span>
-              <span>{relatedWithCoords.length} tin có tọa độ</span>
-            </div>
-          </div>
-        </section>
+        </RelatedListingsMapProvider>
 
         {/* ======================================================
             RELATED LISTINGS
@@ -2099,6 +2109,10 @@ const suitableBusinessTypes = getSuitableBusinessTypes();
           color: var(--muted);
           border-top: 1px solid var(--border);
           font-size: 11px;
+        }
+
+        .related-listings-outside-map {
+          margin-top: 32px;
         }
 
         .ld-related {

@@ -219,10 +219,9 @@ export default function RelatedListingsMapClient({
         }}
       >
         <TileLayer
-          attribution="&copy; OpenStreetMap contributors &copy; CARTO"
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-          subdomains={["a", "b", "c", "d"]}
-          maxZoom={20}
+          attribution='Tiles &copy; Esri &mdash; Source: Esri, HERE, Garmin, USGS'
+          url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
+          maxZoom={19}
         />
 
         <InvalidateMapSize />
