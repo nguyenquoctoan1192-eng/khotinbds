@@ -200,16 +200,23 @@ export default function ListingCard({
         }}
       >
         <img
-          src={listing.images?.[0] || "https://placehold.co/600x400"}
-          loading="lazy"
-          alt={title}
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            opacity: isRented ? 0.6 : 1,
-          }}
-        />
+  src={listing.images?.[0] || "/images/default-property.png"}
+  loading="lazy"
+  alt={title}
+  onError={(e) => {
+    if (e.currentTarget.src.endsWith("/images/default-property.png")) {
+  return;
+}
+
+e.currentTarget.src = "/images/default-property.png";
+  }}
+  style={{
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    opacity: isRented ? 0.6 : 1,
+  }}
+/>
         {isRented && <RentedStamp />}
         <span
           style={{
@@ -224,7 +231,7 @@ export default function ListingCard({
             fontWeight: 700,
           }}
         >
-          {listing.images?.length || 1} ảnh
+          {listing.images?.length ? `${listing.images.length} ảnh` : "Chưa có ảnh"}
         </span>
       </div>
 
