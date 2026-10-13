@@ -367,6 +367,35 @@ export default function BotAdminClient() {
     }
   }
 
+  function renewLicense(license: LicenseRow) {
+  const currentExpiry = license.expires_at
+    ? license.expires_at.slice(0, 10)
+    : "";
+
+  const expiresAt = window.prompt(
+    `Nhập ngày hết hạn mới cho license "${license.name}" (YYYY-MM-DD):`,
+    currentExpiry,
+  );
+
+  if (expiresAt === null) return;
+
+  const newExpiry = expiresAt.trim();
+
+  if (!newExpiry) {
+    window.alert("Vui lòng nhập ngày hết hạn.");
+    return;
+  }
+
+  void updateItem(
+    {
+      type: "license",
+      id: license.id,
+      expiresAt: newExpiry,
+    },
+    `license-renew-${license.id}`,
+  );
+}
+
   const tabs: Array<{ id: Tab; label: string }> = [
     { id: "overview", label: "Tổng quan" },
     { id: "licenses", label: "License" },
@@ -699,7 +728,85 @@ export default function BotAdminClient() {
           </>
         )}
 
-        {tab === "licenses" && <DataCard title="Danh sách license"><table className={styles.table}><thead><tr><th>Tên</th><th>Mã đầu</th><th>Thiết bị</th><th>Facebook</th><th>Hết hạn</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>{data.licenses.map((license) => <tr key={license.id}><td><strong>{license.name}</strong><div className={styles.subText}>Tạo: {formatDate(license.created_at)}</div></td><td>{license.license_key_prefix}</td><td>{license.max_devices}</td><td>{license.max_facebook_accounts}</td><td>{shortDate(license.expires_at)}</td><td><span className={`${styles.badge} ${license.is_active ? styles.badgeGreen : styles.badgeGray}`}>{license.is_active ? "Đang bật" : "Đã khóa"}</span></td><td><button className={license.is_active ? styles.dangerButton : styles.button} disabled={busy === `license-${license.id}`} onClick={() => void updateItem({ type: "license", id: license.id, isActive: !license.is_active }, `license-${license.id}`)}>{license.is_active ? "Khóa" : "Mở lại"}</button></td></tr>)}</tbody></table></DataCard>}
+{tab === "licenses" && (
+  <DataCard title="Danh sách license">
+    <table className={styles.table}>
+      <thead>
+        <tr>
+          <th>Tên</th>
+          <th>Mã đầu</th>
+          <th>Thiết bị</th>
+          <th>Facebook</th>
+          <th>Hết hạn</th>
+          <th>Trạng thái</th>
+          <th>Thao tác</th>
+        </tr>
+      </thead>
+      <tbody>
+        {data.licenses.map((license) => (
+          <tr key={license.id}>
+            <td>
+              <strong>{license.name}</strong>
+              <div className={styles.subText}>
+                Tạo: {formatDate(license.created_at)}
+              </div>
+            </td>
+            <td>{license.license_key_prefix}</td>
+            <td>{license.max_devices}</td>
+            <td>{license.max_facebook_accounts}</td>
+            <td>{shortDate(license.expires_at)}</td>
+            <td>
+              <span
+                className={`${styles.badge} ${
+                  license.is_active
+                    ? styles.badgeGreen
+                    : styles.badgeGray
+                }`}
+              >
+                {license.is_active ? "Đang bật" : "Đã khóa"}
+              </span>
+            </td>
+            <td>
+              <div className={styles.actions}>
+                <button
+                  className={
+                    license.is_active
+                      ? styles.dangerButton
+                      : styles.button
+                  }
+                  disabled={busy === `license-${license.id}`}
+                  onClick={() =>
+                    void updateItem(
+                      {
+                        type: "license",
+                        id: license.id,
+                        isActive: !license.is_active,
+                      },
+                      `license-${license.id}`,
+                    )
+                  }
+                >
+                  {license.is_active ? "Khóa" : "Mở lại"}
+                </button>
+
+                <button
+                  className={styles.primaryButton}
+                  disabled={
+                    busy === `license-renew-${license.id}`
+                  }
+                  onClick={() => renewLicense(license)}
+                >
+                  Gia hạn
+                </button>
+              </div>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </DataCard>
+)}
+
 
         {tab === "devices" && <DataCard title="Danh sách thiết bị"><table className={styles.table}><thead><tr><th>Thiết bị</th><th>License</th><th>Nền tảng</th><th>Phiên bản</th><th>IP</th><th>Trạng thái</th><th>Lần cuối</th><th>Thao tác</th></tr></thead><tbody>{data.devices.map((device) => { const online = device.is_active && isOnline(device.last_seen_at, nowMs); return <tr key={device.id}><td><strong>{device.device_name || "Thiết bị"}</strong><div className={styles.subText}>{device.device_uid}</div></td><td>{licenseById.get(device.license_id)?.name || "—"}</td><td>{device.platform || "—"}</td><td>{device.app_version || "—"}</td><td>{device.last_ip || "—"}</td><td><span className={`${styles.badge} ${online ? styles.badgeGreen : styles.badgeGray}`}>{online ? "Online" : "Offline"}</span></td><td>{formatDate(device.last_seen_at)}</td><td><div className={styles.actions}><button className={styles.button} disabled={busy === `reset-${device.id}`} onClick={() => void updateItem({ type: "device", id: device.id, isActive: device.is_active, resetToken: true }, `reset-${device.id}`)}>Reset token</button><button className={device.is_active ? styles.dangerButton : styles.button} disabled={busy === `device-${device.id}`} onClick={() => void updateItem({ type: "device", id: device.id, isActive: !device.is_active }, `device-${device.id}`)}>{device.is_active ? "Khóa" : "Mở"}</button></div></td></tr>; })}</tbody></table></DataCard>}
 

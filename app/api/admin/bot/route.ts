@@ -402,6 +402,31 @@ export async function PATCH(
         updated_at: now,
       };
 
+      if (body?.expiresAt !== undefined) {
+  const expiresAt = String(body.expiresAt ?? "").trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(expiresAt)) {
+    return NextResponse.json(
+      { error: "Ngày hết hạn không hợp lệ" },
+      { status: 400 },
+    );
+  }
+
+  const parsedDate = new Date(`${expiresAt}T23:59:59.000Z`);
+
+  if (
+    Number.isNaN(parsedDate.getTime()) ||
+    parsedDate.toISOString().slice(0, 10) !== expiresAt
+  ) {
+    return NextResponse.json(
+      { error: "Ngày hết hạn không hợp lệ" },
+      { status: 400 },
+    );
+  }
+
+  patch.expires_at = parsedDate.toISOString();
+}
+
       if (
         typeof body?.isActive ===
         "boolean"
