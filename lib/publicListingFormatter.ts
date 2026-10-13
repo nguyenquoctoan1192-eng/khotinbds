@@ -2261,46 +2261,29 @@ export function extractPublicStructure(
    MỞ RỘNG VIẾT TẮT TRONG KẾT CẤU
 ========================================================= */
 
-const STRUCTURE_PHRASE_REPLACEMENTS:
-  Array<[RegExp, string]> = [
-    [
-      /\bfull\s*nt\b/giu,
-      "Full Nội Thất",
-    ],
-
-    [
-      /\bntcb\b/giu,
-      "Nội Thất Cơ Bản",
-    ],
-
-    [
-      /\bcó\s*nt\b/giu,
-      "Có Nội Thất",
-    ],
-
-    [
-      /\bpccc\b/giu,
-      "Có PCCC",
-    ],
-
-    [
-      /\btm\b/giu,
-      "Có Thang Máy",
-    ],
-  ];
+const STRUCTURE_PHRASE_REPLACEMENTS: Array<
+  [RegExp, string]
+> = [
+  [/\bfull\s*nt\b/giu, "Full Nội Thất"],
+  [/\bntcb\b/giu, "Nội Thất Cơ Bản"],
+  [/\bcó\s*nt\b/giu, "Có Nội Thất"],
+  [/\bpccc\b/giu, "Có PCCC"],
+];
 
 const formatPublicStructureDisplay = (
   rawStructure: string,
 ): string => {
-  let text =
-    asText(rawStructure);
+  let text = asText(rawStructure);
 
   if (!text) {
     return "";
   }
 
   /**
-   * Cụm dài xử lý trước.
+   * Chỉ chuẩn hóa các shorthand KC cần thiết.
+   * Không tự thêm "1 Trệt".
+   * Không đổi PN/P thành chữ dài.
+   * Không đổi nội dung KC sang format mới.
    */
   for (const [
     pattern,
@@ -2313,73 +2296,60 @@ const formatPublicStructureDisplay = (
   }
 
   /**
-   * 6pn -> 6 Phòng Ngủ
-   */
-  text = text.replace(
-    /\b(\d+)\s*pn\b/giu,
-    "$1 Phòng Ngủ",
-  );
-
-  /**
-   * 4wc -> 4 WC
-   */
-  text = text.replace(
-    /\b(\d+)\s*wc\b/giu,
-    "$1 WC",
-  );
-
-  /**
-   * 22p -> 22 Phòng
-   */
-  text = text.replace(
-    /\b(\d+)\s*p\b/giu,
-    "$1 Phòng",
-  );
-
-  /**
-   * Trệt không có số:
-   * trệt 5 lầu
-   * => 1 Trệt 5 lầu
-   */
-  text = text.replace(
-    /^\s*(\d+)\s*trệt\b/iu,
-    "$1 Trệt",
-  );
-
-  text = text.replace(
-    /^\s*trệt\b/iu,
-    "1 Trệt",
-  );
-
-  text =
-    text
-      .replace(/\s+/g, " ")
-      .trim();
-
-  /**
-   * Viết hoa chữ đầu từ.
+   * Chuẩn hóa số phòng / WC:
+   * 11p  -> 11P
+   * 12wc -> 12WC
+   * 2pn  -> 2PN
    */
   text = text
-    .split(" ")
-    .map((word) => {
-      if (!word) {
-        return word;
-      }
+    .replace(
+      /\b(\d+)\s*pn\b/giu,
+      "$1PN",
+    )
+    .replace(
+      /\b(\d+)\s*p\b/giu,
+      "$1P",
+    )
+    .replace(
+      /\b(\d+)\s*wc\b/giu,
+      "$1WC",
+    );
 
-      if (
-        /^[A-ZÀ-Ỹ0-9]/u.test(
-          word,
-        )
-      ) {
-        return word;
-      }
+  /**
+   * Chuẩn hóa shorthand thường gặp.
+   */
+  text = text
+    .replace(
+      /\bst\b/giu,
+      "Sân Thượng",
+    )
+    .replace(
+      /\btm\b/giu,
+      "Thang Máy",
+    )
+    .replace(
+      /\btrệt\b/giu,
+      "trệt",
+    )
+    .replace(
+      /\blầu\b/giu,
+      "lầu",
+    )
+    .replace(
+      /\bhầm\b/giu,
+      "hầm",
+    )
+    .replace(
+      /\blửng\b/giu,
+      "lửng",
+    );
 
-      return (
-        word.charAt(0).toUpperCase() +
-        word.slice(1)
-      );
-    })
-    .join(" ");
+  /**
+   * Dọn khoảng trắng.
+   */
+  text = text
+    .replace(/\s+/g, " ")
+    .trim();
 
   return text;
 };
@@ -2632,16 +2602,13 @@ const structureFromFields = [
   .filter(Boolean)
   .join(" ");
 
-const publicStructure =
-  formatPublicStructureDisplay(
-    convertUsdPricesInText(
-      sanitizePublicStructure(
-        structureFromFields ||
-          publicStructuredStructure ||
-          extractedStructure,
-      ),
+const publicStructure = formatPublicStructureDisplay(
+  convertUsdPricesInText(
+    sanitizePublicStructure(
+      extractedStructure || publicStructuredStructure || structureFromFields,
     ),
-  );
+  ),
+);
 
   /* =======================================================
      RETURN
@@ -2690,9 +2657,9 @@ const publicStructure =
       ),
 
     area:
-  structuredArea ||
-  dimensions ||
-  extractedArea,
+  extractPublicSize(rawText) ||
+  extractedArea ||
+  structuredArea,
 
     structure:
       publicStructure,
