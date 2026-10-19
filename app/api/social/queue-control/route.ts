@@ -25,8 +25,8 @@ const RESETTABLE_STATUSES = [
 ];
 
 function randomDelayMs(): number {
-  const min = 3 * 60 * 1000;
-  const max = 12 * 60 * 1000;
+  const min = 5 * 60 * 1000;
+  const max = 15 * 60 * 1000;
 
   return (
     min +
@@ -235,7 +235,7 @@ async function updateUnit(input: {
  * hiện tại + 30 giây
  *
  * Các tin tiếp:
- * cách nhau 3–12 phút.
+ * cách nhau 5–15 phút.
  */
 async function resetQueue() {
   const {

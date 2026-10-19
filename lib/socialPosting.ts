@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 
 export const MAX_GROUPS_PER_CROSSPOST = 10;
-export const MIN_DELAY_MINUTES = 1;
-export const MAX_DELAY_MINUTES = 6;
+export const MIN_DELAY_MINUTES = 5;
+export const MAX_DELAY_MINUTES = 15;
 export const MIN_REPEAT_HOURS = 12;
 export const MAX_REPEAT_HOURS = 16;
 

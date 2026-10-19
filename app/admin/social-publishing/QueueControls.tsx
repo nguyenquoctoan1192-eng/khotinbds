@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 
@@ -47,7 +47,7 @@ export function ResetQueueButton({
   async function handleReset() {
     if (
       !window.confirm(
-        "Làm mới toàn bộ giờ đăng từ thời điểm hiện tại? Các tin sẽ cách nhau ngẫu nhiên 1–6 phút.",
+        "Làm mới toàn bộ giờ đăng từ thời điểm hiện tại? Các tin sẽ cách nhau ngẫu nhiên 5–15 phút.",
       )
     ) return;
 

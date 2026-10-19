@@ -1,12 +1,12 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getSocialAdminClient } from "@/lib/socialSupabase";
 
 export const dynamic = "force-dynamic";
 
 const WORKER_START_VERSION = "worker-start-job-only-v2";
 
-const MIN_INTERVAL_MINUTES = 1;
-const MAX_INTERVAL_MINUTES = 6;
+const MIN_INTERVAL_MINUTES = 5;
+const MAX_INTERVAL_MINUTES = 15;
 
 type QueueRow = {
   id: string;
@@ -170,7 +170,7 @@ export async function POST(request: Request) {
 
       /*
        * Tin đầu tiên luôn đăng ngay khi bot khởi động.
-       * Từ tin thứ hai mới cộng ngẫu nhiên 1–6 phút.
+       * Từ tin thứ hai mới cộng ngẫu nhiên 5–15 phút.
        */
       const delayMinutes =
         index === 0 ? 0 : randomIntervalMinutes();

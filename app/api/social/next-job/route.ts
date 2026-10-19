@@ -1298,80 +1298,68 @@ export async function GET(request: Request) {
     const dayStart = new Date(now);
     dayStart.setHours(0, 0, 0, 0);
 
-    const hourStart = new Date(now.getTime() - 60 * 60 * 1000);
+    
+const hourStart = new Date(now.getTime() - 60 * 60 * 1000);
 
-    const [{ count: postedToday }, { count: postedLastHour }] =
-      await Promise.all([
-        db
-          .from("social_post_history")
-          .select("id", { count: "exact", head: true })
-          .eq("facebook_account_id", accountId)
-          .gte("posted_at", dayStart.toISOString()),
-        db
-          .from("social_post_history")
-          .select("id", { count: "exact", head: true })
-          .eq("facebook_account_id", accountId)
-          .gte("posted_at", hourStart.toISOString()),
-      ]);
+const [{ count: postedToday }, { count: postedLastHour }] =
+  await Promise.all([
+    db
+      .from("social_post_history")
+      .select("id", { count: "exact", head: true })
+      .eq("facebook_account_id", accountId)
+      .gte("posted_at", dayStart.toISOString()),
 
-    if ((postedToday ?? 0) >= Number(account.daily_post_limit ?? 20)) {
-      return NextResponse.json({
-        job: null,
-        blocked: true,
-        reason: "Đã đạt giới hạn bài hôm nay",
-      });
-    }
+    db
+      .from("social_post_history")
+      .select("id", { count: "exact", head: true })
+      .eq("facebook_account_id", accountId)
+      .gte("posted_at", hourStart.toISOString()),
+  ]);
 
-    if ((postedLastHour ?? 0) >= Number(account.hourly_post_limit ?? 5)) {
-      return NextResponse.json({
-        job: null,
-        blocked: true,
-        reason: "Đã đạt giới hạn bài trong 1 giờ",
-      });
-    }
+if ((postedToday ?? 0) >= Number(account.daily_post_limit ?? 20)) {
+  return NextResponse.json({
+    job: null,
+    blocked: true,
+    reason: "Đã đạt giới hạn bài hôm nay",
+  });
+}
 
-    let job = await claimPendingJob({
-      db,
-      accountId,
-      defaultContactPhone,
-    });
+if ((postedLastHour ?? 0) >= Number(account.hourly_post_limit ?? 5)) {
+  return NextResponse.json({
+    job: null,
+    blocked: true,
+    reason: "Đã đạt giới hạn bài trong 1 giờ",
+  });
+}
 
-    if (!job) {
-      const created = await materializeNextBatch({
-        db,
-        accountId,
-        defaultContactPhone,
-      });
+// CHỈ LẤY JOB ĐÃ CÓ TRONG HÀNG CHỜ.
+// KHÔNG TỰ ĐỘNG TẠO JOB TỪ BATCH.
+const job = await claimPendingJob({
+  db,
+  accountId,
+  defaultContactPhone,
+});
 
-      if (created) {
-        job = await claimPendingJob({
-          db,
-          accountId,
-          defaultContactPhone,
-        });
-      }
-    }
+if (job) {
+  console.log(
+    `[NEXT-JOB] Đã trả job ${String(job.id ?? "")}`,
+  );
+} else {
+  console.log("[NEXT-JOB] Hàng chờ không có job phù hợp, bot tiếp tục chờ");
+}
 
-    if (job) {
-      console.log(
-        `[NEXT-JOB] Đã trả job ${String(job.id ?? "")}`,
-      );
-    } else {
-      console.log("[NEXT-JOB] Chưa có job phù hợp");
-    }
-
-    return NextResponse.json({ job: job ?? null });
-  } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Không lấy được job Facebook",
-      },
-      { status: 500 },
-    );
-  }
+return NextResponse.json({ job: job ?? null });
+} catch (error) {
+  return NextResponse.json(
+    {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Không lấy được job Facebook",
+    },
+    { status: 500 },
+  );
+}
 }
 
 export async function POST(request: Request) {

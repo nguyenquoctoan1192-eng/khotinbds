@@ -1,4 +1,5 @@
-﻿import { NextResponse } from "next/server";
+
+import { NextResponse } from "next/server";
 import {
   addRandomMinutes,
   selectCrosspostGroups,
@@ -60,35 +61,21 @@ type FacebookGroupDbRow = {
   facebook_account_id: string | null;
 };
 
-function startOfTodayVietnam(): Date {
-  const now = new Date();
-  const vietnamOffsetMs = 7 * 60 * 60 * 1000;
-  const vietnamNow = new Date(now.getTime() + vietnamOffsetMs);
-
-  return new Date(
-    Date.UTC(
-      vietnamNow.getUTCFullYear(),
-      vietnamNow.getUTCMonth(),
-      vietnamNow.getUTCDate(),
-    ) - vietnamOffsetMs,
-  );
-}
-
-function endOfTodayVietnam(): Date {
-  return new Date(
-    startOfTodayVietnam().getTime() + 24 * 60 * 60 * 1000,
-  );
-}
-
 function formatPrice(price: number | null): string {
-  if (price === null || !Number.isFinite(price) || price <= 0) {
+  if (
+    price === null ||
+    !Number.isFinite(price) ||
+    price <= 0
+  ) {
     return "Liên hệ";
   }
 
   return `${price.toLocaleString("vi-VN")} đồng/tháng`;
 }
 
-function detectCategories(listing: ListingRow): string[] {
+function detectCategories(
+  listing: ListingRow,
+): string[] {
   const source = [
     listing.title,
     listing.address,
@@ -137,7 +124,9 @@ function detectCategories(listing: ListingRow): string[] {
   return [...categories];
 }
 
-function buildBaseContents(listing: ListingRow): string[] {
+function buildBaseContents(
+  listing: ListingRow,
+): string[] {
   const dimensions =
     listing.width && listing.length
       ? `${listing.width}x${listing.length}m`
@@ -146,7 +135,9 @@ function buildBaseContents(listing: ListingRow): string[] {
         : "";
 
   const structure = [
-    listing.floors ? `${listing.floors} tầng` : "",
+    listing.floors
+      ? `${listing.floors} tầng`
+      : "",
     listing.bedrooms
       ? `${listing.bedrooms} phòng ngủ`
       : "",
@@ -162,8 +153,12 @@ function buildBaseContents(listing: ListingRow): string[] {
   return [
     [
       `🔥 ${listing.title || "CHO THUÊ BẤT ĐỘNG SẢN"}`,
-      listing.district ? `📍 ${listing.district}` : "",
-      dimensions ? `📐 Diện tích: ${dimensions}` : "",
+      listing.district
+        ? `📍 ${listing.district}`
+        : "",
+      dimensions
+        ? `📐 Diện tích: ${dimensions}`
+        : "",
       structure.length
         ? `🏢 ${structure.join(" – ")}`
         : "",
@@ -180,7 +175,9 @@ function buildBaseContents(listing: ListingRow): string[] {
       listing.district
         ? `Khu vực: ${listing.district}`
         : "",
-      dimensions ? `Diện tích: ${dimensions}` : "",
+      dimensions
+        ? `Diện tích: ${dimensions}`
+        : "",
       structure.length
         ? `Công năng: ${structure.join(", ")}`
         : "",
@@ -193,7 +190,9 @@ function buildBaseContents(listing: ListingRow): string[] {
   );
 }
 
-function normalizeDistrictArray(value: unknown): string[] {
+function normalizeDistrictArray(
+  value: unknown,
+): string[] {
   if (!Array.isArray(value)) {
     return [];
   }
@@ -215,7 +214,9 @@ function toGroupCandidate(
   return {
     id: String(group.id),
     name: String(group.name ?? "").trim(),
-    districts: normalizeDistrictArray(group.districts),
+    districts: normalizeDistrictArray(
+      group.districts,
+    ),
     category: String(
       group.category ?? "general",
     ).trim(),
@@ -249,7 +250,9 @@ async function getAccount(
     throw new Error(error.message);
   }
 
-  return (data as FacebookAccountRow | null) ?? null;
+  return (
+    (data as FacebookAccountRow | null) ?? null
+  );
 }
 
 async function getBrokerProfile(
@@ -269,7 +272,9 @@ async function getBrokerProfile(
       throw new Error(error.message);
     }
 
-    return (data as BrokerProfileRow | null) ?? null;
+    return (
+      (data as BrokerProfileRow | null) ?? null
+    );
   }
 
   if (account.license_id) {
@@ -285,7 +290,9 @@ async function getBrokerProfile(
       throw new Error(error.message);
     }
 
-    return (data as BrokerProfileRow | null) ?? null;
+    return (
+      (data as BrokerProfileRow | null) ?? null
+    );
   }
 
   return null;
@@ -299,6 +306,41 @@ export async function POST(request: Request) {
       .json()
       .catch(() => ({}));
 
+    /*
+     * NGUYÊN TẮC:
+     * Chỉ xử lý các listingId được giao diện gửi lên.
+     * Không tự quét toàn bộ tin đăng trong ngày.
+     * Không có danh sách chọn thì không tạo hàng chờ.
+     */
+    
+const requestedListingIds: string[] = Array.isArray(body?.listingIds)
+  ? [
+      ...new Set<string>(
+        (body.listingIds as unknown[])
+          .filter((id): id is string | number => typeof id === "string" || typeof id === "number")
+          .map((id) => String(id).trim())
+          .filter((id) => id.length > 0),
+      ),
+    ]
+  : [];
+
+
+    if (requestedListingIds.length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Bạn chưa chọn tin nào. Hãy chọn tin cần đưa vào hàng chờ.",
+          found: 0,
+          queuedListings: 0,
+          skippedListings: 0,
+          createdJobs: 0,
+          results: [],
+        },
+        { status: 400 },
+      );
+    }
+
     const requestedAccountId = String(
       body?.facebookAccountId ||
         body?.accountId ||
@@ -310,7 +352,7 @@ export async function POST(request: Request) {
       requestedAccountId || null,
     );
 
-    if (!account) {
+    if (!account || account.is_active !== true) {
       return NextResponse.json(
         {
           error:
@@ -334,6 +376,11 @@ export async function POST(request: Request) {
         ? profile.default_contact_phone
         : null;
 
+    /*
+     * CHỈ TRUY VẤN CÁC TIN ĐƯỢC CHỌN.
+     * Không lọc theo ngày tạo.
+     * Không tự bổ sung tin khác.
+     */
     const { data: listingsData, error: listingsError } =
       await db
         .from("listings")
@@ -358,17 +405,7 @@ export async function POST(request: Request) {
             "created_at",
           ].join(","),
         )
-        .gte(
-          "created_at",
-          startOfTodayVietnam().toISOString(),
-        )
-        .lt(
-          "created_at",
-          endOfTodayVietnam().toISOString(),
-        )
-        .order("created_at", {
-          ascending: true,
-        });
+        .in("id", requestedListingIds);
 
     if (listingsError) {
       return NextResponse.json(
@@ -377,14 +414,49 @@ export async function POST(request: Request) {
       );
     }
 
-    const listings =
+    const selectedListings =
       (listingsData ?? []) as unknown as ListingRow[];
 
-    const availableListings = listings.filter(
+    /*
+     * Giữ nguyên điều kiện trạng thái:
+     * chỉ xử lý tin chưa có trạng thái hoặc đang available.
+     */
+    const availableListings = selectedListings.filter(
       (listing) =>
         !listing.status ||
         listing.status === "available",
     );
+
+    const availableIds = new Set(
+      availableListings.map((listing) =>
+        String(listing.id),
+      ),
+    );
+
+    const results: Record<string, unknown>[] = [];
+
+    /*
+     * Báo rõ những ID được chọn nhưng không tìm thấy
+     * hoặc không còn đủ điều kiện đăng.
+     */
+    for (const listingId of requestedListingIds) {
+      if (!availableIds.has(listingId)) {
+        const foundListing = selectedListings.find(
+          (listing) =>
+            String(listing.id) === listingId,
+        );
+
+        results.push({
+          listingId,
+          status: "skipped",
+          reason: foundListing
+            ? `Tin không ở trạng thái được phép đăng: ${
+                foundListing.status || "không xác định"
+              }`
+            : "Không tìm thấy tin đã chọn",
+        });
+      }
+    }
 
     const listingIds = availableListings.map(
       (listing) => listing.id,
@@ -449,8 +521,6 @@ export async function POST(request: Request) {
     let queuedListings = 0;
     let skippedListings = 0;
     let nextStartAt = new Date();
-
-    const results: Record<string, unknown>[] = [];
 
     for (const listing of availableListings) {
       if (queuedListingIds.has(listing.id)) {
@@ -555,11 +625,11 @@ export async function POST(request: Request) {
         buildBaseContents(listing);
 
       /*
-       * Một listing là một lần đăng chéo lên tối đa 10 nhóm.
-       * Vì vậy toàn bộ job con trong cùng batch phải có cùng scheduled_at.
-       * Không giãn 1–6 phút giữa từng nhóm của cùng một listing.
+       * Một listing là một lần đăng chéo lên các nhóm phù hợp.
+       * Job con trong cùng batch dùng chung scheduled_at.
        */
-      const listingScheduledAt = new Date(nextStartAt);
+      const listingScheduledAt =
+        new Date(nextStartAt);
 
       const jobs = selectedGroups.map(
         (group, index) => {
@@ -616,13 +686,12 @@ export async function POST(request: Request) {
       createdJobs += jobs.length;
 
       /*
-       * Chỉ giãn giữa hai listing khác nhau.
-       * Mỗi tin tiếp theo chờ ngẫu nhiên từ 1 đến 6 phút.
+       * Chỉ giãn lịch giữa các listing khác nhau.
        */
       nextStartAt = addRandomMinutes(
         listingScheduledAt,
-        1,
-        6,
+        5,
+        15,
       );
 
       results.push({
@@ -635,10 +704,26 @@ export async function POST(request: Request) {
       });
     }
 
+    skippedListings += results.filter(
+      (result) =>
+        result.status === "skipped" ||
+        result.status === "blocked",
+    ).length - results.filter(
+      (result) =>
+        result.reason === "Đã có lịch Facebook" ||
+        result.reason === "Tin chưa có quận" ||
+        result.reason === "Không có nhóm phù hợp" ||
+        result.reason ===
+          "Tin chưa có SĐT liên hệ" ||
+        result.reason ===
+          "Môi giới chưa cài SĐT liên hệ mặc định",
+    ).length;
+
     return NextResponse.json({
       success: true,
       facebookAccountId: account.id,
       found: availableListings.length,
+      selected: requestedListingIds.length,
       queuedListings,
       skippedListings,
       createdJobs,
@@ -657,7 +742,13 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
-  return POST(request);
+export async function GET() {
+  return NextResponse.json(
+    {
+      success: false,
+      error:
+        "Endpoint này chỉ nhận POST kèm danh sách listingIds đã chọn.",
+    },
+    { status: 405 },
+  );
 }
-

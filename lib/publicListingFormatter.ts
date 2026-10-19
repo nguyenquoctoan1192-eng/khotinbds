@@ -1571,173 +1571,24 @@ const extractFloors = (
    TẠO TITLE PUBLIC
 ========================================================= */
 
+
 const sanitizeAddressWithContext = (
   rawAddressOrTitle: string,
   context: string,
 ): string => {
-  const addressLine =
-    firstContentLine(
-      rawAddressOrTitle,
-    );
+  const address = asText(rawAddressOrTitle);
+  const rawContext = asText(context);
 
-  if (!addressLine) {
+  if (!address && !rawContext) {
     return "";
   }
 
-  /**
-   * PREFIX:
-   *
-   * 1. Explicit prefix.
-   * 2. Nếu không có:
-   *    - số nhà có "/" => Hẻm
-   *    - không "/" => Mặt Tiền
-   *
-   * context bắt buộc là dữ liệu THÔ.
-   */
-  const prefix =
-    detectExplicitPrefix(context) ||
-    (hasAddressSlash(context)
-      ? "Hẻm"
-      : "Mặt Tiền");
-
-  /**
-   * Xóa:
-   * - SĐT
-   * - hh
-   * - lh
-   * - sđt
-   * - nd
-   */
-  const cleanedAddress =
-    addressLine
-      .replace(
-        PHONE_PATTERN,
-        "",
-      )
-      .replace(
-        INTERNAL_HH_PATTERN,
-        "",
-      )
-      .replace(
-        INTERNAL_CONTACT_PATTERN,
-        "",
-      )
-      .trim();
-
-  /**
-   * Bỏ:
-   * - prefix
-   * - private label
-   * - toàn bộ số nhà đầu địa chỉ
-   *
-   * QUAN TRỌNG:
-   * Prefix đã được xác định TRƯỚC khi
-   * số nhà bị xóa.
-   */
-  let strippedAddress =
-    stripLeadingPrivateParts(
-      cleanedAddress,
-    );
-
-  strippedAddress =
-    normalizeAdministrativeAreas(
-      strippedAddress,
-    );
-
-  const districtResult =
-    extractDistrictFromAddress(
-      strippedAddress,
-    );
-
-  let street =
-    districtResult.street;
-
-  let district =
-    districtResult.district;
-
-  /**
-   * Fallback tìm Quận.
-   */
-  if (!district) {
-    const match =
-      street.match(
-        /(?:^|[\s,-]+)(Quận\s+(?:\d+|Tân\s+Bình|Tan\s+Binh|Thủ\s+Đức|Thu\s+Duc|Gò\s+Vấp|Go\s+Vap|Bình\s+Thạnh|Binh\s+Thanh|Phú\s+Nhuận|Phu\s+Nhuan|Tân\s+Phú|Tan\s+Phu|Bình\s+Tân|Binh\s+Tan|Bình\s+Chánh|Binh\s+Chanh))\s*$/iu,
-      );
-
-    if (match?.[1]) {
-      district =
-        normalizeDistrictName(
-          match[1],
-        );
-
-      street = street
-        .slice(
-          0,
-          match.index ??
-            street.length,
-        )
-        .replace(
-          /[\s,-]+$/u,
-          "",
-        )
-        .trim();
-    }
-  }
-
-  /**
-   * Chặn tuyệt đối việc số nhà quay trở lại.
-   */
-  street = street
-  .replace(HOUSE_NUMBER_AT_START, "")
-  .replace(/^\s*[/]\s*/u, "")
-  .trim();
-
-  /**
-   * Chuẩn hóa title.
-   */
-  street =
-    normalizePublicTitleText(
-      street,
-    );
-
-  street = street
-    .replace(
-      /\s*-\s*-\s*/g,
-      " - ",
-    )
-    .replace(
-      /^\s*-\s*|\s*-\s*$/g,
-      "",
-    )
-    .trim();
-
-  /**
-   * Chuẩn hóa viết hoa.
-   */
-  street =
-    toTitleCaseWords(street);
-
-  /**
-   * Kết quả:
-   *
-   * Prefix - Đường - P.x - Quận
-   */
-  const result = [
-    prefix,
-    street,
-    district,
-  ]
-    .filter(Boolean)
-    .join(" - ")
-    .replace(
-      /\s*-\s*-\s*/g,
-      " - ",
-    )
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return result;
+  return buildPublicTitle({
+    address,
+    raw_input: rawContext,
+  });
 };
+
 
 /* =========================================================
    PUBLIC ADDRESS API
@@ -2469,20 +2320,25 @@ export function formatPublicListing(
    * title có thể là title cũ/sai.
    */
   const addressSource =
-  title ||
   bestRawAddressLine ||
   address ||
+  rawInput ||
   description ||
-  rawInput;
+  title;
 
   /**
    * Context quyết định Hẻm / Mặt Tiền.
    *
    * Ưu tiên address + description + raw_input.
    */
-  const prefixContext =
-    rawAddressContext ||
-    addressSource;
+  const prefixContext = [
+  title,
+  address,
+  description,
+  rawInput,
+]
+  .filter(Boolean)
+  .join("\n");
 
   /* =======================================================
      DIỆN TÍCH
