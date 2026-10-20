@@ -278,74 +278,46 @@ export async function POST(request: Request) {
       );
     }
 
+    
+    // Chỉ chặn nếu căn nhà và tài khoản này vẫn có
+    // công việc đang chờ hoặc đang được worker xử lý.
+    // Các công việc đã "posted" hôm trước không bị chặn.
     const {
-      data: existingBatch,
-      error: existingBatchError,
+      data: activeJobs,
+      error: activeJobsError,
     } = await db
-      .from("social_post_batches")
-      .select("id")
+      .from("social_post_jobs")
+      .select("id,status")
       .eq("listing_id", listingId)
-      .eq(
-        "facebook_account_id",
-        facebookAccountId,
-      )
-      .order("created_at", {
-        ascending: false,
-      })
-      .limit(1)
-      .maybeSingle();
+      .eq("facebook_account_id", facebookAccountId)
+      .in("status", [
+        "pending",
+        "processing",
+        "posting",
+      ])
+      .limit(1);
 
-    if (existingBatchError) {
+    if (activeJobsError) {
       return NextResponse.json(
-        { error: existingBatchError.message },
+        { error: activeJobsError.message },
         { status: 500 },
       );
     }
 
-    if (existingBatch?.id) {
-      const {
-        data: existingJobs,
-        error: existingJobsError,
-      } = await db
-        .from("social_post_jobs")
-        .select("id,status")
-        .eq("batch_id", existingBatch.id)
-        .in("status", [
-          "pending",
-          "processing",
-          "posting",
-          "completed",
-          "success",
-        ])
-        .limit(1);
-
-      if (existingJobsError) {
-        return NextResponse.json(
-          {
-            error: existingJobsError.message,
-          },
-          { status: 500 },
-        );
-      }
-
-      if (
-        Array.isArray(existingJobs) &&
-        existingJobs.length > 0
-      ) {
-        return NextResponse.json(
-          {
-            success: true,
-            skipped: true,
-            message:
-              "Tin này đã có trong hàng chờ Facebook",
-            batchId: existingBatch.id,
-            groupCount: 0,
-            jobs: [],
-          },
-          { status: 200 },
-        );
-      }
+    if (activeJobs && activeJobs.length > 0) {
+      return NextResponse.json(
+        {
+          success: true,
+          skipped: true,
+          message:
+            "Tin này vẫn có công việc đang chờ hoặc đang đăng trên Facebook",
+          groupCount: 0,
+          jobs: [],
+        },
+        { status: 200 },
+      );
     }
+
 
     const {
       data: batch,
